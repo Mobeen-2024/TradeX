@@ -1,0 +1,6 @@
+{
+  "name": "TradeX",
+  "description": "A professional financial trading dashboard with TradingView charts, market data, and order execution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
