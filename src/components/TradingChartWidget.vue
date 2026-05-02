@@ -33,6 +33,101 @@ let bbLowerSeries: ISeriesApi<"Line"> | null = null;
 const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
 const activeIndicators = ref<string[]>([]);
+const showFootprint = ref(false);
+const footprintDataMap = ref<Map<number, any>>(new Map());
+const footprintSettings = ref({
+    tickSize: 10,
+    imbalanceRatio: 3,
+    showShading: true,
+    showImbalances: true
+});
+
+const hoveredCell = ref<any>(null);
+const tooltipPosition = ref({ x: 0, y: 0 });
+const showFootprintSettings = ref(false);
+
+watch(footprintSettings, () => {
+    if (allCandles.value.length > 0) {
+        // Find volume data which is stored in volumeSeries (hard to get back, so we use a cache or just re-generate from allCandles if we store volume there)
+        // Actually, updateChartData is easier, but let's just re-map from allCandles
+        footprintDataMap.value.clear();
+        allCandles.value.forEach((c: any) => {
+            // We need the volume. Let's assume volume is stored in the candle or we re-fetch.
+            // For now, let's just trigger updateChartData for simplicity as it's a mock.
+            updateChartData();
+        });
+    }
+}, { deep: true });
+
+const generateMockFootprint = (candle: CandlestickData, volume: number) => {
+    const tickSize = footprintSettings.value.tickSize;
+    const minPrice = Math.floor(candle.low / tickSize) * tickSize;
+    const maxPrice = Math.ceil(candle.high / tickSize) * tickSize;
+    
+    const cells = [];
+    let delta = 0;
+    let maxVol = 0;
+    let hvnPrice = minPrice;
+    
+    const levelsCount = Math.max(1, (maxPrice - minPrice) / tickSize + 1);
+    let remainingVol = volume;
+    
+    for (let p = maxPrice; p >= minPrice; p -= tickSize) {
+        let cellVol = (Math.random() * (remainingVol / (levelsCount / 2)));
+        if (p < minPrice + tickSize) cellVol = remainingVol;
+        remainingVol -= cellVol;
+        if(cellVol < 0) cellVol = 0;
+        
+        let bidVol = cellVol * (Math.random() * 0.6 + 0.2);
+        let askVol = cellVol - bidVol;
+        
+        if (candle.close > candle.open) {
+            askVol = cellVol * (Math.random() * 0.4 + 0.6);
+            bidVol = cellVol - askVol;
+        } else {
+            bidVol = cellVol * (Math.random() * 0.4 + 0.6);
+            askVol = cellVol - bidVol;
+        }
+        
+        const bidV = Math.round(bidVol);
+        const askV = Math.round(askVol);
+        
+        cells.push({
+            price: p,
+            bidVolume: bidV,
+            askVolume: askV,
+            totalVolume: Math.round(cellVol),
+            isBuyImbalance: false,
+            isSellImbalance: false
+        });
+        
+        delta += (askV - bidV);
+        if (cellVol > maxVol) {
+            maxVol = cellVol;
+            hvnPrice = p;
+        }
+    }
+    
+    const ratio = footprintSettings.value.imbalanceRatio;
+    for (let i = 0; i < cells.length - 1; i++) {
+        const askP = cells[i].askVolume;
+        const bidPminus1 = cells[i+1].bidVolume;
+        if (askP >= ratio * bidPminus1 && askP > 0) cells[i].isBuyImbalance = true;
+        
+        const bidP = cells[i+1].bidVolume;
+        const askPplus1 = cells[i].askVolume;
+        if (bidP >= ratio * askPplus1 && bidP > 0) cells[i+1].isSellImbalance = true;
+    }
+    
+    return {
+        time: candle.time as number,
+        cells,
+        delta,
+        maxVolume: maxVol,
+        hvnPrice
+    };
+};
+
 import { activeTool, setGlobalTool } from '../store/workspaceStore';
 const drawings = ref<any[]>([]);
 const fibStart = ref<{ price: number, time: any } | null>(null);
@@ -243,6 +338,29 @@ const initChart = async () => {
                     isUp: data.close >= data.open
                 };
             }
+
+            // Handle Footprint Hover
+            if (showFootprint.value && param.point) {
+                const fp = footprintDataMap.value.get(param.time as number);
+                if (fp) {
+                    const price = candleSeries.coordinateToPrice(param.point.y);
+                    if (price) {
+                        const tickSize = footprintSettings.value.tickSize;
+                        const targetPrice = Math.round(price / tickSize) * tickSize;
+                        const cell = fp.cells.find((c: any) => Math.abs(c.price - targetPrice) < tickSize / 2);
+                        if (cell) {
+                            hoveredCell.value = { ...cell, time: param.time, delta: cell.askVolume - cell.bidVolume };
+                            tooltipPosition.value = { x: param.point.x, y: param.point.y };
+                        } else {
+                            hoveredCell.value = null;
+                        }
+                    }
+                }
+            } else {
+                hoveredCell.value = null;
+            }
+        } else {
+            hoveredCell.value = null;
         }
     });
 
@@ -485,7 +603,7 @@ const renderHeatmap = () => {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 1. Render Heatmap
+    // 1. Render Heatmap (Liquidity)
     const maxVol = Math.max(...heatmapData.value.map(d => d.volume), 1);
     heatmapData.value.forEach(d => {
         const y = candleSeries?.priceToCoordinate(d.price);
@@ -498,6 +616,103 @@ const renderHeatmap = () => {
             
         ctx.fillRect(0, y - 1, canvas.width, 2);
     });
+
+    // 1.5 Render Footprints if active
+    if (showFootprint.value) {
+        const logicalRange = chart.timeScale().getVisibleLogicalRange();
+        if (logicalRange) {
+            const startIdx = Math.max(0, Math.floor(logicalRange.from));
+            const endIdx = Math.min(allCandles.value.length - 1, Math.ceil(logicalRange.to));
+            
+            // Calculate candle width to see if we should render footprint
+            let candleWidth = 10;
+            if (startIdx < endIdx && startIdx >= 0 && startIdx + 1 < allCandles.value.length) {
+                const x1 = chart.timeScale().timeToCoordinate(allCandles.value[startIdx].time);
+                const x2 = chart.timeScale().timeToCoordinate(allCandles.value[startIdx+1].time);
+                if (x1 !== null && x2 !== null) {
+                    candleWidth = Math.abs(x2 - x1);
+                }
+            } else {
+                candleWidth = 50; // fallback if only 1 candle
+            }
+            
+            if (candleWidth > 40) {
+                ctx.font = '10px "JetBrains Mono"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                for (let i = startIdx; i <= endIdx; i++) {
+                    const candle = allCandles.value[i];
+                    if (!candle) continue;
+                    const fp = footprintDataMap.value.get(candle.time as number);
+                    const x = chart.timeScale().timeToCoordinate(candle.time);
+                    if (!fp || x === null) continue;
+                    
+                    const cellHeight = 16;
+                    const halfWidth = candleWidth / 2 - 2;
+                    
+                    fp.cells.forEach(cell => {
+                        const y = candleSeries?.priceToCoordinate(cell.price);
+                        if (y === null) return;
+                        
+                        // Background shading
+                        if (footprintSettings.value.showShading) {
+                            const intensity = cell.totalVolume / fp.maxVolume;
+                            const isAskStronger = cell.askVolume > cell.bidVolume;
+                            
+                            ctx.fillStyle = isAskStronger 
+                                ? `rgba(14, 203, 129, ${intensity * 0.5})`
+                                : `rgba(246, 70, 93, ${intensity * 0.5})`;
+                            ctx.fillRect(x - halfWidth, y - cellHeight/2, candleWidth - 4, cellHeight);
+                        }
+                        
+                        // HVN Highlight
+                        if (cell.price === fp.hvnPrice) {
+                            ctx.strokeStyle = '#000000';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(x - halfWidth, y - cellHeight/2, candleWidth - 4, cellHeight);
+                            ctx.strokeStyle = '#FFFFFF';
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(x - halfWidth - 1, y - cellHeight/2 - 1, candleWidth - 2, cellHeight + 2);
+                        }
+                        
+                        // Text: Bid
+                        ctx.fillStyle = cell.isSellImbalance ? '#3b82f6' : '#EAECEF';
+                        ctx.fillText(cell.bidVolume.toString(), x - halfWidth/2, y);
+                        
+                        // Text: Ask
+                        ctx.fillStyle = cell.isBuyImbalance ? '#3b82f6' : '#EAECEF';
+                        ctx.fillText(cell.askVolume.toString(), x + halfWidth/2, y);
+                    });
+                    
+                    // Delta
+                    if (fp.cells.length > 0) {
+                        const lowestCellY = candleSeries?.priceToCoordinate(fp.cells[fp.cells.length - 1].price);
+                        if (lowestCellY !== null) {
+                            ctx.fillStyle = fp.delta > 0 ? '#0ecb81' : '#f6465d';
+                            ctx.fillText(`Δ ${fp.delta}`, x, lowestCellY + cellHeight + 4);
+                        }
+                    }
+                }
+            } else {
+                // If zoomed out, just show HVN outline or nothing
+                for (let i = startIdx; i <= endIdx; i++) {
+                    const candle = allCandles.value[i];
+                    if (!candle) continue;
+                    const fp = footprintDataMap.value.get(candle.time as number);
+                    const x = chart.timeScale().timeToCoordinate(candle.time);
+                    if (!fp || x === null) continue;
+                    
+                    const cellHeight = 4;
+                    const y = candleSeries?.priceToCoordinate(fp.hvnPrice);
+                    if (y !== null && candleWidth > 5) {
+                        ctx.fillStyle = '#F0B90B';
+                        ctx.fillRect(x - candleWidth/2 + 1, y - cellHeight/2, candleWidth - 2, cellHeight);
+                    }
+                }
+            }
+        }
+    }
 
     // 2. Render Drawings (Trends & Fib Diagonals)
     ctx.lineWidth = 1.5;
@@ -549,6 +764,12 @@ const updateChartData = async () => {
     volumeSeries.setData(data.volume);
     lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
     updateIndicators(data.candlestick);
+    
+    footprintDataMap.value.clear();
+    data.candlestick.forEach((c, idx) => {
+        footprintDataMap.value.set(c.time as number, generateMockFootprint(c, data.volume[idx].value));
+    });
+
     if (chart) chart.timeScale().fitContent();
 };
 
@@ -608,6 +829,10 @@ const subscribeKline = (symbol: string, interval: string) => {
             if (allCandles.value.length > 1000) allCandles.value.shift();
         }
         updateIndicators(allCandles.value);
+        
+        // Mock footprint update
+        footprintDataMap.value.set(update.time as number, generateMockFootprint(update, parseFloat(k.v)));
+        
         renderHeatmap();
     };
 };
@@ -743,6 +968,65 @@ watch(showVolume, (val) => {
 <template>
   <div class="flex flex-col h-full bg-[#0b0e11] text-[#EAECEF] overflow-hidden select-none border border-[#2b3139]/50 hover:border-[#F0B90B]/30 transition-colors rounded-xl m-1 shadow-2xl relative">
     
+    <!-- Footprint Tooltip Overlay -->
+    <div v-if="hoveredCell && showFootprint" 
+         class="absolute z-50 bg-[#161a1e]/95 backdrop-blur-md border border-white/10 p-2.5 rounded-lg shadow-2xl pointer-events-none text-[10px] min-w-[120px]"
+         :style="{ left: `${tooltipPosition.x + 15}px`, top: `${tooltipPosition.y + 15}px` }">
+        <div class="flex justify-between border-b border-white/5 pb-1 mb-1">
+            <span class="text-[#848e9c]">Price</span>
+            <span class="font-bold text-[#F0B90B]">{{ hoveredCell.price }}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+            <span class="text-[#848e9c]">Bid Vol</span>
+            <span class="text-right text-[#f6465d]">{{ hoveredCell.bidVolume }}</span>
+            <span class="text-[#848e9c]">Ask Vol</span>
+            <span class="text-right text-[#0ecb81]">{{ hoveredCell.askVolume }}</span>
+            <span class="text-[#848e9c]">Total</span>
+            <span class="text-right font-bold">{{ hoveredCell.totalVolume }}</span>
+            <span class="text-[#848e9c]">Delta</span>
+            <span :class="['text-right font-bold', hoveredCell.delta > 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]']">
+                {{ hoveredCell.delta > 0 ? '+' : '' }}{{ hoveredCell.delta }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Footprint Settings Panel -->
+    <div v-if="showFootprintSettings" 
+         class="absolute top-12 right-4 z-40 bg-[#161a1e] border border-white/10 p-4 rounded-xl shadow-2xl w-64 animate-in fade-in slide-in-from-top-2">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-xs font-bold text-[#F0B90B] uppercase tracking-wider">Footprint Settings</h3>
+            <button @click="showFootprintSettings = false" class="text-[#848e9c] hover:text-white">
+                <X class="w-4 h-4" />
+            </button>
+        </div>
+        
+        <div class="space-y-4">
+            <div class="space-y-1.5">
+                <div class="flex justify-between text-[10px]">
+                    <span class="text-[#848e9c]">Tick Size</span>
+                    <span class="text-[#F0B90B] font-mono">{{ footprintSettings.tickSize }}</span>
+                </div>
+                <input type="range" min="1" max="50" step="1" v-model.number="footprintSettings.tickSize" class="w-full accent-[#F0B90B]">
+            </div>
+
+            <div class="space-y-1.5">
+                <div class="flex justify-between text-[10px]">
+                    <span class="text-[#848e9c]">Imbalance Ratio</span>
+                    <span class="text-[#F0B90B] font-mono">{{ footprintSettings.imbalanceRatio }}x</span>
+                </div>
+                <input type="range" min="1.5" max="10" step="0.5" v-model.number="footprintSettings.imbalanceRatio" class="w-full accent-[#F0B90B]">
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-white/5">
+                <span class="text-[10px] text-[#848e9c]">Show Shading</span>
+                <button @click="footprintSettings.showShading = !footprintSettings.showShading" 
+                        :class="cn('w-8 h-4 rounded-full transition-all relative', footprintSettings.showShading ? 'bg-[#F0B90B]' : 'bg-[#2b3139]')">
+                    <div :class="cn('absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all', footprintSettings.showShading ? 'left-4.5' : 'left-0.5')"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Drawing Toolbar (Floating Sidebar) -->
     <div class="absolute left-1 md:left-3 top-16 md:top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/90 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl transform scale-[0.8] md:scale-100 origin-top-left">
         <button 
@@ -818,6 +1102,22 @@ watch(showVolume, (val) => {
 
         <!-- Indicators Toggle -->
         <div class="flex items-center gap-1 border-l border-white/10 pl-2 ml-1">
+            <button 
+                @click="() => { showFootprint = !showFootprint; renderHeatmap(); }"
+                :class="cn(
+                    'px-1.5 py-0.5 rounded-l text-[9px] font-bold transition-all',
+                    showFootprint ? 'bg-[#9C27B0]/20 text-[#9C27B0]' : 'text-[#848e9c] hover:bg-[#2b3139]'
+                )"
+            >FP</button>
+            <button 
+                @click="showFootprintSettings = !showFootprintSettings"
+                :class="cn(
+                    'px-1 py-0.5 rounded-r border-l border-white/10 text-[9px] font-bold transition-all',
+                    showFootprintSettings ? 'bg-[#9C27B0]/20 text-[#9C27B0]' : 'text-[#848e9c] hover:bg-[#2b3139]'
+                )"
+            >
+                <Settings2 class="w-3 h-3" />
+            </button>
             <button 
                 @click="toggleIndicator('EMA')"
                 :class="cn(
