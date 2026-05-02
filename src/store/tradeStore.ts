@@ -155,9 +155,9 @@ export const addPosition = (pos: any) => placeOrder({
 export const closePosition = async (id: string) => {
   const pos = activePositions.value.find(p => p.id === id);
   if (pos) {
-      const pnl = pos.side === 'Buy' 
-          ? (currentPrice.value - pos.price) * pos.quantity 
-          : (pos.price - currentPrice.value) * pos.quantity;
+      const pnl = pos.type === 'LONG' 
+          ? (currentPrice.value - pos.entry) * pos.size 
+          : (pos.entry - currentPrice.value) * pos.size;
       
       closedTrades.value.push({
           ...pos,

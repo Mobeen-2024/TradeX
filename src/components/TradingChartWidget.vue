@@ -6,7 +6,7 @@ import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Se
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
 import { calculateEMA, calculateRSI } from '../utils/indicators';
-import { alerts, createAlert, removeAlert } from '../store/tradeStore';
+import { alerts, createAlert, removeAlert, currentPrice } from '../store/tradeStore';
 
 const props = defineProps<{
     panelId?: string;
@@ -33,6 +33,7 @@ const activeIndicators = ref<string[]>([]);
 const activeTool = ref<'none' | 'hline' | 'fib' | 'trend' | 'alert'>('none');
 const drawings = ref<any[]>([]);
 const fibStart = ref<{ price: number, time: any } | null>(null);
+const heatmapData = ref<{ price: number, volume: number }[]>([]);
 let drawingPriceLines: IPriceLine[] = [];
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
 
@@ -417,8 +418,53 @@ const subscribeKline = (symbol: string, interval: string) => {
             if (allCandles.value.length > 1000) allCandles.value.shift();
         }
         updateIndicators(allCandles.value);
+        renderHeatmap();
     };
 };
+
+const renderHeatmap = () => {
+    const canvas = document.getElementById(`heatmap-${props.panelId}`) as HTMLCanvasElement;
+    if (!canvas || !chart || !candleSeries) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const container = canvas.parentElement;
+    if (container && (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight)) {
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const maxVol = Math.max(...heatmapData.value.map(d => d.volume), 1);
+    
+    heatmapData.value.forEach(d => {
+        const y = candleSeries?.priceToCoordinate(d.price);
+        if (y === null || y < 0 || y > canvas.height) return;
+        
+        const intensity = d.volume / maxVol;
+        ctx.fillStyle = d.price > currentPrice.value 
+            ? `rgba(246, 70, 93, ${intensity * 0.15})`
+            : `rgba(14, 203, 129, ${intensity * 0.15})`;
+            
+        ctx.fillRect(0, y - 1, canvas.width, 2);
+    });
+};
+
+const updateLiquidity = () => {
+    if (currentPrice.value === 0) return;
+    const base = Math.round(currentPrice.value / 10) * 10;
+    const newData = [];
+    for (let i = -40; i <= 40; i++) {
+        const p = base + i * 5;
+        const vol = Math.random() > 0.85 ? Math.random() * 100 : Math.random() * 5;
+        newData.push({ price: p, volume: vol });
+    }
+    heatmapData.value = newData;
+};
+
+watch(currentPrice, () => {
+    if (Math.random() > 0.95 || heatmapData.value.length === 0) updateLiquidity();
+});
 
 onMounted(() => {
     // Load drawings from store
@@ -649,6 +695,12 @@ watch(showVolume, (val) => {
     <!-- Chart Container -->
     <div class="flex-1 relative min-h-0">
       <div ref="chartContainer" class="w-full h-full"></div>
+      
+      <!-- Heatmap Canvas -->
+      <canvas 
+        :id="`heatmap-${panelId}`" 
+        class="absolute inset-0 z-0 pointer-events-none opacity-60"
+      ></canvas>
       
       <!-- Watermark -->
       <div class="absolute bottom-4 right-4 pointer-events-none opacity-[0.03] select-none text-right">
