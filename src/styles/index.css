@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@theme {
+:root {
   --color-dash-bg: #09090b;
   --color-dash-surface: #121214;
   --color-dash-card: #18191c;
@@ -21,41 +21,37 @@
   --animate-float: float 6s ease-in-out infinite;
   --animate-glow: glow 2s ease-in-out infinite alternate;
   --animate-spin-slow: spin-slow 8s linear infinite;
-  
-  @keyframes shimmer {
-    from {
-      backgroundPosition: 0 0;
-    }
-    to {
-      backgroundPosition: -200% 0;
-    }
-  }
+}
 
-  @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-    100% { transform: translateY(0px); }
-  }
+@keyframes shimmer {
+  from { background-position: 0 0; }
+  to { background-position: -200% 0; }
+}
 
-  @keyframes glow {
-    from { box-shadow: 0 0 10px -10px rgba(240, 185, 11, 0.2); }
-    to { box-shadow: 0 0 20px 5px rgba(240, 185, 11, 0.6); }
-  }
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
 
-  @keyframes spin-slow {
-    to { transform: rotate(360deg); }
-  }
+@keyframes glow {
+  from { box-shadow: 0 0 10px -10px rgba(240, 185, 11, 0.2); }
+  to { box-shadow: 0 0 20px 5px rgba(240, 185, 11, 0.6); }
+}
 
-  @keyframes slide-up {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
-  }
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
 
-  @keyframes badge-pop {
-    0% { transform: scale(0); }
-    80% { transform: scale(1.2); }
-    100% { transform: scale(1); }
-  }
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes badge-pop {
+  0% { transform: scale(0); }
+  80% { transform: scale(1.2); }
+  100% { transform: scale(1); }
 }
 
 @layer base {
