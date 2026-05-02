@@ -24,17 +24,17 @@ export const activePositions = ref<{
 
 export const closedTrades = ref<any[]>([]);
 
-export const currentPrice = ref(36000.00);
-export const previousPrice = ref(36000.00);
+export const currentPrice = ref(75000.00);
+export const previousPrice = ref(75000.00);
 export const selectedPrice = ref<number | null>(null);
 export const sharedSlPrice = ref<number | null>(null);
 export const isRiskModeActive = ref(false);
 export const marketData = ref({
     change24h: '+1,240.50 +1.99%',
-    high24h: '64,500.00',
-    low24h: '61,800.00',
+    high24h: '78,500.00',
+    low24h: '73,800.00',
     volBtc24h: '42,512.14',
-    volUsdt24h: '2.68B'
+    volUsdt24h: '3.18B'
 });
 
 export const openOrders = ref<any[]>([]);

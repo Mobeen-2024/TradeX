@@ -6,8 +6,8 @@ import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, se
 import { useOrderExecution } from '../composables/useOrderExecution';
 
 const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
-const orderPrice = ref(36000.00);
-const lastOrderPrice = ref(36000.00);
+const orderPrice = ref(75000.00);
+const lastOrderPrice = ref(75000.00);
 const orderAmount = ref<number | null>(null);
 const orderSide = ref<'Buy' | 'Sell'>('Buy');
 const priceChangeClass = ref('');
@@ -779,7 +779,7 @@ watch(tpSl, (val) => {
             </div>
             <span v-if="orderPriceError" class="text-[#f6465d] text-[10px]">{{ orderPriceError }}</span>
           </div>
-          <button @click="orderPrice = orderSide === 'Buy' ? 36000.00 : 36000.50" class="h-[40px] px-3 sm:px-4 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] text-[#EAECEF] rounded-lg font-semibold text-xs transition-colors shrink-0">BBO</button>
+          <button @click="orderPrice = orderSide === 'Buy' ? currentPrice : currentPrice + 0.5" class="h-[40px] px-3 sm:px-4 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] text-[#EAECEF] rounded-lg font-semibold text-xs transition-colors shrink-0">BBO</button>
         </div>
 
         <!-- Amount Input -->
