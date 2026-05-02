@@ -46,7 +46,10 @@ const footprintSettings = ref({
     tickSize: 10,
     imbalanceRatio: 3,
     showShading: true,
-    showImbalances: true
+    showImbalances: true,
+    minTradeFilter: 0,
+    stackedImbalanceCount: 3,
+    showUnfinishedBusiness: true
 });
 
 const hoveredCell = ref<any>(null);
@@ -224,8 +227,11 @@ const updateChartData = async () => {
     lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
     updateIndicators(data.candlestick);
     footprintDataMap.value.clear();
+    let prevFp: any = null;
     data.candlestick.forEach((c, idx) => {
-        footprintDataMap.value.set(c.time as number, FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value));
+        const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
+        footprintDataMap.value.set(c.time as number, fp);
+        prevFp = fp;
     });
     if (chart) chart.timeScale().fitContent();
 };
@@ -236,7 +242,10 @@ const internalSubscribe = () => {
         lineSeries?.update({ time: update.time, value: update.close });
         volumeSeries?.update({ time: update.time, value: parseFloat(k.v), color: update.close >= update.open ? 'rgba(14, 203, 129, 0.2)' : 'rgba(246, 70, 93, 0.2)' });
         updateIndicators(allCandles.value);
-        footprintDataMap.value.set(update.time as number, FootprintRenderer.generateMock(update, parseFloat(k.v), footprintSettings.value));
+        const allTimes = Array.from(footprintDataMap.value.keys()).sort((a, b) => a - b);
+        const currIdx = allTimes.indexOf(update.time as number);
+        const prevFp = currIdx > 0 ? footprintDataMap.value.get(allTimes[currIdx - 1]) : null;
+        footprintDataMap.value.set(update.time as number, FootprintRenderer.generateMock(update, parseFloat(k.v), footprintSettings.value, prevFp));
         renderHeatmap();
     });
 };

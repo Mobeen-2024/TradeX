@@ -7,6 +7,9 @@ export interface FootprintCell {
     totalVolume: number;
     isBuyImbalance: boolean;
     isSellImbalance: boolean;
+    isPartOfStackedBuy: boolean;
+    isPartOfStackedSell: boolean;
+    isUnfinishedBusiness: boolean;
 }
 
 export interface FootprintData {
@@ -16,11 +19,12 @@ export interface FootprintData {
     delta: number;
     maxVolume: number;
     hvnPrice: number;
+    isMultipleHVN: boolean;
 }
 
 export class FootprintRenderer {
-    static generateMock(candle: CandlestickData, volume: number, settings: any): FootprintData {
-        const tickSize = settings.tickSize;
+    static generateMock(candle: CandlestickData, volume: number, settings: any, prevFp?: FootprintData): FootprintData {
+        const tickSize = settings.tickSize || 10;
         const minPrice = Math.floor(candle.low / tickSize) * tickSize;
         const maxPrice = Math.ceil(candle.high / tickSize) * tickSize;
         
@@ -35,6 +39,12 @@ export class FootprintRenderer {
         for (let p = maxPrice; p >= minPrice; p -= tickSize) {
             let cellVol = (Math.random() * (remainingVol / (levelsCount / 2)));
             if (p < minPrice + tickSize) cellVol = remainingVol;
+            
+            // Trades Filter Logic
+            if (settings.minTradeFilter && cellVol < settings.minTradeFilter) {
+                cellVol = 0;
+            }
+            
             remainingVol -= cellVol;
             if(cellVol < 0) cellVol = 0;
             
@@ -58,7 +68,10 @@ export class FootprintRenderer {
                 askVolume: askV,
                 totalVolume: Math.round(cellVol),
                 isBuyImbalance: false,
-                isSellImbalance: false
+                isSellImbalance: false,
+                isPartOfStackedBuy: false,
+                isPartOfStackedSell: false,
+                isUnfinishedBusiness: false
             });
             
             delta += (askV - bidV);
@@ -68,7 +81,8 @@ export class FootprintRenderer {
             }
         }
         
-        const ratio = settings.imbalanceRatio;
+        // Imbalances Logic
+        const ratio = settings.imbalanceRatio || 3;
         for (let i = 0; i < cells.length - 1; i++) {
             const askP = cells[i].askVolume;
             const bidPminus1 = cells[i+1].bidVolume;
@@ -78,6 +92,46 @@ export class FootprintRenderer {
             const askPplus1 = cells[i].askVolume;
             if (bidP >= ratio * askPplus1 && bidP > 0) cells[i+1].isSellImbalance = true;
         }
+
+        // Stacked Imbalances Logic
+        const stackCount = settings.stackedImbalanceCount || 3;
+        let buyStack = 0;
+        let sellStack = 0;
+
+        for (let i = 0; i < cells.length; i++) {
+            if (cells[i].isBuyImbalance) {
+                buyStack++;
+            } else {
+                if (buyStack >= stackCount) {
+                    for (let j = i - buyStack; j < i; j++) cells[j].isPartOfStackedBuy = true;
+                }
+                buyStack = 0;
+            }
+
+            if (cells[i].isSellImbalance) {
+                sellStack++;
+            } else {
+                if (sellStack >= stackCount) {
+                    for (let j = i - sellStack; j < i; j++) cells[j].isPartOfStackedSell = true;
+                }
+                sellStack = 0;
+            }
+        }
+        // Final check for stacks at end of candle
+        if (buyStack >= stackCount) {
+            for (let j = cells.length - buyStack; j < cells.length; j++) cells[j].isPartOfStackedBuy = true;
+        }
+        if (sellStack >= stackCount) {
+            for (let j = cells.length - sellStack; j < cells.length; j++) cells[j].isPartOfStackedSell = true;
+        }
+
+        // Unfinished Business Logic
+        if (cells.length > 0) {
+            const top = cells[0];
+            const bottom = cells[cells.length - 1];
+            if (top.bidVolume > 0) top.isUnfinishedBusiness = true;
+            if (bottom.askVolume > 0) bottom.isUnfinishedBusiness = true;
+        }
         
         return {
             time: candle.time as number,
@@ -85,7 +139,8 @@ export class FootprintRenderer {
             cells,
             delta,
             maxVolume: maxVol,
-            hvnPrice
+            hvnPrice,
+            isMultipleHVN: prevFp ? prevFp.hvnPrice === hvnPrice : false
         };
     }
 
@@ -127,12 +182,12 @@ export class FootprintRenderer {
             return v.toString();
         };
 
-        fp.cells.forEach(cell => {
+        fp.cells.forEach((cell, idx) => {
             const y = candleSeries.priceToCoordinate(cell.price);
             if (y === null) return;
             
             let intensity = cell.totalVolume / fp.maxVolume;
-            if (intensity < 0.15) intensity = 0.15; // Minimum opacity
+            if (intensity < 0.15) intensity = 0.15; 
             
             if (settings.showShading) {
                 if (cell.askVolume > cell.bidVolume) {
@@ -144,12 +199,39 @@ export class FootprintRenderer {
                 }
                 ctx.fillRect(x - halfWidth, y - cellHeight/2, candleWidth, cellHeight);
             }
+
+            // Stacked Imbalance Highlight
+            if (cell.isPartOfStackedBuy || cell.isPartOfStackedSell) {
+                ctx.strokeStyle = cell.isPartOfStackedBuy ? '#0ecb81' : '#f6465d';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x - halfWidth + 1, y - cellHeight/2 + 1, candleWidth - 2, cellHeight - 2);
+            }
             
-            // HVN
-            if (cell.price === fp.hvnPrice) {
+            // Multiple HVN Highlight
+            if (fp.isMultipleHVN && cell.price === fp.hvnPrice) {
+                ctx.strokeStyle = '#F0B90B';
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#F0B90B';
+                ctx.strokeRect(x - halfWidth - 2, y - cellHeight/2 - 2, candleWidth + 4, cellHeight + 4);
+                ctx.shadowBlur = 0;
+            } else if (cell.price === fp.hvnPrice) {
+                // Normal HVN
                 ctx.strokeStyle = '#000000';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x - halfWidth + 1, y - cellHeight/2 + 1, candleWidth - 2, cellHeight - 2);
+            }
+
+            // Unfinished Business Dotted Line
+            if (settings.showUnfinishedBusiness && cell.isUnfinishedBusiness) {
+                ctx.setLineDash([4, 4]);
+                ctx.strokeStyle = cell.price === fp.cells[0].price ? '#f6465d' : '#0ecb81';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x + halfWidth, y);
+                ctx.lineTo(x + candleWidth * 5, y); // Extend into the future
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
 
             // Text

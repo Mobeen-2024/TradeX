@@ -8,6 +8,9 @@ defineProps<{
         imbalanceRatio: number;
         showShading: boolean;
         showImbalances: boolean;
+        minTradeFilter: number;
+        stackedImbalanceCount: number;
+        showUnfinishedBusiness: boolean;
     }
 }>();
 
@@ -57,6 +60,42 @@ defineEmits(['update:modelValue', 'close']);
             :class="cn('w-8 h-4 rounded-full transition-all relative', modelValue.showShading ? 'bg-[#F0B90B]' : 'bg-[#2b3139]')"
         >
           <div :class="cn('absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all', modelValue.showShading ? 'left-4.5' : 'left-0.5')"></div>
+        </button>
+      </div>
+
+      <div class="space-y-1.5">
+        <div class="flex justify-between text-[10px]">
+          <span class="text-[#848e9c]">Trades Filter</span>
+          <span class="text-[#F0B90B] font-mono">>{{ modelValue.minTradeFilter }}</span>
+        </div>
+        <input 
+            type="range" min="0" max="1000" step="10" 
+            :value="modelValue.minTradeFilter"
+            @input="e => $emit('update:modelValue', { ...modelValue, minTradeFilter: parseInt((e.target as HTMLInputElement).value) })"
+            class="w-full accent-[#F0B90B]"
+        >
+      </div>
+
+      <div class="space-y-1.5">
+        <div class="flex justify-between text-[10px]">
+          <span class="text-[#848e9c]">Stacked Imbalance</span>
+          <span class="text-[#F0B90B] font-mono">{{ modelValue.stackedImbalanceCount }}</span>
+        </div>
+        <input 
+            type="range" min="2" max="5" step="1" 
+            :value="modelValue.stackedImbalanceCount"
+            @input="e => $emit('update:modelValue', { ...modelValue, stackedImbalanceCount: parseInt((e.target as HTMLInputElement).value) })"
+            class="w-full accent-[#F0B90B]"
+        >
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] text-[#848e9c]">Unfinished Business</span>
+        <button 
+            @click="$emit('update:modelValue', { ...modelValue, showUnfinishedBusiness: !modelValue.showUnfinishedBusiness })"
+            :class="cn('w-8 h-4 rounded-full transition-all relative', modelValue.showUnfinishedBusiness ? 'bg-[#F0B90B]' : 'bg-[#2b3139]')"
+        >
+          <div :class="cn('absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all', modelValue.showUnfinishedBusiness ? 'left-4.5' : 'left-0.5')"></div>
         </button>
       </div>
     </div>
