@@ -1,0 +1,16 @@
+services:
+  tradex:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - ./mock_db.json:/app/mock_db.json
+    restart: always
+
+  # Potential future addition: Redis for high-speed caching of market data
+  # redis:
+  #   image: redis:alpine
+  #   ports:
+  #     - "6379:6379"
