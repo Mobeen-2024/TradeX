@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "s9wt0x4dj",
+    "pair": "BTC/USDT",
+    "type": "LONG",
+    "leverage": "Cross_10x",
+    "size": 0.0013,
+    "cost": 10.1840414,
+    "entry": 78338.78,
+    "mark": 78338.78,
+    "liveDelta": 0,
+    "liveDeltaPercent": 0,
+    "protocolLimits": [
+      "-",
+      "-"
+    ]
+  }
+]

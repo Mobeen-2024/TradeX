@@ -2,9 +2,10 @@
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit, Shield } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice } from '../store/tradeStore';
+import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc } from '../store/tradeStore';
+import { useOrderExecution } from '../composables/useOrderExecution';
 
-const isPending = ref(false);
+const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
 const orderPrice = ref(36000.00);
 const lastOrderPrice = ref(36000.00);
 const orderAmount = ref<number | null>(null);
@@ -170,14 +171,9 @@ const tpPercent = ref<number | null>(5);
 const slPercent = ref<number | null>(5);
 const riskUsdt = ref<number | null>(100);
 
-const availableUsdt = ref(9840.79);
-const availableBtc = ref(0.4521);
 const shadowBorrowValue = ref(0.00);
 
-const availableMargin = computed(() => {
-    const unrealizedPNL = activePositions.value.reduce((acc, pos) => acc + (pos.liveDelta || 0), 0);
-    return availableUsdt.value + unrealizedPNL;
-});
+
 
 const borrowValue = computed(() => {
     if (!marginEnabled.value) return 0.00;
@@ -251,15 +247,6 @@ const isFormValid = computed(() => {
 
 const executeTrade = async () => {
   if (!isFormValid.value) return;
-  
-  const mult = marginEnabled.value ? leverage.value : 1;
-  const marginRequired = totalCostNumber.value / mult;
-
-  if (orderSide.value === 'Buy') {
-    availableUsdt.value -= marginRequired;
-  } else {
-    availableBtc.value -= (orderAmount.value! / mult);
-  }
 
   const typeMapping: Record<string, string> = {
     'Limit': 'LIMIT',
@@ -270,22 +257,23 @@ const executeTrade = async () => {
     'OCO': 'OCO'
   };
 
-  await placeOrder({
-    pair: 'BTC/USDT',
+  const result = await runTrade({
     side: orderSide.value,
     type: typeMapping[orderType.value] || 'MARKET',
-    quantity: orderAmount.value!,
+    amount: orderAmount.value!,
     price: orderPrice.value,
+    leverage: leverage.value,
+    marginEnabled: marginEnabled.value,
     stopPrice: stopPrice.value || undefined,
     callbackRate: callbackRate.value || undefined,
     activationPrice: activationPrice.value || undefined,
-    leverage: marginEnabled.value ? `Cross_${leverage.value}x` : 'Spot',
-    cost: marginRequired,
   });
-  
-  orderAmount.value = null; // reset
-  tpSl.value = false;
-  percentage.value = 0;
+
+  if (result?.success) {
+    orderAmount.value = null; // reset
+    tpSl.value = false;
+    percentage.value = 0;
+  }
 };
 
 const isUpdatingAmountAutomatically = ref(false);

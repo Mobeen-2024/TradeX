@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { ArrowDownLeft, ArrowUpRight, Bitcoin, Activity, Signal, TrendingUp } from 'lucide-vue-next';
+
 import Sidebar from './components/Sidebar.vue';
 import TopHeader from './components/TopHeader.vue';
 import TickerRibbon from './components/TickerRibbon.vue';
@@ -12,9 +12,11 @@ import SettingsPanel from './components/SettingsPanel.vue';
 import PortfolioVisualizer from './components/PortfolioVisualizer.vue';
 import MarketSentiment from './components/MarketSentiment.vue';
 import PerformanceDashboard from './components/PerformanceDashboard.vue';
-import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders } from './store/tradeStore';
+import QuickTradeView from './components/QuickTradeView.vue';
+import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool } from './store/workspaceStore';
+import { LayoutDashboard, History, TrendingUp, Settings as SettingsIcon, Menu, X, Zap, ArrowDownLeft, ArrowUpRight, Bitcoin, Activity, Signal } from 'lucide-vue-next';
 
 const activeItem = ref('Market');
 const mobileTab = ref('Chart');
@@ -235,6 +237,18 @@ const icons: Record<string, any> = {
       </div>
     </div>
     </div> <!-- Close main content container -->
+    
+    <!-- Mobile Quick-Trade FAB -->
+    <button 
+      @click="quickTradeMode = true"
+      class="sm:hidden fixed right-6 bottom-24 z-[150] w-14 h-14 bg-[#F0B90B] rounded-full shadow-2xl flex items-center justify-center text-[#0b0e11] active:scale-95 transition-transform"
+    >
+      <Zap class="w-7 h-7 fill-current" />
+    </button>
+
+    <!-- Quick Trade View Overlay -->
+    <QuickTradeView v-if="quickTradeMode" />
+
     <SettingsPanel ref="settingsPanel" />
   </div>
 </template>

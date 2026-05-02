@@ -30,11 +30,35 @@ export const marketData = ref({
 export const openOrders = ref<any[]>([]);
 export const alerts = ref<{ id: string; price: number; side: 'above' | 'below'; triggered: boolean }[]>([]);
 export const isLiveMode = ref(false);
+export const availableUsdt = ref(9840.79);
+export const availableBtc = ref(0.4521);
+export const quickTradeMode = ref(false);
+export const quickTradePreferences = ref({
+    defaultRisk: 100, // USDT
+    defaultLeverage: 10,
+    oneTapMode: false
+});
 
 if (typeof window !== 'undefined') {
     const savedMode = localStorage.getItem('tradex_live_mode');
     isLiveMode.value = savedMode === 'true';
+
+    const savedQT = localStorage.getItem('tradex_qt_prefs');
+    if (savedQT) quickTradePreferences.value = JSON.parse(savedQT);
+    
+    const savedUsdt = localStorage.getItem('tradex_available_usdt');
+    if (savedUsdt) availableUsdt.value = parseFloat(savedUsdt);
+    
+    const savedBtc = localStorage.getItem('tradex_available_btc');
+    if (savedBtc) availableBtc.value = parseFloat(savedBtc);
 }
+
+watch(quickTradePreferences, (val) => {
+    localStorage.setItem('tradex_qt_prefs', JSON.stringify(val));
+}, { deep: true });
+
+watch(availableUsdt, (val) => localStorage.setItem('tradex_available_usdt', val.toString()));
+watch(availableBtc, (val) => localStorage.setItem('tradex_available_btc', val.toString()));
 
 export const createAlert = (price: number) => {
     const side = price > currentPrice.value ? 'above' : 'below';
