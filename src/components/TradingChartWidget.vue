@@ -6,7 +6,7 @@ import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Se
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
 import { calculateEMA, calculateRSI, calculateBollingerBands } from '../utils/indicators';
-import { alerts, createAlert, removeAlert, currentPrice } from '../store/tradeStore';
+import { alerts, createAlert, removeAlert, currentPrice, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 
 const props = defineProps<{
     panelId?: string;
@@ -39,6 +39,8 @@ const fibStart = ref<{ price: number, time: any } | null>(null);
 const trendStart = ref<{ price: number, time: any } | null>(null);
 const heatmapData = ref<{ price: number, volume: number }[]>([]);
 let drawingPriceLines: IPriceLine[] = [];
+let riskSlLine: IPriceLine | null = null;
+let isDraggingSl = false;
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
 
 // State for legend
@@ -265,6 +267,76 @@ const initChart = async () => {
 
     chart.timeScale().subscribeVisibleTimeRangeChange(() => {
         renderHeatmap();
+    });
+
+    const handleMouseDown = (e: MouseEvent) => {
+        if (!isRiskModeActive.value || !candleSeries || !chart || !chartContainer.value) return;
+        
+        const rect = chartContainer.value.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        
+        // If SL price is null, set it on first click
+        if (sharedSlPrice.value === null) {
+            const initialPrice = candleSeries.coordinateToPrice(y);
+            if (initialPrice) {
+                sharedSlPrice.value = parseFloat(initialPrice.toFixed(2));
+            }
+            return;
+        }
+
+        // Check if we are near the SL line
+        const slCoord = candleSeries.priceToCoordinate(sharedSlPrice.value);
+        if (slCoord !== null && Math.abs(y - slCoord) < 15) {
+            isDraggingSl = true;
+            chart.applyOptions({ handleScroll: { mouseWheel: false, pressedMouseMove: false }, handleScale: { mouseWheel: false, pinch: false } });
+            
+            const onMouseMove = (moveEvent: MouseEvent) => {
+                const moveY = moveEvent.clientY - rect.top;
+                const newPrice = candleSeries!.coordinateToPrice(moveY);
+                if (newPrice) {
+                    sharedSlPrice.value = parseFloat(newPrice.toFixed(2));
+                }
+            };
+            
+            const onMouseUp = () => {
+                isDraggingSl = false;
+                chart?.applyOptions({ handleScroll: { mouseWheel: true, pressedMouseMove: true }, handleScale: { mouseWheel: true, pinch: true } });
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+            e.stopPropagation();
+        }
+    };
+
+    chartContainer.value.addEventListener('mousedown', handleMouseDown);
+
+    watch([isRiskModeActive, sharedSlPrice], ([active, price]) => {
+        if (!candleSeries) return;
+        
+        if (riskSlLine) {
+            candleSeries.removePriceLine(riskSlLine);
+            riskSlLine = null;
+        }
+
+        if (active && price) {
+            riskSlLine = candleSeries.createPriceLine({
+                price: price,
+                color: '#f6465d',
+                lineWidth: 2,
+                lineStyle: 2, // Dashed
+                axisLabelVisible: true,
+                title: 'RISK SL',
+            });
+        }
+    }, { immediate: true });
+
+    onUnmounted(() => {
+        if (chartContainer.value) {
+            chartContainer.value.removeEventListener('mousedown', handleMouseDown);
+        }
     });
 };
 

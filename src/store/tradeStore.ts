@@ -19,6 +19,8 @@ export const closedTrades = ref<any[]>([]);
 export const currentPrice = ref(36000.00);
 export const previousPrice = ref(36000.00);
 export const selectedPrice = ref<number | null>(null);
+export const sharedSlPrice = ref<number | null>(null);
+export const isRiskModeActive = ref(false);
 export const marketData = ref({
     change24h: '+1,240.50 +1.99%',
     high24h: '64,500.00',
@@ -151,30 +153,58 @@ export const placeOrder = async (order: {
   activationPrice?: number;
   leverage: string;
   cost: number;
+  takeProfitPrice?: number;
+  stopLossPrice?: number;
 }) => {
+  const id = Math.random().toString(36).substr(2, 9);
+  const isMarket = order.type === 'MARKET' || order.type === 'STOP_MARKET' || order.type === 'TRAILING_STOP_MARKET';
+
   try {
-      // In Live Mode, we would call the actual exchange API bridge
       const endpoint = isLiveMode.value ? '/api/live/place_order' : '/api/place_order';
-      
       const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              ...order,
-              amount: order.quantity, 
-              isLive: isLiveMode.value
-          })
+          body: JSON.stringify({ ...order, amount: order.quantity, isLive: isLiveMode.value })
       });
       const data = await response.json();
       if (data.success) {
-          if (data.position) {
-              activePositions.value.push(data.position);
-          } else if (data.order) {
-              openOrders.value.push(data.order);
-          }
+          if (data.position) activePositions.value.push(data.position);
+          else if (data.order) openOrders.value.push(data.order);
       }
+      return data;
   } catch (err) {
-      console.warn('PlaceOrder failed:', err);
+      // Mock Simulation for local demo
+      if (isMarket) {
+          activePositions.value.push({
+              id,
+              pair: order.pair,
+              type: order.side === 'Buy' ? 'LONG' : 'SHORT',
+              size: order.quantity,
+              entry: order.price || currentPrice.value,
+              leverage: order.leverage.replace('Spot', '1x').replace('Cross_', ''),
+              cost: order.cost,
+              tp: order.takeProfitPrice,
+              sl: order.stopLossPrice,
+              time: Date.now(),
+              pnl: 0,
+              pnlPercent: 0
+          });
+      } else {
+          openOrders.value.unshift({
+              id,
+              pair: order.pair,
+              side: order.side,
+              type: order.type,
+              price: order.price || currentPrice.value,
+              amount: order.quantity,
+              total: (order.price || currentPrice.value) * order.quantity,
+              time: new Date().toLocaleTimeString(),
+              status: 'Open',
+              tp: order.takeProfitPrice,
+              sl: order.stopLossPrice
+          });
+      }
+      return { success: true };
   }
 };
 
@@ -182,8 +212,11 @@ export const placeOrder = async (order: {
 export const addPosition = (pos: any) => placeOrder({
     ...pos,
     side: pos.type === 'LONG' ? 'Buy' : 'Sell',
-    type: 'Market',
-    quantity: pos.size
+    type: 'MARKET',
+    quantity: pos.size,
+    leverage: pos.leverage.includes('x') ? `Cross_${pos.leverage}` : pos.leverage,
+    takeProfitPrice: pos.tp,
+    stopLossPrice: pos.sl
 });
 
 export const closePosition = async (id: string) => {

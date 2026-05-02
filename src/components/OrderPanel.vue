@@ -2,7 +2,7 @@
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit, Shield } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc } from '../store/tradeStore';
+import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 import { useOrderExecution } from '../composables/useOrderExecution';
 
 const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
@@ -11,6 +11,10 @@ const lastOrderPrice = ref(36000.00);
 const orderAmount = ref<number | null>(null);
 const orderSide = ref<'Buy' | 'Sell'>('Buy');
 const priceChangeClass = ref('');
+const isRiskMode = isRiskModeActive;
+const riskPercentOfBalance = ref(1); // 1% default
+const riskAmountAbsolute = ref(100); // $100 default
+const riskInputMode = ref<'percent' | 'absolute'>('percent');
 
 // Extra specific fields for complex types
 const stopPrice = ref<number | null>(null);
@@ -163,10 +167,16 @@ watch(orderType, (val) => localStorage.setItem('defaultOrderType', val));
 watch(marginEnabled, (val) => localStorage.setItem('defaultMarginEnabled', String(val)));
 watch(leverage, (val) => localStorage.setItem('defaultLeverage', String(val)));
 
+watch(isRiskModeActive, (val) => {
+    if (val && sharedSlPrice.value === null && orderPrice.value) {
+        setSlPercent(5);
+    }
+});
+
 const tpSl = ref(false);
 const isTpSlOpen = ref(false);
 const tpPrice = ref<number | null>(null);
-const slPrice = ref<number | null>(null);
+const slPrice = sharedSlPrice;
 const tpPercent = ref<number | null>(5);
 const slPercent = ref<number | null>(5);
 const riskUsdt = ref<number | null>(100);
@@ -236,6 +246,12 @@ const orderAmountError = computed(() => {
 });
 
 const isFormValid = computed(() => {
+  if (isRiskMode.value) {
+    if (!slPrice.value || slError.value) return false;
+    if (calculatedRiskSize.value <= 0) return false;
+    if (requiredRiskMargin.value > availableUsdt.value) return false;
+    return true;
+  }
   if (!orderAmount.value || orderAmount.value <= 0) return false;
   if (orderPriceError.value) return false;
   if (orderAmountError.value) return false;
@@ -243,6 +259,24 @@ const isFormValid = computed(() => {
     if (tpError.value || slError.value) return false;
   }
   return true;
+});
+
+const calculatedRiskAmount = computed(() => {
+    if (riskInputMode.value === 'percent') {
+        return (availableUsdt.value * riskPercentOfBalance.value) / 100;
+    }
+    return riskAmountAbsolute.value;
+});
+
+const calculatedRiskSize = computed(() => {
+    if (!slPrice.value || !orderPrice.value) return 0;
+    const priceDiff = Math.abs(orderPrice.value - slPrice.value);
+    if (priceDiff === 0) return 0;
+    return parseFloat((calculatedRiskAmount.value / priceDiff).toFixed(4));
+});
+
+const requiredRiskMargin = computed(() => {
+    return (calculatedRiskSize.value * (orderType.value === 'Market' ? lastOrderPrice.value : orderPrice.value)) / leverage.value;
 });
 
 const executeTrade = async () => {
@@ -257,16 +291,22 @@ const executeTrade = async () => {
     'OCO': 'OCO'
   };
 
+  const finalAmount = isRiskMode.value ? calculatedRiskSize.value : orderAmount.value!;
+  const finalSl = isRiskMode.value ? slPrice.value : (tpSl.value ? slPrice.value : undefined);
+  const finalTp = tpSl.value ? tpPrice.value : undefined;
+
   const result = await runTrade({
     side: orderSide.value,
     type: typeMapping[orderType.value] || 'MARKET',
-    amount: orderAmount.value!,
+    amount: finalAmount,
     price: orderPrice.value,
     leverage: leverage.value,
     marginEnabled: marginEnabled.value,
     stopPrice: stopPrice.value || undefined,
     callbackRate: callbackRate.value || undefined,
     activationPrice: activationPrice.value || undefined,
+    takeProfitPrice: finalTp || undefined,
+    stopLossPrice: finalSl || undefined,
   });
 
   if (result?.success) {
@@ -606,9 +646,77 @@ watch(tpSl, (val) => {
         </Teleport>
       </div>
 
+      <!-- Calculator Toggle -->
+      <div class="flex rounded bg-[#1e2329] p-0.5 mb-3">
+        <button 
+          @click="isRiskMode = false"
+          class="flex-1 py-1 rounded text-[10px] font-bold transition-all uppercase tracking-tight"
+          :class="!isRiskMode ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]'"
+        >
+          Standard
+        </button>
+        <button 
+          @click="isRiskMode = true"
+          class="flex-1 py-1 rounded text-[10px] font-bold transition-all uppercase tracking-tight flex items-center justify-center gap-1"
+          :class="isRiskMode ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]'"
+        >
+          <Shield class="w-3 h-3" />
+          Risk-Based
+        </button>
+      </div>
+
       <!-- Inputs -->
       <div class="flex flex-col gap-3 min-h-[120px]">
+        
+        <!-- Risk-Based Sizing Inputs -->
+        <template v-if="isRiskMode">
+           <div class="flex flex-col gap-2 p-3 rounded-lg bg-[#F0B90B]/5 border border-[#F0B90B]/10">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-bold text-[#F0B90B] uppercase">Risk Per Trade</span>
+                <div class="flex rounded bg-[#161a1e] p-0.5">
+                    <button @click="riskInputMode = 'percent'" :class="cn('px-2 py-0.5 text-[8px] font-bold rounded', riskInputMode === 'percent' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c]')">%</button>
+                    <button @click="riskInputMode = 'absolute'" :class="cn('px-2 py-0.5 text-[8px] font-bold rounded', riskInputMode === 'absolute' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c]')">$</button>
+                </div>
+              </div>
+
+              <div v-if="riskInputMode === 'percent'" class="flex items-center gap-2 bg-[#0b0e11] rounded px-3 py-1.5 border border-[#2b3139] focus-within:border-[#F0B90B]">
+                <input type="number" v-model="riskPercentOfBalance" step="0.1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
+                <span class="text-[10px] text-[#848e9c] font-bold">% Balance</span>
+              </div>
+              <div v-else class="flex items-center gap-2 bg-[#0b0e11] rounded px-3 py-1.5 border border-[#2b3139] focus-within:border-[#F0B90B]">
+                <input type="number" v-model="riskAmountAbsolute" step="1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
+                <span class="text-[10px] text-[#848e9c] font-bold">USDT</span>
+              </div>
+
+              <div class="flex flex-col gap-1 mt-1">
+                <span class="text-[10px] font-bold text-[#848e9c] uppercase">Stop Loss Price</span>
+                <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[36px] px-2 bg-[#0b0e11] border', slError ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+                    <input type="number" step="0.1" v-model="slPrice" placeholder="Exit Price" class="flex-1 bg-transparent outline-none text-[#EAECEF] font-mono text-xs text-center" />
+                </div>
+                <div class="flex items-center justify-between px-1">
+                    <span class="text-[8px] text-[#848e9c] italic">Tip: Drag line on chart</span>
+                    <div class="flex gap-1">
+                        <button v-for="pct in [1, 2, 5, 10]" :key="pct" @click="setSlPercent(pct)" class="text-[8px] font-bold px-2 py-0.5 bg-[#2b3139] text-[#848e9c] rounded hover:text-white transition-colors">{{ pct }}%</button>
+                    </div>
+                </div>
+              </div>
+
+              <!-- Calculation Result -->
+              <div class="mt-2 pt-2 border-t border-[#F0B90B]/10 flex flex-col gap-1.5">
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-[#848e9c]">Position Size</span>
+                    <span class="text-xs font-mono font-bold text-[#EAECEF]">{{ calculatedRiskSize }} BTC</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-[#848e9c]">Required Margin</span>
+                    <span :class="cn('text-xs font-mono font-bold', requiredRiskMargin > availableUsdt ? 'text-[#f6465d]' : 'text-[#0ecb81]')">{{ requiredRiskMargin.toFixed(2) }} USDT</span>
+                </div>
+              </div>
+           </div>
+        </template>
+
         <!-- Setup Inputs based on Type -->
+        <template v-if="!isRiskMode">
         
         <!-- Stop Price (for Stop-Limit and OCO) -->
         <div v-if="orderType === 'Stop-Limit' || orderType === 'Stop Market' || orderType === 'OCO'" class="flex flex-col gap-1">
@@ -694,6 +802,8 @@ watch(tpSl, (val) => {
           </div>
           <div class="h-[40px] px-3 sm:px-4 bg-[#1e2329]/50 border border-[#2b3139] text-[#EAECEF]/50 rounded-lg font-semibold text-xs shrink-0 cursor-not-allowed opacity-50 flex items-center justify-center">BBO</div>
         </div>
+
+        </template>
 
         <!-- Total -->
         <div class="flex items-center bg-[#1e2329] hover:bg-[#2b3139] transition-colors rounded-lg w-full h-[40px] px-1.5 sm:px-3 border border-transparent focus-within:ring-1 focus-within:ring-[#F0B90B]">

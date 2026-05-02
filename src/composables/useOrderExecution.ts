@@ -25,6 +25,8 @@ export function useOrderExecution() {
         stopPrice?: number;
         callbackRate?: number;
         activationPrice?: number;
+        takeProfitPrice?: number;
+        stopLossPrice?: number;
     }) => {
         if (isPending.value) return;
         isPending.value = true;
@@ -61,6 +63,8 @@ export function useOrderExecution() {
                 activationPrice: params.activationPrice,
                 leverage: params.marginEnabled ? `Cross_${params.leverage}x` : 'Spot',
                 cost: marginRequired,
+                takeProfitPrice: params.takeProfitPrice,
+                stopLossPrice: params.stopLossPrice,
             });
 
             return { success: true };
