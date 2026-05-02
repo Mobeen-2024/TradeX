@@ -18,7 +18,6 @@ if (fs.existsSync(DB_FILE)) {
 const saveDb = () => {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(positions, null, 2));
-    console.log('Saved DB to', DB_FILE);
   } catch (err) {
     console.error('Failed to save DB:', err);
   }
@@ -41,7 +40,7 @@ setInterval(() => {
 }, 500);
 
 async function start() {
-  const fastify = Fastify({ logger: true });
+  const fastify = Fastify({ logger: false });
 
   await fastify.register(fastifyWebsocket);
   await fastify.register(middie);
@@ -174,10 +173,10 @@ async function start() {
     });
 
   if (!isProd) {
-    // Mount Vite dev server middleware
+    // Mount Vite dev server
     const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: { port: 24680, clientPort: 24680 } },
-      appType: 'custom'
+      server: { middlewareMode: true },
+      appType: 'custom',
     });
     // Use middie to register vite middleware
     fastify.use(vite.middlewares);
@@ -195,10 +194,13 @@ async function start() {
     });
   } else {
     // In production, serve the built static files
-    fastify.register(async (fastify) => {
-        fastify.get('*', async (request, reply) => {
-            return reply.sendFile('index.html'); // You would need @fastify/static here
-        });
+    fastify.get('*', async (request, reply) => {
+        const indexPath = path.join(process.cwd(), 'dist', 'index.html');
+        if (fs.existsSync(indexPath)) {
+            const content = fs.readFileSync(indexPath, 'utf-8');
+            return reply.type('text/html').send(content);
+        }
+        reply.status(404).send('Not Found. Please run npm run build first.');
     });
   }
 
@@ -209,11 +211,11 @@ async function start() {
       fastify.log.error(err);
       process.exit(1);
     }
-    console.log(`Fastify server running efficiently at ${address}`);
+    // Server started
   });
 
   const shutdown = async () => {
-    console.log('Shutting down gracefully...');
+    // Closing...
     await fastify.close();
     process.exit(0);
   };
