@@ -14,6 +14,8 @@ export const activePositions = ref<{
   protocolLimits: [string, string];
 }[]>([]);
 
+export const closedTrades = ref<any[]>([]);
+
 export const currentPrice = ref(36000.00);
 export const previousPrice = ref(36000.00);
 export const selectedPrice = ref<number | null>(null);
@@ -151,6 +153,20 @@ export const addPosition = (pos: any) => placeOrder({
 });
 
 export const closePosition = async (id: string) => {
+  const pos = activePositions.value.find(p => p.id === id);
+  if (pos) {
+      const pnl = pos.side === 'Buy' 
+          ? (currentPrice.value - pos.price) * pos.quantity 
+          : (pos.price - currentPrice.value) * pos.quantity;
+      
+      closedTrades.value.push({
+          ...pos,
+          closePrice: currentPrice.value,
+          realizedPnl: pnl,
+          closeTime: Date.now()
+      });
+  }
+  
   try {
       await fetch(`/api/close_position/${id}`, { method: 'POST' });
   } catch (err) {}

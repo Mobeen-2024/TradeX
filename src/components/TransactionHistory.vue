@@ -15,6 +15,7 @@ import {
 import { cn } from '../lib/utils';
 import { ref } from 'vue';
 import { activePositions, closePosition, openOrders, cancelOrder } from '../store/tradeStore';
+import PerformanceDashboard from './PerformanceDashboard.vue';
 
 const activeTab = ref(0);
 
@@ -51,6 +52,16 @@ const formatDate = (date: any) => {
         >
           <span class="text-[13px] font-bold tracking-tight">Open Orders <span class="font-normal opacity-60">({{ openOrders.length }})</span></span>
           <div v-show="activeTab === 1" class="absolute bottom-0 left-0 right-0 h-[2px] bg-[#F0B90B] shadow-[0_0_10px_#F0B90B]"></div>
+        </button>
+        <button 
+          @click="activeTab = 2"
+          :class="cn(
+            'h-full relative transition-all duration-300 flex items-center group',
+            activeTab === 2 ? 'text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]'
+          )"
+        >
+          <span class="text-[13px] font-bold tracking-tight">Performance</span>
+          <div v-show="activeTab === 2" class="absolute bottom-0 left-0 right-0 h-[2px] bg-[#F0B90B] shadow-[0_0_10px_#F0B90B]"></div>
         </button>
       </div>
       <div class="flex items-center gap-4 text-[#848e9c]">
@@ -243,6 +254,11 @@ const formatDate = (date: any) => {
                 <div v-if="order.stopPrice" class="text-[9px] text-[#fcd535] font-bold uppercase">Trigger Condition: {{ order.stopPrice }}</div>
             </div>
         </div>
+      </div>
+
+      <!-- Performance Tab -->
+      <div v-else-if="activeTab === 2" class="flex-1 overflow-hidden">
+        <PerformanceDashboard />
       </div>
 
     </div>
