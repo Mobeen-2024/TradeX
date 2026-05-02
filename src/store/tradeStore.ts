@@ -1,5 +1,7 @@
 import { ref, watch } from 'vue';
 import { addNotification } from './alertStore';
+import { apiClient } from '../lib/apiClient';
+import { wsManager } from '../lib/wsManager';
 
 export const activePositions = ref<{
   id: string;
@@ -97,56 +99,27 @@ export const orderBook = ref<{
     asks: [number, number][];
 }>({ bids: [], asks: [] });
 
-let ws: WebSocket;
-export const sharedWs = ref<WebSocket | null>(null);
-
-function connectWs() {
-  if (typeof window !== 'undefined') {
-    // Binance combined stream for ticker and 20-level depth
-    const wsUrl = 'wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/btcusdt@depth20@100ms';
-    ws = new WebSocket(wsUrl);
-    sharedWs.value = ws;
-
-    ws.addEventListener('message', (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        const stream = payload.stream;
-        const data = payload.data;
-
-        if (stream === 'btcusdt@ticker') {
-            previousPrice.value = currentPrice.value;
-            currentPrice.value = parseFloat(data.c);
-            
-            marketData.value = {
-                change24h: `${parseFloat(data.p).toFixed(2)} ${data.P}%`,
-                high24h: parseFloat(data.h).toFixed(2),
-                low24h: parseFloat(data.l).toFixed(2),
-                volBtc24h: parseFloat(data.v).toFixed(2),
-                volUsdt24h: (parseFloat(data.q) / 1000000).toFixed(2) + 'M'
-            };
-        } else if (stream === 'btcusdt@depth20@100ms') {
-            orderBook.value = {
-                bids: data.b.map((b: string[]) => [parseFloat(b[0]), parseFloat(b[1])]),
-                asks: data.a.map((a: string[]) => [parseFloat(a[0]), parseFloat(a[1])])
-            };
-        }
-      } catch(e) {
-        console.error('WS Error:', e);
-      }
+if (typeof window !== 'undefined') {
+    wsManager.subscribe('btcusdt@ticker', (data) => {
+        previousPrice.value = currentPrice.value;
+        currentPrice.value = parseFloat(data.c);
+        
+        marketData.value = {
+            change24h: `${parseFloat(data.p).toFixed(2)} ${data.P}%`,
+            high24h: parseFloat(data.h).toFixed(2),
+            low24h: parseFloat(data.l).toFixed(2),
+            volBtc24h: parseFloat(data.v).toFixed(2),
+            volUsdt24h: (parseFloat(data.q) / 1000000).toFixed(2) + 'M'
+        };
     });
 
-    ws.addEventListener('close', () => {
-      console.log('WS Closed, reconnecting...');
-      setTimeout(connectWs, 3000);
+    wsManager.subscribe('btcusdt@depth20@100ms', (data) => {
+        orderBook.value = {
+            bids: data.b.map((b: string[]) => [parseFloat(b[0]), parseFloat(b[1])]),
+            asks: data.a.map((a: string[]) => [parseFloat(a[0]), parseFloat(a[1])])
+        };
     });
-    
-    ws.addEventListener('error', (err) => {
-        console.error('WS Error:', err);
-    });
-  }
 }
-
-connectWs();
 
 export const placeOrder = async (order: {
   pair: string;
@@ -166,14 +139,15 @@ export const placeOrder = async (order: {
   const isMarket = order.type === 'MARKET' || order.type === 'STOP_MARKET' || order.type === 'TRAILING_STOP_MARKET';
 
   try {
-      const endpoint = isLiveMode.value ? '/api/live/place_order' : '/api/place_order';
-      const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...order, amount: order.quantity, isLive: isLiveMode.value })
+      const endpoint = isLiveMode.value ? '/live/place_order' : '/place_order';
+      const response = await apiClient.post<any>(endpoint, { 
+          ...order, 
+          amount: order.quantity, 
+          isLive: isLiveMode.value 
       });
-      const data = await response.json();
-      if (data.success) {
+
+      if (response.success && response.data) {
+          const data = response.data;
           if (data.position) {
               activePositions.value.push(data.position);
               addNotification({
@@ -189,8 +163,9 @@ export const placeOrder = async (order: {
                   message: `${order.type} ${order.side} ${order.quantity} ${order.pair}`
               });
           }
+          return data;
       }
-      return data;
+      throw new Error(response.error || 'API call failed');
   } catch (err) {
       // Mock Simulation for local demo
       if (isMarket) {
@@ -272,7 +247,7 @@ export const closePosition = async (id: string) => {
   }
   
   try {
-      await fetch(`/api/close_position/${id}`, { method: 'POST' });
+      await apiClient.post(`/close_position/${id}`, {});
   } catch (err) {}
   activePositions.value = activePositions.value.filter(p => p.id !== id);
 };
