@@ -35,36 +35,56 @@ if (typeof window !== 'undefined') {
         .catch(() => {});
 }
 
+export const orderBook = ref<{
+    bids: [number, number][];
+    asks: [number, number][];
+}>({ bids: [], asks: [] });
+
 let ws: WebSocket;
 export const sharedWs = ref<WebSocket | null>(null);
 
 function connectWs() {
   if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/trading`;
+    // Binance combined stream for ticker and 20-level depth
+    const wsUrl = 'wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/btcusdt@depth20@100ms';
     ws = new WebSocket(wsUrl);
     sharedWs.value = ws;
 
     ws.addEventListener('message', (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'trade') {
-            if (data.price) {
-                previousPrice.value = currentPrice.value;
-                currentPrice.value = data.price;
-            }
-            if (data.positions) {
-                activePositions.value = data.positions;
-            }
-        } else if (data.type === 'position_opened') {
-            const exists = activePositions.value.find(p => p.id === data.position.id);
-            if (!exists) activePositions.value.push(data.position);
+        const payload = JSON.parse(event.data);
+        const stream = payload.stream;
+        const data = payload.data;
+
+        if (stream === 'btcusdt@ticker') {
+            previousPrice.value = currentPrice.value;
+            currentPrice.value = parseFloat(data.c);
+            
+            marketData.value = {
+                change24h: `${parseFloat(data.p).toFixed(2)} ${data.P}%`,
+                high24h: parseFloat(data.h).toFixed(2),
+                low24h: parseFloat(data.l).toFixed(2),
+                volBtc24h: parseFloat(data.v).toFixed(2),
+                volUsdt24h: (parseFloat(data.q) / 1000000).toFixed(2) + 'M'
+            };
+        } else if (stream === 'btcusdt@depth20@100ms') {
+            orderBook.value = {
+                bids: data.b.map((b: string[]) => [parseFloat(b[0]), parseFloat(b[1])]),
+                asks: data.a.map((a: string[]) => [parseFloat(a[0]), parseFloat(a[1])])
+            };
         }
-      } catch(e) {}
+      } catch(e) {
+        console.error('WS Error:', e);
+      }
     });
 
     ws.addEventListener('close', () => {
-      setTimeout(connectWs, 1000);
+      console.log('WS Closed, reconnecting...');
+      setTimeout(connectWs, 3000);
+    });
+    
+    ws.addEventListener('error', (err) => {
+        console.error('WS Error:', err);
     });
   }
 }

@@ -8,9 +8,11 @@ import BalancesPanel from './components/BalancesPanel.vue';
 import TradingChartWidget from './components/TradingChartWidget.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
+import { currentPrice } from './store/tradeStore';
 import { cn } from './lib/utils';
 
 const activeItem = ref('Market');
+const mobileTab = ref('Chart');
 
 const icons: Record<string, any> = {
   Activity,
@@ -38,52 +40,117 @@ const icons: Record<string, any> = {
       <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
       <TopHeader :title="activeItem" />
       
-      <div v-if="activeItem === 'Market'" class="flex-1 overflow-y-auto lg:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
-        <!-- Main Workspace Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">
-          <!-- Chart -->
-          <div class="lg:col-span-7 xl:col-span-8 lg:row-start-1 lg:col-start-1 flex flex-col min-h-[450px] lg:min-h-[0]">
-            <TradingChartWidget class="w-full h-full" />
-          </div>
+      <div v-if="activeItem === 'Market'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <!-- Mobile Tab Switcher -->
+        <div class="md:hidden flex bg-[#161a1e] border-b border-dash-border p-1 gap-1 shrink-0">
+          <button 
+            v-for="tab in ['Chart', 'Trade', 'Positions']" 
+            :key="tab"
+            @click="mobileTab = tab"
+            :class="cn(
+              'flex-1 py-2 text-xs font-bold rounded-md transition-all',
+              mobileTab === tab ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c]'
+            )"
+          >
+            {{ tab }}
+          </button>
+        </div>
 
-          <!-- OrderPanel -->
-          <div class="lg:col-span-5 xl:col-span-4 lg:row-start-1 lg:col-start-8 xl:col-start-9 flex flex-col h-[460px] lg:h-full">
-            <OrderPanel class="w-full h-full" />
-          </div>
-          
-          <!-- Transactions -->
-          <div class="lg:col-span-12 lg:row-start-2 lg:col-start-1 flex flex-col h-[300px] lg:h-full">
-            <TransactionHistory class="h-full" />
+        <div class="flex-1 overflow-y-auto md:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
+          <!-- Main Workspace Grid -->
+          <!-- On mobile, we show only the active mobileTab. On desktop, we show the full grid. -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">
+            
+            <!-- Chart: Visible on Desktop OR if mobileTab is 'Chart' -->
+            <div 
+              :class="cn(
+                'lg:col-span-7 xl:col-span-8 lg:row-start-1 lg:col-start-1 flex flex-col min-h-[450px] lg:min-h-[0]',
+                mobileTab !== 'Chart' ? 'hidden md:flex' : 'flex'
+              )"
+            >
+              <TradingChartWidget class="w-full h-full" />
+            </div>
+
+            <!-- OrderPanel: Visible on Desktop OR if mobileTab is 'Trade' -->
+            <div 
+              :class="cn(
+                'lg:col-span-5 xl:col-span-4 lg:row-start-1 lg:col-start-8 xl:col-start-9 flex flex-col h-[520px] lg:h-full',
+                mobileTab !== 'Trade' ? 'hidden md:flex' : 'flex'
+              )"
+            >
+              <OrderPanel class="w-full h-full" />
+            </div>
+            
+            <!-- Transactions: Visible on Desktop OR if mobileTab is 'Positions' -->
+            <div 
+              :class="cn(
+                'lg:col-span-12 lg:row-start-2 lg:col-start-1 flex flex-col h-[400px] lg:h-full',
+                mobileTab !== 'Positions' ? 'hidden md:flex' : 'flex'
+              )"
+            >
+              <TransactionHistory class="h-full" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-else-if="activeItem === 'Trade'" class="flex-1 overflow-y-auto p-6 flex flex-col gap-8 no-scrollbar bg-[#0b0e11]/50 backdrop-blur-sm">
+      <div v-else-if="activeItem === 'Trade'" class="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-6 no-scrollbar bg-[#0b0e11]/50 backdrop-blur-md">
         <div class="flex flex-col gap-6">
-          <h2 class="text-xl font-bold text-white mb-2">Market Overview</h2>
+          <div class="flex justify-between items-end">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-bold text-white">Market Overview</h2>
+              <p class="text-xs text-[#848e9c]">Real-time market performance and top gainers</p>
+            </div>
+            <div class="hidden sm:flex gap-4">
+               <div class="text-right">
+                 <div class="text-[10px] text-[#848e9c] uppercase font-bold">24h Volume</div>
+                 <div class="text-sm font-mono text-white">$2.68B</div>
+               </div>
+               <div class="text-right border-l border-[#2b3139] pl-4">
+                 <div class="text-[10px] text-[#848e9c] uppercase font-bold">Total Cap</div>
+                 <div class="text-sm font-mono text-white">$2.42T</div>
+               </div>
+            </div>
+          </div>
+          
           <TickerRibbon />
           
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            <!-- Mock Market Cards -->
-            <div v-for="i in 6" :key="i" class="bg-dash-card border border-dash-border p-4 rounded-xl hover:border-dash-primary/50 transition-all cursor-pointer group">
-              <div class="flex justify-between items-center mb-4">
-                <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-full bg-dash-surface flex items-center justify-center">
-                      <component :is="icons[['Bitcoin', 'Activity', 'Signal', 'TrendingUp'][i % 4]]" class="w-4 h-4 text-dash-primary" />
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
+            <!-- Professional Pair Cards -->
+            <div v-for="pair in [
+              { name: 'Bitcoin', symbol: 'BTC', price: currentPrice.toFixed(2), change: '+1.99%', icon: 'Bitcoin', color: '#F0B90B' },
+              { name: 'Ethereum', symbol: 'ETH', price: '3077.93', change: '+2.45%', icon: 'Signal', color: '#627EEA' },
+              { name: 'Solana', symbol: 'SOL', price: '145.22', change: '-0.82%', icon: 'Activity', color: '#14F195' },
+              { name: 'Binance Coin', symbol: 'BNB', price: '580.44', change: '+0.15%', icon: 'TrendingUp', color: '#F3BA2F' },
+              { name: 'Cardano', symbol: 'ADA', price: '0.45', change: '-1.12%', icon: 'Signal', color: '#0033AD' },
+              { name: 'Ripple', symbol: 'XRP', price: '0.62', change: '+0.88%', icon: 'Activity', color: '#23292F' }
+            ]" :key="pair.symbol" class="bg-[#161a1e] border border-[#2b3139] p-4 rounded-xl hover:border-[#F0B90B]/30 transition-all cursor-pointer group hover:bg-[#1e2329] relative overflow-hidden">
+              <!-- Glow Effect -->
+              <div class="absolute -right-4 -top-4 w-16 h-16 opacity-10 blur-2xl rounded-full" :style="`background-color: ${pair.color}`"></div>
+              
+              <div class="flex justify-between items-center mb-4 relative z-10">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-[#0b0e11] flex items-center justify-center border border-[#2b3139] group-hover:border-[#F0B90B]/30 transition-colors">
+                      <component :is="icons[pair.icon]" class="w-5 h-5" :style="`color: ${pair.color}`" />
                     </div>
                   <div>
-                    <div class="font-bold text-white">{{ ['Bitcoin', 'Ethereum', 'Solana', 'Cardano'][i % 4] }}</div>
-                    <div class="text-[10px] text-dash-text-muted uppercase">{{ ['BTC', 'ETH', 'SOL', 'ADA'][i % 4] }}/USDT</div>
+                    <div class="font-bold text-white text-[15px]">{{ pair.name }}</div>
+                    <div class="text-[10px] text-[#848e9c] uppercase font-mono tracking-tighter">{{ pair.symbol }}/USDT</div>
                   </div>
                 </div>
                 <div class="text-right">
-                  <div class="text-dash-primary font-bold">+{{ (Math.random() * 5).toFixed(2) }}%</div>
+                  <div :class="cn('text-[13px] font-bold px-1.5 py-0.5 rounded', pair.change.startsWith('+') ? 'text-[#0ecb81] bg-[#0ecb81]/10' : 'text-[#f6465d] bg-[#f6465d]/10')">
+                    {{ pair.change }}
+                  </div>
                 </div>
               </div>
-              <div class="flex justify-between items-end">
-                <div class="text-lg font-mono text-white">${{ (36000 / (i + 1)).toFixed(2) }}</div>
-                <div class="w-20 h-8 bg-dash-primary/10 rounded flex items-end px-1 pb-1">
-                   <div v-for="j in 8" :key="j" class="flex-1 bg-dash-primary rounded-t-sm mx-[1px]" :style="`height: ${Math.random() * 100}%`"></div>
+              <div class="flex justify-between items-end relative z-10">
+                <div>
+                  <div class="text-xs text-[#848e9c] mb-1">Price</div>
+                  <div class="text-xl font-mono font-bold text-white leading-none">${{ pair.price }}</div>
+                </div>
+                <div class="w-24 h-10 flex items-end gap-[2px]">
+                   <div v-for="j in 10" :key="j" :class="cn('flex-1 rounded-t-sm transition-all duration-500', pair.change.startsWith('+') ? 'bg-[#0ecb81]' : 'bg-[#f6465d]')" :style="`height: ${20 + Math.random() * 80}%; opacity: ${0.2 + (j/10) * 0.8}`"></div>
                 </div>
               </div>
             </div>

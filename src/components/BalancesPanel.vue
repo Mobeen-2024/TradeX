@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Wallet, Bitcoin, CheckCircle2, Eye, EyeOff } from 'lucide-vue-next';
+import { currentPrice } from '../store/tradeStore';
 
 const hideBalance = ref(false);
 const toggleHideBalance = () => {
   hideBalance.value = !hideBalance.value;
 };
+
+const btcHolding = 0.34545;
 </script>
 
 <template>
@@ -56,14 +59,14 @@ const toggleHideBalance = () => {
       <div class="flex items-end justify-between">
         <div class="text-2xl font-bold text-white flex items-baseline gap-1">
           <template v-if="!hideBalance">
-            0.34545 <span class="text-sm font-medium text-dash-text-muted">BTC</span>
+            {{ btcHolding }} <span class="text-sm font-medium text-dash-text-muted">BTC</span>
           </template>
           <template v-else>
             ****** BTC
           </template>
         </div>
-        <div class="text-sm text-dash-text-muted">
-           {{ hideBalance ? '****** USD' : '21900,84 USD' }}
+        <div class="text-sm text-dash-text-muted font-mono">
+           {{ hideBalance ? '****** USD' : (btcHolding * currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD' }}
         </div>
       </div>
     </div>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ChevronDown, ArrowUp, ArrowDown } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
-import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { sharedWs } from '../store/tradeStore';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { currentPrice, previousPrice } from '../store/tradeStore';
 
 interface TickerItem {
   pair: string;
@@ -11,49 +11,20 @@ interface TickerItem {
   active?: boolean;
 }
 
-const mockTickers = ref<TickerItem[]>([
-  { pair: '1 BTC', price: '36000.00 USD', isUp: true, active: true },
-  { pair: '1 ETH', price: '3077.93 USD', isUp: true, active: false },
-  { pair: '1 LTC', price: '80.44 USD', isUp: false, active: false },
-  { pair: '1 DASH', price: '28.84 USD', isUp: false, active: false },
-  { pair: '1 NEO', price: '16.18 USD', isUp: true, active: false },
-  { pair: '1 XMR', price: '129.72 USD', isUp: true, active: false },
+const tickers = computed<TickerItem[]>(() => [
+  { pair: 'BTC/USDT', price: `${currentPrice.value.toFixed(2)}`, isUp: currentPrice.value >= previousPrice.value, active: true },
+  { pair: 'ETH/USDT', price: '3077.93', isUp: true, active: false },
+  { pair: 'SOL/USDT', price: '145.22', isUp: false, active: false },
+  { pair: 'BNB/USDT', price: '580.44', isUp: true, active: false },
+  { pair: 'ADA/USDT', price: '0.45', isUp: false, active: false },
+  { pair: 'XRP/USDT', price: '0.62', isUp: true, active: false },
 ]);
-
-let lastPrice = 36000;
-
-const handleMessage = (event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'trade') {
-        const newPrice = data.price;
-        mockTickers.value[0].price = `${newPrice.toFixed(2)} USD`;
-        mockTickers.value[0].isUp = newPrice >= lastPrice;
-        lastPrice = newPrice;
-      }
-    } catch(e) {}
-};
-
-watch(sharedWs, (newWs, oldWs) => {
-  if (oldWs) {
-    oldWs.removeEventListener('message', handleMessage);
-  }
-  if (newWs) {
-    newWs.addEventListener('message', handleMessage);
-  }
-}, { immediate: true });
-
-onUnmounted(() => {
-  if (sharedWs.value) {
-     sharedWs.value.removeEventListener('message', handleMessage);
-  }
-});
 </script>
 
 <template>
   <div class="flex px-1 py-1 gap-2 overflow-x-auto no-scrollbar shrink-0">
     <button
-      v-for="t in mockTickers"
+      v-for="t in tickers"
       :key="t.pair"
       :class="cn(
         'flex items-center gap-2 px-4 py-2 rounded-lg border whitespace-nowrap transition-colors',

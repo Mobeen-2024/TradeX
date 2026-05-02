@@ -2,10 +2,8 @@
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { addPosition, sharedWs, activePositions } from '../store/tradeStore';
+import { addPosition, activePositions, currentPrice, previousPrice, orderBook } from '../store/tradeStore';
 
-const currentMarketPrice = ref(36000.00);
-const previousMarketPrice = ref(36000.00);
 const isPending = ref(false);
 const orderPrice = ref(36000.00);
 const lastOrderPrice = ref(36000.00);
@@ -19,63 +17,38 @@ const limitPrice = ref<number | null>(null);
 const callbackRate = ref<number | null>(1.0);
 const activationPrice = ref<number | null>(null);
 
-const orderBookAsks = ref<Array<{price: number, amount: number}>>(
-  Array.from({ length: 7 }, (_, i) => ({ price: 36000 + (7 - i) * 1.5, amount: 1 + i * 0.5 }))
-);
-const orderBookBids = ref<Array<{price: number, amount: number}>>(
-  Array.from({ length: 7 }, (_, i) => ({ price: 36000 - (i + 1) * 1.5, amount: 1 + i * 0.5 }))
-);
+const orderBookAsks = computed(() => {
+  return orderBook.value.asks.slice(0, 15).map(a => ({ price: a[0], amount: a[1] }));
+});
+const orderBookBids = computed(() => {
+  return orderBook.value.bids.slice(0, 15).map(b => ({ price: b[0], amount: b[1] }));
+});
 
 const maxOrderBookAmount = computed(() => {
   const maxAsk = Math.max(...orderBookAsks.value.map(a => a.amount), 0);
   const maxBid = Math.max(...orderBookBids.value.map(b => b.amount), 0);
-  return Math.max(maxAsk, maxBid, 1);
+  return Math.max(maxAsk, maxBid, 0.001);
 });
 
-// WebSocket implementation
-const handleMessage = (event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'trade') {
-        const newPrice = data.price;
-        previousMarketPrice.value = currentMarketPrice.value;
-        currentMarketPrice.value = newPrice;
-        
-        if (newPrice > previousMarketPrice.value) {
-          priceChangeClass.value = 'animate-price-up';
-        } else if (newPrice < previousMarketPrice.value) {
-          priceChangeClass.value = 'animate-price-down';
-        }
-        setTimeout(() => { priceChangeClass.value = ''; }, 300);
+const marketSentiment = computed(() => {
+  const totalBids = orderBookBids.value.reduce((acc, b) => acc + b.amount, 0);
+  const totalAsks = orderBookAsks.value.reduce((acc, a) => acc + a.amount, 0);
+  if (totalBids + totalAsks === 0) return 50;
+  return (totalBids / (totalBids + totalAsks)) * 100;
+});
 
-        if (!isUpdatingAmountAutomatically.value && orderType.value === 'Market') {
-          orderPrice.value = newPrice;
-        }
-        lastOrderPrice.value = orderPrice.value;
-        if (orderType.value !== 'Market') {
-            // Keep user input unless it's initial load
-        }
-        if (data.orderBook && data.orderBook.asks.length > 0) {
-            orderBookAsks.value = data.orderBook.asks;
-            orderBookBids.value = data.orderBook.bids;
-        }
-      }
-    } catch(e) {}
-};
+watch(currentPrice, (newPrice, oldPrice) => {
+    if (newPrice > oldPrice) {
+      priceChangeClass.value = 'animate-price-up';
+    } else if (newPrice < oldPrice) {
+      priceChangeClass.value = 'animate-price-down';
+    }
+    setTimeout(() => { priceChangeClass.value = ''; }, 300);
 
-watch(sharedWs, (newWs, oldWs) => {
-  if (oldWs) {
-    oldWs.removeEventListener('message', handleMessage);
-  }
-  if (newWs) {
-    newWs.addEventListener('message', handleMessage);
-  }
-}, { immediate: true });
-
-onUnmounted(() => {
-  if (sharedWs.value) {
-     sharedWs.value.removeEventListener('message', handleMessage);
-  }
+    lastOrderPrice.value = newPrice;
+    if (orderType.value === 'Market') {
+      orderPrice.value = newPrice;
+    }
 });
 
 const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
@@ -338,52 +311,61 @@ watch(tpSl, (val) => {
          </button>
        </div>
 
-       <div class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
+        <div class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
           <table class="w-full text-[11px] sm:text-[12px] text-right h-full border-collapse" style="table-layout: fixed">
             <thead class="text-[#848e9c] sticky top-0 bg-[#0b0e11] z-20">
               <tr>
-                <th class="font-normal pb-1.5 pt-1 text-left w-1/2 text-[10px] pl-1">Price(USDT)</th>
-                <th class="font-normal pb-1.5 pt-1 w-1/2 text-[10px] pr-1">Amount(BTC)</th>
+                <th class="font-normal pb-1 sm:pb-1.5 pt-1 text-left w-1/2 text-[9px] sm:text-[10px] pl-1">Price(USDT)</th>
+                <th class="font-normal pb-1 sm:pb-1.5 pt-1 w-1/2 text-[9px] sm:text-[10px] pr-1">Amount(BTC)</th>
               </tr>
             </thead>
             <tbody class="font-mono tracking-tight">
               <tr v-for="(ask, i) in orderBookAsks" :key="`ask-${i}`" class="hover:bg-[#1e2329]/80 cursor-pointer group relative transition-colors duration-150">
-                <td class="py-[3px] text-left text-[#f6465d] border-none pl-1 relative z-10 w-1/2">
+                <td class="py-[2px] sm:py-[3px] text-left text-[#f6465d] border-none pl-1 relative z-10 w-1/2">
                   <div class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#f6465d]/20 to-transparent group-hover:from-[#f6465d]/30 -z-10 transition-all duration-300 ease-out" :style="`width: ${(ask.amount / maxOrderBookAmount) * 100}%`"></div>
                   {{ ask.price.toFixed(2) }}
                 </td>
-                <td class="py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ ask.amount.toFixed(4) }}</td>
+                <td class="py-[2px] sm:py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ ask.amount.toFixed(4) }}</td>
               </tr>
               
               <!-- Middle: Market Price -->
               <tr>
-                <td colspan="2" class="py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent transition-all duration-300" :class="priceChangeClass">
-                  <div class="flex flex-col items-center justify-center py-1">
-                    <div class="flex items-center gap-2">
-                      <span :class="cn('font-bold text-lg sm:text-xl transition-colors duration-300 flex items-center', currentMarketPrice >= previousMarketPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
-                        {{ currentMarketPrice.toFixed(2) }} 
-                        <ArrowUp v-if="currentMarketPrice >= previousMarketPrice" class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
-                        <ArrowDown v-else class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
+                <td colspan="2" class="py-1 sm:py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent transition-all duration-300" :class="priceChangeClass">
+                  <div class="flex flex-col items-center justify-center py-0.5 sm:py-1">
+                    <div class="flex items-center gap-1 sm:gap-2">
+                      <span :class="cn('font-bold text-base sm:text-xl transition-colors duration-300 flex items-center', currentPrice >= previousPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                        {{ currentPrice.toFixed(2) }} 
+                        <ArrowUp v-if="currentPrice >= previousPrice" class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
+                        <ArrowDown v-else class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
                       </span>
                     </div>
-                    <span class="text-[#848e9c] text-xs mt-0.5 font-medium underline decoration-dashed underline-offset-2 cursor-pointer hover:text-white transition-colors">
-                      ${{ currentMarketPrice.toFixed(2) }}
-                    </span>
                   </div>
                 </td>
               </tr>
 
               <tr v-for="(bid, i) in orderBookBids" :key="`bid-${i}`" class="hover:bg-[#1e2329]/80 cursor-pointer group relative transition-colors duration-150">
-                <td class="py-[3px] text-left text-[#0ecb81] border-none pl-1 relative z-10 w-1/2">
+                <td class="py-[2px] sm:py-[3px] text-left text-[#0ecb81] border-none pl-1 relative z-10 w-1/2">
                   <div class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#0ecb81]/20 to-transparent group-hover:from-[#0ecb81]/30 -z-10 transition-all duration-300 ease-out" :style="`width: ${(bid.amount / maxOrderBookAmount) * 100}%`"></div>
                   {{ bid.price.toFixed(2) }}
                 </td>
-                <td class="py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ bid.amount.toFixed(4) }}</td>
+                <td class="py-[2px] sm:py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ bid.amount.toFixed(4) }}</td>
               </tr>
             </tbody>
           </table>
-       </div>
-    </div>
+        </div>
+        
+        <!-- Sentiment Bar -->
+        <div class="px-2 py-1.5 border-t border-[#1e2329] bg-[#0b0e11] shrink-0">
+            <div class="flex justify-between text-[9px] font-bold uppercase tracking-wider mb-1">
+                <span class="text-[#0ecb81]">{{ marketSentiment.toFixed(1) }}% Buy</span>
+                <span class="text-[#f6465d]">{{ (100 - marketSentiment).toFixed(1) }}% Sell</span>
+            </div>
+            <div class="h-1.5 w-full bg-[#1e2329] rounded-full overflow-hidden flex">
+                <div class="h-full bg-[#0ecb81] transition-all duration-500 ease-out" :style="`width: ${marketSentiment}%`"></div>
+                <div class="h-full bg-[#f6465d] transition-all duration-500 ease-out" :style="`width: ${100 - marketSentiment}%`"></div>
+            </div>
+        </div>
+      </div>
 
     <!-- Right: Order Panel -->
     <div class="bg-[#0b0e11] border border-[#1e2329] rounded p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-hidden">

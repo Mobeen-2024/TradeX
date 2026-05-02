@@ -72,65 +72,65 @@ const mockOpenOrders = ref([
           <div 
             v-for="pos in activePositions" 
             :key="pos.id"
-            class="flex flex-col p-5 hover:bg-white/[0.02] transition-colors relative group"
+            class="flex flex-col p-4 sm:p-5 hover:bg-white/[0.02] transition-colors relative group"
           >
             <!-- Badge Status -->
-            <div class="absolute top-5 right-5 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#0ecb81]/10 border border-[#0ecb81]/20">
+            <div class="absolute top-4 right-4 sm:top-5 sm:right-5 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#0ecb81]/10 border border-[#0ecb81]/20">
                 <div class="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse"></div>
-                <span class="text-[10px] font-bold text-[#0ecb81] uppercase tracking-tighter">Live</span>
+                <span class="text-[9px] sm:text-[10px] font-bold text-[#0ecb81] uppercase tracking-tighter">Live</span>
             </div>
 
             <!-- Top Header -->
-            <div class="flex items-center gap-3 mb-6">
-              <div :class="cn('w-9 h-9 rounded-xl flex items-center justify-center shadow-lg', pos.type === 'LONG' ? 'bg-[#0ecb81]/20 text-[#0ecb81]' : 'bg-[#f6465d]/20 text-[#f6465d]')">
-                <TrendingUp v-if="pos.type === 'LONG'" class="w-5 h-5" />
-                <TrendingDown v-else class="w-5 h-5" />
+            <div class="flex items-center gap-3 mb-4 sm:mb-6">
+              <div :class="cn('w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg', pos.type === 'LONG' ? 'bg-[#0ecb81]/20 text-[#0ecb81]' : 'bg-[#f6465d]/20 text-[#f6465d]')">
+                <TrendingUp v-if="pos.type === 'LONG'" class="w-4 h-4 sm:w-5 sm:h-5" />
+                <TrendingDown v-else class="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div>
                 <div class="flex items-center gap-2">
-                    <h3 class="text-[#EAECEF] font-black text-base tracking-tight">{{ pos.pair }}</h3>
-                    <span :class="cn('text-[10px] font-bold px-1.5 py-0.5 rounded', pos.type === 'LONG' ? 'bg-[#0ecb81] text-[#0b0e11]' : 'bg-[#f6465d] text-white')">
+                    <h3 class="text-[#EAECEF] font-black text-sm sm:text-base tracking-tight">{{ pos.pair }}</h3>
+                    <span :class="cn('text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded', pos.type === 'LONG' ? 'bg-[#0ecb81] text-[#0b0e11]' : 'bg-[#f6465d] text-white')">
                         {{ pos.leverage }}
                     </span>
                 </div>
-                <div class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest mt-0.5">Isolated • Cross Margin</div>
+                <div class="text-[9px] sm:text-[10px] text-[#848e9c] font-medium uppercase tracking-widest mt-0.5">Isolated • Cross Margin</div>
               </div>
             </div>
 
             <!-- Stats Grid -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div class="flex flex-col gap-1.5">
-                <span class="text-[11px] text-[#848e9c] font-bold uppercase tracking-wider flex items-center gap-1">Unrealized PNL <Info class="w-3 h-3 opacity-30" /></span>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+              <div class="flex flex-col gap-1 sm:gap-1.5">
+                <span class="text-[10px] sm:text-[11px] text-[#848e9c] font-bold uppercase tracking-wider flex items-center gap-1">PNL <Info class="w-3 h-3 opacity-30" /></span>
                 <div class="flex flex-col">
-                    <span :class="cn('text-lg font-mono font-bold leading-none', pos.liveDelta >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
-                      {{ pos.liveDelta > 0 ? '+' : '' }}{{ pos.liveDelta.toFixed(2) }} <span class="text-xs uppercase">USDT</span>
+                    <span :class="cn('text-sm sm:text-lg font-mono font-bold leading-none', pos.liveDelta >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                      {{ pos.liveDelta > 0 ? '+' : '' }}{{ pos.liveDelta.toFixed(2) }} <span class="text-[10px] uppercase">USDT</span>
                     </span>
-                    <span :class="cn('text-xs font-mono font-medium mt-1', pos.liveDeltaPercent >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                    <span :class="cn('text-[10px] sm:text-xs font-mono font-medium mt-1', pos.liveDeltaPercent >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
                       ({{ pos.liveDeltaPercent >= 0 ? '+' : '' }}{{ pos.liveDeltaPercent.toFixed(2) }}%)
                     </span>
                 </div>
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Size / Value</span>
+              <div class="flex flex-col gap-1 sm:gap-1.5">
+                <span class="text-[10px] sm:text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Size / Value</span>
                 <div class="flex flex-col">
-                    <span class="text-sm font-mono text-[#EAECEF] font-bold leading-none">{{ pos.size.toFixed(4) }} BTC</span>
-                    <span class="text-[11px] font-mono text-[#848e9c] mt-1">≈ {{ (pos.size * pos.mark).toFixed(2) }} USDT</span>
+                    <span class="text-xs sm:text-sm font-mono text-[#EAECEF] font-bold leading-none">{{ pos.size.toFixed(4) }} BTC</span>
+                    <span class="text-[10px] font-mono text-[#848e9c] mt-1">≈ {{ (pos.size * pos.mark).toFixed(2) }} USDT</span>
                 </div>
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Entry / Mark</span>
+              <div class="flex flex-col gap-1 sm:gap-1.5">
+                <span class="text-[10px] sm:text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Entry / Mark</span>
                 <div class="flex flex-col">
-                    <span class="text-sm font-mono text-[#EAECEF] font-bold leading-none">{{ pos.entry.toFixed(2) }}</span>
-                    <span class="text-[11px] font-mono text-[#F0B90B] mt-1">{{ pos.mark.toFixed(2) }}</span>
+                    <span class="text-xs sm:text-sm font-mono text-[#EAECEF] font-bold leading-none">{{ pos.entry.toFixed(2) }}</span>
+                    <span class="text-[10px] font-mono text-[#F0B90B] mt-1">{{ pos.mark.toFixed(2) }}</span>
                 </div>
               </div>
 
-              <div class="flex flex-col gap-1.5">
-                <span class="text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Liq. Price</span>
+              <div class="flex flex-col gap-1 sm:gap-1.5">
+                <span class="text-[10px] sm:text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Liq. Price</span>
                 <div class="flex flex-col">
-                    <span class="text-sm font-mono text-[#fcd535] font-bold leading-none">{{ (pos.entry * (pos.type === 'LONG' ? 0.85 : 1.15)).toFixed(2) }}</span>
+                    <span class="text-xs sm:text-sm font-mono text-[#fcd535] font-bold leading-none">{{ (pos.entry * (pos.type === 'LONG' ? 0.85 : 1.15)).toFixed(2) }}</span>
                     <div class="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
                         <div class="h-full bg-[#fcd535]" :style="`width: ${Math.max(10, 100 - (Math.abs(pos.mark - pos.entry) / pos.entry * 500))}%`"></div>
                     </div>
@@ -139,23 +139,23 @@ const mockOpenOrders = ref([
             </div>
 
             <!-- PNL Visual Bar -->
-            <div class="mt-6 w-full h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+            <div class="mt-4 sm:mt-6 w-full h-1 sm:h-1.5 bg-white/5 rounded-full overflow-hidden relative">
                 <div :class="cn('h-full transition-all duration-1000', pos.liveDelta >= 0 ? 'bg-[#0ecb81] shadow-[0_0_10px_#0ecb81]' : 'bg-[#f6465d] shadow-[0_0_10px_#f6465d]')" :style="`width: ${Math.min(100, Math.abs(pos.liveDeltaPercent))}%`"></div>
             </div>
 
             <!-- Footer Actions -->
-            <div class="flex items-center justify-between mt-6 pt-4 border-t border-white/5">
-                <div class="flex items-center gap-4">
-                    <button class="text-[11px] text-[#848e9c] hover:text-[#EAECEF] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors">
-                        <Settings2 class="w-3.5 h-3.5" /> TP/SL
+            <div class="flex items-center justify-between mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-white/5">
+                <div class="flex items-center gap-3 sm:gap-4">
+                    <button class="text-[10px] sm:text-[11px] text-[#848e9c] hover:text-[#EAECEF] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors">
+                        <Settings2 class="w-3 sm:w-3.5 h-3 sm:h-3.5" /> <span class="hidden xs:inline">TP/SL</span>
                     </button>
-                    <button class="text-[11px] text-[#848e9c] hover:text-[#EAECEF] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors">
-                        <Plus class="w-3.5 h-3.5" /> Margin
+                    <button class="text-[10px] sm:text-[11px] text-[#848e9c] hover:text-[#EAECEF] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors">
+                        <Plus class="w-3 sm:w-3.5 h-3 sm:h-3.5" /> <span class="hidden xs:inline">Margin</span>
                     </button>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button @click="closePosition(pos.id)" class="px-4 py-1.5 rounded-lg bg-[#2b3139] hover:bg-[#323a43] text-white text-[12px] font-bold transition-all active:scale-95">Close Position</button>
-                    <button class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"><MoreHorizontal class="w-4 h-4" /></button>
+                    <button @click="closePosition(pos.id)" class="px-3 sm:px-4 py-1 sm:py-1.5 rounded-lg bg-[#2b3139] hover:bg-[#323a43] text-white text-[11px] sm:text-[12px] font-bold transition-all active:scale-95">Close</button>
+                    <button class="p-1 sm:p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"><MoreHorizontal class="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>
                 </div>
             </div>
           </div>
@@ -163,9 +163,10 @@ const mockOpenOrders = ref([
       </div>
 
       <!-- Open Orders Tab -->
-      <div v-else-if="activeTab === 1" class="flex flex-col">
-        <div class="p-0">
-            <table class="w-full text-left border-collapse">
+      <div v-else-if="activeTab === 1" class="flex flex-col h-full overflow-hidden">
+        <!-- Desktop Table View -->
+        <div class="hidden sm:block flex-1 overflow-auto">
+            <table class="w-full text-left border-collapse min-w-[600px]">
                 <thead class="bg-[#161a1e]/20 text-[10px] text-[#848e9c] font-bold uppercase tracking-wider sticky top-0 z-10 backdrop-blur-md">
                     <tr>
                         <th class="px-5 py-3">Date</th>
@@ -201,6 +202,36 @@ const mockOpenOrders = ref([
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile Card View -->
+        <div class="sm:hidden flex-1 overflow-auto divide-y divide-white/5">
+            <div v-for="order in mockOpenOrders" :key="order.id" class="p-4 flex flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <div class="flex flex-col">
+                        <span class="text-white font-black text-sm">{{ order.pair }}</span>
+                        <span class="text-[10px] text-[#848e9c] font-mono">{{ order.date }}</span>
+                    </div>
+                    <button class="text-[10px] font-bold uppercase text-[#f6465d] bg-[#f6465d]/10 px-2.5 py-1 rounded">Cancel</button>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-[#848e9c] uppercase font-bold tracking-wider">Side/Type</span>
+                        <span :class="cn('text-[11px] font-bold', order.side === 'Buy' ? 'text-[#0ecb81]' : 'text-[#f6465d]')">{{ order.side }} {{ order.type }}</span>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-[#848e9c] uppercase font-bold tracking-wider">Price</span>
+                        <span class="text-[11px] font-mono text-white">{{ order.price.toFixed(2) }}</span>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-[9px] text-[#848e9c] uppercase font-bold tracking-wider">Amount</span>
+                        <span class="text-[11px] font-mono text-white">{{ order.amount.toFixed(4) }}</span>
+                    </div>
+                </div>
+                <div class="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                    <div class="h-full bg-[#F0B90B]" :style="`width: ${order.filled}%`"></div>
+                </div>
+            </div>
         </div>
       </div>
 
