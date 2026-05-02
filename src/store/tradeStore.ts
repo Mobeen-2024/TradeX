@@ -29,6 +29,12 @@ export const marketData = ref({
 
 export const openOrders = ref<any[]>([]);
 export const alerts = ref<{ id: string; price: number; side: 'above' | 'below'; triggered: boolean }[]>([]);
+export const isLiveMode = ref(false);
+
+if (typeof window !== 'undefined') {
+    const savedMode = localStorage.getItem('tradex_live_mode');
+    isLiveMode.value = savedMode === 'true';
+}
 
 export const createAlert = (price: number) => {
     const side = price > currentPrice.value ? 'above' : 'below';
@@ -123,12 +129,16 @@ export const placeOrder = async (order: {
   cost: number;
 }) => {
   try {
-      const response = await fetch('/api/place_order', {
+      // In Live Mode, we would call the actual exchange API bridge
+      const endpoint = isLiveMode.value ? '/api/live/place_order' : '/api/place_order';
+      
+      const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
               ...order,
-              amount: order.quantity, // map to server expectation
+              amount: order.quantity, 
+              isLive: isLiveMode.value
           })
       });
       const data = await response.json();

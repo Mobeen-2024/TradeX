@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown, Search, Download, Bell, User, Globe } from 'lucide-vue-next';
-import { currentPrice, previousPrice, marketData } from '../store/tradeStore';
+import { currentPrice, previousPrice, marketData, isLiveMode } from '../store/tradeStore';
 
 defineProps<{ title?: string }>();
+const emit = defineEmits(['open-settings']);
 </script>
 
 <template>
@@ -17,8 +18,8 @@ defineProps<{ title?: string }>();
         <div class="flex items-center gap-1 cursor-pointer hover:bg-[#2b3139] px-2 py-1 rounded transition-colors group">
           <h1 class="text-lg lg:text-xl font-bold text-[#EAECEF] flex items-center gap-1">BTC/USDT</h1>
           <ChevronDown class="w-4 h-4 text-[#848e9c] group-hover:text-white" />
-          <div class="text-[#F0B90B] bg-[#F0B90B]/10 px-1 py-0.5 rounded text-[10px] font-medium ml-1">
-            <a href="#" class="no-underline hover:underline">Bitcoin</a>
+          <div :class="cn('px-1.5 py-0.5 rounded text-[10px] font-bold ml-1 tracking-tighter uppercase', isLiveMode ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20' : 'bg-[#F0B90B]/10 text-[#F0B90B] border border-[#F0B90B]/20')">
+            {{ isLiveMode ? 'Live' : 'Demo' }}
           </div>
         </div>
 
@@ -74,7 +75,10 @@ defineProps<{ title?: string }>();
         <Bell class="w-4 h-4" />
         <div class="absolute top-1 right-1 w-2 h-2 bg-[#f6465d] rounded-full border border-[#161a1e]"></div>
       </div>
-      <div class="hidden md:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
+      <div 
+        @click="emit('open-settings')"
+        class="hidden md:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors"
+      >
         <Settings class="w-4 h-4" />
       </div>
       <div class="hidden lg:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">

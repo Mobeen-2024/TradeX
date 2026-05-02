@@ -8,12 +8,14 @@ import BalancesPanel from './components/BalancesPanel.vue';
 import MultiChartWorkspace from './components/MultiChartWorkspace.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
+import SettingsPanel from './components/SettingsPanel.vue';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool } from './store/workspaceStore';
 
 const activeItem = ref('Market');
 const mobileTab = ref('Chart');
+const settingsPanel = ref<InstanceType<typeof SettingsPanel> | null>(null);
 
 // Professional Hotkeys
 const handleKeydown = (e: KeyboardEvent) => {
@@ -89,7 +91,7 @@ const icons: Record<string, any> = {
     <div class="flex h-full w-full z-10 flex-col md:flex-row">
       <Sidebar class="order-2 md:order-none shrink-0" :active-item="activeItem" @update:active-item="activeItem = $event" />
       <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
-      <TopHeader :title="activeItem" />
+      <TopHeader :title="activeItem" @open-settings="settingsPanel?.open()" />
       
       <div v-if="activeItem === 'Market'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
         <!-- Mobile Tab Switcher -->
@@ -249,5 +251,6 @@ const icons: Record<string, any> = {
       </div>
     </div>
     </div> <!-- Close main content container -->
+    <SettingsPanel ref="settingsPanel" />
   </div>
 </template>
