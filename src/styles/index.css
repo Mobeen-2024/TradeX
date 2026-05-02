@@ -88,3 +88,44 @@
   }
 }
 
+@keyframes price-flash-up {
+  0%, 100% { color: inherit; background: transparent; }
+  50% { color: #0ecb81; background: rgba(14, 203, 129, 0.1); text-shadow: 0 0 8px rgba(14, 203, 129, 0.5); }
+}
+
+@keyframes price-flash-down {
+  0%, 100% { color: inherit; background: transparent; }
+  50% { color: #f6465d; background: rgba(246, 70, 93, 0.1); text-shadow: 0 0 8px rgba(246, 70, 93, 0.5); }
+}
+
+@keyframes candle-in {
+  from { transform: scaleY(0); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes depth-bar {
+  from { width: 0; }
+  to { width: var(--depth-w); }
+}
+
+.animate-price-up {
+  animation: price-flash-up 0.3s ease-out;
+}
+
+.animate-price-down {
+  animation: price-flash-down 0.3s ease-out;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: #2b3139;
+  border-radius: 2px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #474d57;
+}
+

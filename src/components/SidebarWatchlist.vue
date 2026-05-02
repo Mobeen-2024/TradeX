@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ChevronRight, TrendingUp, TrendingDown } from 'lucide-vue-next';
 import { useWatchlist } from '../composables/useWatchlist';
+import MiniSparkline from './MiniSparkline.vue';
 
 const { watchlist } = useWatchlist();
 </script>
@@ -21,6 +22,10 @@ const { watchlist } = useWatchlist();
         <div class="flex flex-col">
           <span class="text-xs font-bold text-[#EAECEF]">{{ item.pair.split('/')[0] }}</span>
           <span class="text-[10px] text-[#848e9c]">{{ item.pair.split('/')[1] }}</span>
+        </div>
+
+        <div class="flex-1 px-4 flex justify-center opacity-40 group-hover:opacity-100 transition-opacity">
+           <MiniSparkline :data="item.history" :color="item.change >= 0 ? '#0ECB81' : '#f6465d'" />
         </div>
         
         <div class="text-right">

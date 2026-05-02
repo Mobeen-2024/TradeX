@@ -11,6 +11,7 @@ const orderPrice = ref(36000.00);
 const lastOrderPrice = ref(36000.00);
 const orderAmount = ref<number | null>(null);
 const orderSide = ref<'Buy' | 'Sell'>('Buy');
+const priceChangeClass = ref('');
 
 // Extra specific fields for complex types
 const stopPrice = ref<number | null>(null);
@@ -40,6 +41,13 @@ const handleMessage = (event: MessageEvent) => {
         previousMarketPrice.value = currentMarketPrice.value;
         currentMarketPrice.value = newPrice;
         
+        if (newPrice > previousMarketPrice.value) {
+          priceChangeClass.value = 'animate-price-up';
+        } else if (newPrice < previousMarketPrice.value) {
+          priceChangeClass.value = 'animate-price-down';
+        }
+        setTimeout(() => { priceChangeClass.value = ''; }, 300);
+
         if (!isUpdatingAmountAutomatically.value && orderType.value === 'Market') {
           orderPrice.value = newPrice;
         }
@@ -349,7 +357,7 @@ watch(tpSl, (val) => {
               
               <!-- Middle: Market Price -->
               <tr>
-                <td colspan="2" class="py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent">
+                <td colspan="2" class="py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent transition-all duration-300" :class="priceChangeClass">
                   <div class="flex flex-col items-center justify-center py-1">
                     <div class="flex items-center gap-2">
                       <span :class="cn('font-bold text-lg sm:text-xl transition-colors duration-300 flex items-center', currentMarketPrice >= previousMarketPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
@@ -415,6 +423,29 @@ watch(tpSl, (val) => {
         >
           Sell
         </button>
+      </div>
+
+      <!-- Leverage Slider (Margin Only) -->
+      <div v-if="marginEnabled" class="flex flex-col gap-2 mb-4 px-1">
+        <div class="flex justify-between items-center text-[10px] text-[#848e9c] font-bold uppercase tracking-wider">
+          <span>Leverage</span>
+          <span class="text-[#F0B90B]">{{ leverage }}x</span>
+        </div>
+        <input 
+          type="range" 
+          v-model="leverage" 
+          min="1" 
+          max="100" 
+          step="1"
+          class="w-full h-1.5 bg-[#1e2329] rounded-lg appearance-none cursor-pointer accent-[#F0B90B]"
+        />
+        <div class="flex justify-between text-[8px] text-[#474d57] px-0.5">
+          <span>1x</span>
+          <span>25x</span>
+          <span>50x</span>
+          <span>75x</span>
+          <span>100x</span>
+        </div>
       </div>
 
       <!-- Order Type -->
