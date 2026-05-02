@@ -5,7 +5,7 @@ import Sidebar from './components/Sidebar.vue';
 import TopHeader from './components/TopHeader.vue';
 import TickerRibbon from './components/TickerRibbon.vue';
 import BalancesPanel from './components/BalancesPanel.vue';
-import TradingChartWidget from './components/TradingChartWidget.vue';
+import MultiChartWorkspace from './components/MultiChartWorkspace.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
 import { addPosition, closePosition, currentPrice, activePositions } from './store/tradeStore';
@@ -107,7 +107,7 @@ const icons: Record<string, any> = {
                 mobileTab !== 'Chart' ? 'hidden md:flex' : 'flex'
               )"
             >
-              <TradingChartWidget class="w-full h-full" />
+              <MultiChartWorkspace class="w-full h-full" />
             </div>
 
             <!-- OrderPanel: Visible on Desktop OR if mobileTab is 'Trade' -->

@@ -3,7 +3,14 @@ import { ChevronRight, TrendingUp, TrendingDown } from 'lucide-vue-next';
 import { useWatchlist } from '../composables/useWatchlist';
 import MiniSparkline from './MiniSparkline.vue';
 
+import { updateGlobalSymbol } from '../store/workspaceStore';
+
 const { watchlist } = useWatchlist();
+
+const selectPair = (pair: string) => {
+  const symbol = pair.replace('/', '');
+  updateGlobalSymbol(symbol);
+};
 </script>
 
 <template>
@@ -17,6 +24,7 @@ const { watchlist } = useWatchlist();
       <div 
         v-for="item in watchlist" 
         :key="item.pair"
+        @click="selectPair(item.pair)"
         class="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-[#2b3139]/30 cursor-pointer transition-colors group"
       >
         <div class="flex flex-col">
