@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { activePositions, selectedPrice } from '../store/tradeStore';
 import { globalSymbol, workspacePanels } from '../store/workspaceStore';
-import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off, MousePointer2, Minus, TrendingUp, Trash2, Bell } from 'lucide-vue-next';
+import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off, MousePointer2, Minus, TrendingUp, Trash2, Bell, GripHorizontal, PenTool } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
 import { calculateEMA, calculateRSI, calculateBollingerBands } from '../utils/indicators';
@@ -36,6 +36,7 @@ const activeIndicators = ref<string[]>([]);
 import { activeTool, setGlobalTool } from '../store/workspaceStore';
 const drawings = ref<any[]>([]);
 const fibStart = ref<{ price: number, time: any } | null>(null);
+const trendStart = ref<{ price: number, time: any } | null>(null);
 const heatmapData = ref<{ price: number, volume: number }[]>([]);
 let drawingPriceLines: IPriceLine[] = [];
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
@@ -249,6 +250,8 @@ const initChart = async () => {
                 addHorizontalLine(price);
             } else if (activeTool.value === 'fib') {
                 handleFibClick(price, param.time);
+            } else if (activeTool.value === 'trend') {
+                handleTrendClick(price, param.time);
             } else if (activeTool.value === 'alert') {
                 createAlert(price);
                 setGlobalTool('none');
@@ -257,6 +260,21 @@ const initChart = async () => {
             }
         }
     });
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+        renderHeatmap();
+    });
+};
+
+const handleKeyDown = (e: KeyboardEvent) => {
+    if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+    
+    const key = e.key.toLowerCase();
+    if (key === 'v') setGlobalTool('none');
+    if (key === 'h') setGlobalTool('hline');
+    if (key === 'f') setGlobalTool('fib');
+    if (key === 't') setGlobalTool('trend');
+    if (key === 'a') setGlobalTool('alert');
 };
 
 const handleFibClick = (price: number, time: any) => {
@@ -278,8 +296,33 @@ const handleFibClick = (price: number, time: any) => {
             }
         }
         
-        fibStart.value = null; // reset
-        setGlobalTool('none'); // switch back to select
+        fibStart.value = null; 
+        setGlobalTool('none'); 
+        renderDrawings();
+    }
+};
+
+const handleTrendClick = (price: number, time: any) => {
+    if (!trendStart.value) {
+        trendStart.value = { price, time };
+    } else {
+        const id = Math.random().toString(36).substring(7);
+        const draw = { 
+            id, 
+            type: 'trend' as const, 
+            points: [trendStart.value, { price, time }] 
+        };
+        drawings.value.push(draw);
+        
+        if (props.panelId) {
+            const panel = workspacePanels.value.find(p => p.id === props.panelId);
+            if (panel) {
+                panel.drawings = [...(panel.drawings || []), draw];
+            }
+        }
+        
+        trendStart.value = null; 
+        setGlobalTool('none'); 
         renderDrawings();
     }
 };
@@ -350,6 +393,65 @@ const renderDrawings = () => {
             title: 'Alert',
         });
         if (line) drawingPriceLines.push(line);
+    });
+    renderHeatmap();
+};
+
+const renderHeatmap = () => {
+    const canvas = document.getElementById(`heatmap-${props.panelId}`) as HTMLCanvasElement;
+    if (!canvas || !chart || !candleSeries) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const container = canvas.parentElement;
+    if (container && (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight)) {
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 1. Render Heatmap
+    const maxVol = Math.max(...heatmapData.value.map(d => d.volume), 1);
+    heatmapData.value.forEach(d => {
+        const y = candleSeries?.priceToCoordinate(d.price);
+        if (y === null || y < 0 || y > canvas.height) return;
+        
+        const intensity = d.volume / maxVol;
+        ctx.fillStyle = d.price > currentPrice.value 
+            ? `rgba(246, 70, 93, ${intensity * 0.12})`
+            : `rgba(14, 203, 129, ${intensity * 0.12})`;
+            
+        ctx.fillRect(0, y - 1, canvas.width, 2);
+    });
+
+    // 2. Render Drawings (Trends & Fib Diagonals)
+    ctx.lineWidth = 1.5;
+    drawings.value.forEach(draw => {
+        if ((draw.type === 'fib' || draw.type === 'trend') && draw.points && draw.points.length === 2) {
+            const p1 = draw.points[0];
+            const p2 = draw.points[1];
+            
+            const x1 = chart?.timeScale().timeToCoordinate(p1.time);
+            const y1 = candleSeries?.priceToCoordinate(p1.price);
+            const x2 = chart?.timeScale().timeToCoordinate(p2.time);
+            const y2 = candleSeries?.priceToCoordinate(p2.price);
+            
+            if (x1 !== null && y1 !== null && x2 !== null && y2 !== null) {
+                ctx.beginPath();
+                ctx.setLineDash(draw.type === 'fib' ? [5, 5] : []);
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = draw.type === 'fib' ? 'rgba(240, 185, 11, 0.4)' : '#F0B90B';
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // End circles
+                ctx.fillStyle = '#F0B90B';
+                ctx.beginPath(); ctx.arc(x1, y1, 2, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x2, y2, 2, 0, Math.PI * 2); ctx.fill();
+            }
+        }
     });
 };
 
@@ -445,33 +547,7 @@ const subscribeKline = (symbol: string, interval: string) => {
     };
 };
 
-const renderHeatmap = () => {
-    const canvas = document.getElementById(`heatmap-${props.panelId}`) as HTMLCanvasElement;
-    if (!canvas || !chart || !candleSeries) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    const container = canvas.parentElement;
-    if (container && (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight)) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
-    }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const maxVol = Math.max(...heatmapData.value.map(d => d.volume), 1);
-    
-    heatmapData.value.forEach(d => {
-        const y = candleSeries?.priceToCoordinate(d.price);
-        if (y === null || y < 0 || y > canvas.height) return;
-        
-        const intensity = d.volume / maxVol;
-        ctx.fillStyle = d.price > currentPrice.value 
-            ? `rgba(246, 70, 93, ${intensity * 0.15})`
-            : `rgba(14, 203, 129, ${intensity * 0.15})`;
-            
-        ctx.fillRect(0, y - 1, canvas.width, 2);
-    });
-};
 
 const updateLiquidity = () => {
     if (currentPrice.value === 0) return;
@@ -500,11 +576,13 @@ onMounted(() => {
     
     initChart();
     window.addEventListener('resize', handleResize);
+    window.addEventListener('keydown', handleKeyDown);
 });
 
 onUnmounted(() => {
     if (currentWs) currentWs.close();
     window.removeEventListener('resize', handleResize);
+    window.removeEventListener('keydown', handleKeyDown);
     if (chart) chart.remove();
 });
 
@@ -559,47 +637,47 @@ watch(showVolume, (val) => {
   <div class="flex flex-col h-full bg-[#0b0e11] text-[#EAECEF] overflow-hidden select-none border border-[#2b3139]/50 hover:border-[#F0B90B]/30 transition-colors rounded-xl m-1 shadow-2xl relative">
     
     <!-- Drawing Toolbar (Floating Sidebar) -->
-    <div class="absolute left-1 md:left-3 top-16 md:top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/80 backdrop-blur-md p-1 rounded-lg border border-white/5 shadow-xl transform scale-[0.8] md:scale-100 origin-top-left">
+    <div class="absolute left-1 md:left-3 top-16 md:top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/90 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-2xl transform scale-[0.8] md:scale-100 origin-top-left">
         <button 
             @click="setGlobalTool('none')"
-            :class="cn('p-2 rounded-md transition-all', activeTool === 'none' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
-            title="Select"
+            :class="cn('p-2 rounded-lg transition-all', activeTool === 'none' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Select (V)"
         >
             <MousePointer2 class="w-4 h-4" />
         </button>
         <button 
             @click="setGlobalTool('hline')"
-            :class="cn('p-2 rounded-md transition-all', activeTool === 'hline' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
-            title="Horizontal Line"
+            :class="cn('p-2 rounded-lg transition-all', activeTool === 'hline' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Horizontal Line (H)"
         >
             <Minus class="w-4 h-4" />
         </button>
         <button 
             @click="setGlobalTool('fib')"
-            :class="cn('p-2 rounded-md transition-all', activeTool === 'fib' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
-            title="Fibonacci Retracement"
+            :class="cn('p-2 rounded-lg transition-all', activeTool === 'fib' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Fibonacci Retracement (F)"
         >
-            <LineChartIcon class="w-4 h-4" />
+            <GripHorizontal class="w-4 h-4" />
         </button>
         <button 
             @click="setGlobalTool('trend')"
-            :class="cn('p-2 rounded-md transition-all', activeTool === 'trend' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
-            title="Trendline (Coming Soon)"
+            :class="cn('p-2 rounded-lg transition-all', activeTool === 'trend' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Trendline (T)"
         >
-            <TrendingUp class="w-4 h-4" />
+            <PenTool class="w-4 h-4" />
         </button>
         <button 
             @click="setGlobalTool('alert')"
-            :class="cn('p-2 rounded-md transition-all', activeTool === 'alert' ? 'bg-[#fcd535] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
-            title="Price Alert"
+            :class="cn('p-2 rounded-lg transition-all', activeTool === 'alert' ? 'bg-[#fcd535] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Price Alert (A)"
         >
             <Bell class="w-4 h-4" />
         </button>
-        <div class="h-px bg-white/5 my-1"></div>
+        <div class="h-px bg-white/10 my-1"></div>
         <button 
             @click="clearDrawings"
-            class="p-2 rounded-md text-[#f6465d] hover:bg-[#f6465d]/10 transition-all"
-            title="Clear All"
+            class="p-2 rounded-lg text-[#f6465d] hover:bg-[#f6465d]/10 transition-all"
+            title="Clear All Drawings"
         >
             <Trash2 class="w-4 h-4" />
         </button>

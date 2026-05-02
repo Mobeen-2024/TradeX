@@ -2,7 +2,7 @@ import { ref, watch } from 'vue';
 
 export interface Drawing {
   id: string;
-  type: 'hline' | 'fib';
+  type: 'hline' | 'fib' | 'trend';
   price?: number;
   points?: { price: number; time: any }[];
 }

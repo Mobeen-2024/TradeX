@@ -11,6 +11,7 @@ import OrderPanel from './components/OrderPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 import PortfolioVisualizer from './components/PortfolioVisualizer.vue';
 import MarketSentiment from './components/MarketSentiment.vue';
+import PerformanceDashboard from './components/PerformanceDashboard.vue';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool } from './store/workspaceStore';
@@ -220,34 +221,13 @@ const icons: Record<string, any> = {
         <BalancesPanel />
         
         <div class="flex-1 flex flex-col min-h-0">
-           <h3 class="text-lg font-bold text-white mb-4">Transaction History</h3>
-           <div class="flex-1 bg-dash-card border border-dash-border rounded-xl overflow-hidden flex flex-col min-h-[400px]">
-              <div class="grid grid-cols-5 p-4 border-b border-dash-border text-dash-text-muted text-xs font-bold uppercase tracking-wider">
-                <div class="col-span-2">Transaction</div>
-                <div>Amount</div>
-                <div>Status</div>
-                <div class="text-right">Date</div>
-              </div>
-              <div class="flex-1 overflow-y-auto">
-                 <div v-for="i in 10" :key="i" class="grid grid-cols-5 p-4 border-b border-dash-border/50 items-center hover:bg-dash-card-hover transition-colors text-sm">
-                   <div class="col-span-2 flex items-center gap-3">
-                      <div :class="cn('w-8 h-8 rounded-full flex items-center justify-center', i % 2 === 0 ? 'bg-dash-primary/20 text-dash-primary' : 'bg-dash-danger/20 text-dash-danger')">
-                        <component :is="i % 2 === 0 ? icons.ArrowDownLeft : icons.ArrowUpRight" class="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div class="font-bold text-white">{{ i % 2 === 0 ? 'Deposit' : 'Withdrawal' }}</div>
-                        <div class="text-[10px] text-dash-text-muted">ID: #TX-{{ Math.random().toString(36).substr(2, 6).toUpperCase() }}</div>
-                      </div>
-                   </div>
-                   <div class="font-mono text-white">{{ (Math.random() * 2).toFixed(4) }} BTC</div>
-                   <div>
-                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-dash-primary/10 text-dash-primary border border-dash-primary/20">Completed</span>
-                   </div>
-                   <div class="text-right text-dash-text-muted text-xs">May 02, 2026</div>
-                 </div>
-              </div>
-           </div>
+           <h3 class="text-lg font-bold text-white mb-4">Account History</h3>
+           <TransactionHistory />
         </div>
+      </div>
+
+      <div v-else-if="activeItem === 'Analytics'" class="flex-1 overflow-y-auto no-scrollbar">
+        <PerformanceDashboard />
       </div>
       
       <div v-else class="flex-1 flex items-center justify-center text-dash-text-muted">

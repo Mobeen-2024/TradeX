@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit } from 'lucide-vue-next';
+import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit, Shield } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice } from '../store/tradeStore';
@@ -857,4 +857,5 @@ watch(tpSl, (val) => {
       </div>
     </div>
   </div>
+</template>
 
