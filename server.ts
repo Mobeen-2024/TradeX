@@ -276,7 +276,8 @@ async function start() {
       fastify.log.error(err);
       process.exit(1);
     }
-    // Server started
+    console.log(`\n  🚀 TradeX Backend & Terminal running at:`);
+    console.log(`  > ${address}\n`);
   });
 
   const shutdown = async () => {

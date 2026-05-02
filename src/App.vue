@@ -115,7 +115,7 @@ const icons: Record<string, any> = {
           </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto md:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
+        <div class="flex-1 overflow-y-auto p-2 flex flex-col gap-2 no-scrollbar">
           <!-- Main Workspace Grid -->
           <!-- On mobile, we show only the active mobileTab. On desktop, we show the full grid. -->
           <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">

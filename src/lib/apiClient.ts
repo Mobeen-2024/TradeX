@@ -1,6 +1,6 @@
 import { isLiveMode } from '../store/tradeStore';
 
-const BASE_URL = '/api/v1';
+const BASE_URL = '/api';
 
 export interface ApiResponse<T> {
     success: boolean;

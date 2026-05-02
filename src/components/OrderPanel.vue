@@ -506,7 +506,7 @@ watch(tpSl, (val) => {
       </div>
 
     <!-- Right: Order Panel -->
-    <div class="bg-[#0b0e11] border border-[#1e2329] rounded p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-hidden">
+    <div class="bg-[#0b0e11] border border-[#1e2329] rounded p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-y-auto no-scrollbar">
       <!-- Header -->
       <div class="flex items-center justify-between mb-2 sm:mb-4 border-b border-[#1e2329] pb-2 sm:pb-3 transition-all duration-300">
         <span class="text-white text-[17px] leading-[22.2857px] font-mono font-normal pl-[10px] text-left no-underline truncate">
