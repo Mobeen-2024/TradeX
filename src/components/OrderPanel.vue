@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { addPosition, activePositions, currentPrice, previousPrice, orderBook } from '../store/tradeStore';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { addPosition, activePositions, currentPrice, previousPrice, orderBook, selectedPrice } from '../store/tradeStore';
 
 const isPending = ref(false);
 const orderPrice = ref(36000.00);
@@ -51,6 +51,15 @@ watch(currentPrice, (newPrice, oldPrice) => {
     }
 });
 
+watch(selectedPrice, (newPrice) => {
+    if (newPrice) {
+        orderPrice.value = newPrice;
+        if (orderType.value === 'Market') {
+            orderType.value = 'Limit';
+        }
+    }
+});
+
 const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
 const orderType = ref<typeof orderTypes[number]>('Limit');
 
@@ -66,6 +75,72 @@ const orderTypeDetails = {
 const showOrderTypeDropdown = ref(false);
 const marginEnabled = ref(false);
 const leverage = ref(10);
+const viewMode = ref<'orderbook' | 'depth'>('orderbook');
+
+const depthCanvas = ref<HTMLCanvasElement | null>(null);
+
+const drawDepthChart = () => {
+    if (!depthCanvas.value) return;
+    const ctx = depthCanvas.value.getContext('2d');
+    if (!ctx) return;
+
+    const w = depthCanvas.value.width;
+    const h = depthCanvas.value.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const bids = orderBook.value.bids;
+    const asks = orderBook.value.asks;
+    if (bids.length === 0 || asks.length === 0) return;
+
+    // Normalize prices
+    const minPrice = bids[bids.length - 1][0];
+    const maxPrice = asks[asks.length - 1][0];
+    const range = maxPrice - minPrice;
+
+    const getX = (p: number) => ((p - minPrice) / range) * w;
+
+    // Calculate cumulative volume
+    let bidVol = 0;
+    const bidPoints = bids.map(b => {
+        bidVol += b[1];
+        return { x: getX(b[0]), y: bidVol };
+    });
+
+    let askVol = 0;
+    const askPoints = asks.map(a => {
+        askVol += a[1];
+        return { x: getX(a[0]), y: askVol };
+    });
+
+    const maxVol = Math.max(bidVol, askVol);
+    const getY = (v: number) => h - (v / maxVol) * h * 0.8;
+
+    // Draw Bids
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    bidPoints.forEach(p => ctx.lineTo(p.x, getY(p.y)));
+    ctx.lineTo(getX(bids[0][0]), h);
+    ctx.fillStyle = 'rgba(14, 203, 129, 0.2)';
+    ctx.fill();
+    ctx.strokeStyle = '#0ecb81';
+    ctx.stroke();
+
+    // Draw Asks
+    ctx.beginPath();
+    ctx.moveTo(w, h);
+    askPoints.forEach(p => ctx.lineTo(p.x, getY(p.y)));
+    ctx.lineTo(getX(asks[0][0]), h);
+    ctx.fillStyle = 'rgba(246, 70, 93, 0.2)';
+    ctx.fill();
+    ctx.strokeStyle = '#f6465d';
+    ctx.stroke();
+};
+
+watch([orderBook, viewMode], () => {
+    if (viewMode.value === 'depth') {
+        nextTick(drawDepthChart);
+    }
+}, { deep: true });
 const iceberg = ref(false);
 const percentage = ref(0);
 
@@ -302,16 +377,23 @@ watch(tpSl, (val) => {
   <div class="flex flex-row gap-1 sm:gap-2 h-[460px] lg:h-full w-full">
     <!-- Left: Order Book / Trades Panel -->
     <div class="bg-[#0b0e11] border border-[#1e2329] rounded flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0">
-       <div class="flex w-full border-b border-[#1e2329] shrink-0">
-         <button class="flex-1 py-2 sm:py-3 text-[10px] sm:text-[11px] font-semibold border-b-2 border-[#F0B90B] text-[#EAECEF] bg-[#1e2329]/20 tracking-wider">
-           ORDER BOOK
-         </button>
-         <button class="flex-1 py-2 sm:py-3 text-[10px] sm:text-[11px] font-semibold border-b-2 border-transparent text-[#848e9c] hover:text-[#EAECEF] transition-colors tracking-wider">
-           TRADES
-         </button>
-       </div>
+        <!-- View Mode Toggle -->
+        <div class="flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-1.5 sm:py-2 border-b border-[#1e2329] bg-[#161a1e]/30">
+          <button 
+            @click="viewMode = 'orderbook'"
+            :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'orderbook' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
+          >
+            Order Book
+          </button>
+          <button 
+            @click="viewMode = 'depth'"
+            :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'depth' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
+          >
+            Depth Chart
+          </button>
+        </div>
 
-        <div class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
+        <div v-if="viewMode === 'orderbook'" class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
           <table class="w-full text-[11px] sm:text-[12px] text-right h-full border-collapse" style="table-layout: fixed">
             <thead class="text-[#848e9c] sticky top-0 bg-[#0b0e11] z-20">
               <tr>
@@ -352,18 +434,24 @@ watch(tpSl, (val) => {
               </tr>
             </tbody>
           </table>
+          
+          <!-- Sentiment Bar -->
+          <div class="px-2 py-1.5 border-t border-[#1e2329] bg-[#0b0e11] shrink-0">
+              <div class="flex justify-between text-[9px] font-bold uppercase tracking-wider mb-1">
+                  <span class="text-[#0ecb81]">{{ marketSentiment.toFixed(1) }}% Buy</span>
+                  <span class="text-[#f6465d]">{{ (100 - marketSentiment).toFixed(1) }}% Sell</span>
+              </div>
+              <div class="h-1.5 w-full bg-[#1e2329] rounded-full overflow-hidden flex">
+                  <div class="h-full bg-[#0ecb81] transition-all duration-500 ease-out" :style="`width: ${marketSentiment}%`"></div>
+                  <div class="h-full bg-[#f6465d] transition-all duration-500 ease-out" :style="`width: ${100 - marketSentiment}%`"></div>
+              </div>
+          </div>
         </div>
-        
-        <!-- Sentiment Bar -->
-        <div class="px-2 py-1.5 border-t border-[#1e2329] bg-[#0b0e11] shrink-0">
-            <div class="flex justify-between text-[9px] font-bold uppercase tracking-wider mb-1">
-                <span class="text-[#0ecb81]">{{ marketSentiment.toFixed(1) }}% Buy</span>
-                <span class="text-[#f6465d]">{{ (100 - marketSentiment).toFixed(1) }}% Sell</span>
-            </div>
-            <div class="h-1.5 w-full bg-[#1e2329] rounded-full overflow-hidden flex">
-                <div class="h-full bg-[#0ecb81] transition-all duration-500 ease-out" :style="`width: ${marketSentiment}%`"></div>
-                <div class="h-full bg-[#f6465d] transition-all duration-500 ease-out" :style="`width: ${100 - marketSentiment}%`"></div>
-            </div>
+
+        <!-- Depth Chart View -->
+        <div v-else class="flex-1 flex flex-col min-h-[250px] relative p-2 bg-[#0b0e11]">
+            <canvas ref="depthCanvas" class="w-full h-full" width="400" height="300"></canvas>
+            <div class="absolute top-2 left-2 text-[9px] text-[#848e9c] font-mono">LIQUIDITY DEPTH</div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { ArrowDownLeft, ArrowUpRight, Bitcoin, Activity, Signal, TrendingUp } from 'lucide-vue-next';
 import Sidebar from './components/Sidebar.vue';
 import TopHeader from './components/TopHeader.vue';
@@ -8,11 +8,50 @@ import BalancesPanel from './components/BalancesPanel.vue';
 import TradingChartWidget from './components/TradingChartWidget.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
-import { currentPrice } from './store/tradeStore';
+import { addPosition, closePosition, currentPrice, activePositions } from './store/tradeStore';
 import { cn } from './lib/utils';
 
 const activeItem = ref('Market');
 const mobileTab = ref('Chart');
+
+// Professional Hotkeys
+const handleKeydown = (e: KeyboardEvent) => {
+    // Only trigger if not typing in an input
+    if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+
+    if (e.key.toLowerCase() === 'b') {
+        // Instant Market Buy
+        addPosition({
+            pair: 'BTC/USDT',
+            type: 'LONG',
+            leverage: '20',
+            size: 0.1,
+            cost: (currentPrice.value * 0.1) / 20,
+            entry: currentPrice.value
+        });
+    } else if (e.key.toLowerCase() === 's') {
+        // Instant Market Sell
+        addPosition({
+            pair: 'BTC/USDT',
+            type: 'SHORT',
+            leverage: '20',
+            size: 0.1,
+            cost: (currentPrice.value * 0.1) / 20,
+            entry: currentPrice.value
+        });
+    } else if (e.key.toLowerCase() === 'c') {
+        // Cancel/Close All Positions
+        activePositions.value.forEach(p => closePosition(p.id));
+    }
+};
+
+onMounted(() => {
+    window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeydown);
+});
 
 const icons: Record<string, any> = {
   Activity,

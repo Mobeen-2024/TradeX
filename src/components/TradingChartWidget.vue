@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { currentPrice, previousPrice, activePositions } from '../store/tradeStore';
+import { currentPrice, previousPrice, activePositions, selectedPrice } from '../store/tradeStore';
 import { Maximize2, Camera, Settings2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Info, Map as MapIcon } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, LineData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
@@ -26,6 +26,43 @@ const lastPriceData = ref({
     volume: 0,
     isUp: true
 });
+
+const fetchKlines = async (interval: string) => {
+    const symbol = 'BTCUSDT';
+    // Map internal interval to Binance interval
+    const binanceInterval = interval === '1s' ? '1s' : interval.toLowerCase();
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=500`;
+    
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        
+        const candlestick: CandlestickData[] = [];
+        const volume: any[] = [];
+        
+        data.forEach((d: any) => {
+            const time = (d[0] / 1000) as Time;
+            const open = parseFloat(d[1]);
+            const high = parseFloat(d[2]);
+            const low = parseFloat(d[3]);
+            const close = parseFloat(d[4]);
+            const vol = parseFloat(d[5]);
+            
+            candlestick.push({ time, open, high, low, close });
+            volume.push({
+                time,
+                value: vol,
+                color: close >= open ? 'rgba(14, 203, 129, 0.2)' : 'rgba(246, 70, 93, 0.2)'
+            });
+        });
+        
+        return { candlestick, volume };
+    } catch (error) {
+        console.error('Error fetching klines:', error);
+        return generateMockData(interval);
+    }
+};
 
 const generateMockData = (interval: string) => {
     const data: CandlestickData[] = [];
@@ -55,7 +92,7 @@ const generateMockData = (interval: string) => {
     return { candlestick: data, volume: volumeData };
 };
 
-const initChart = () => {
+const initChart = async () => {
     if (!chartContainer.value) return;
 
     chart = createChart(chartContainer.value, {
@@ -88,6 +125,9 @@ const initChart = () => {
             borderColor: 'rgba(43, 49, 57, 0.5)',
             timeVisible: true,
             secondsVisible: false,
+            rightOffset: 15,
+            barSpacing: 8,
+            minBarSpacing: 4,
         },
         handleScroll: {
             mouseWheel: true,
@@ -97,6 +137,14 @@ const initChart = () => {
             axisPressedMouseMove: true,
             mouseWheel: true,
             pinch: true,
+        },
+        rightPriceScale: {
+            borderColor: 'rgba(43, 49, 57, 0.5)',
+            autoScale: true,
+            scaleMargins: {
+                top: 0.1,
+                bottom: 0.25,
+            },
         },
     });
 
@@ -127,16 +175,16 @@ const initChart = () => {
         },
     });
 
-    const data = generateMockData(selectedInterval.value);
+    const data = await fetchKlines(selectedInterval.value);
     candleSeries.setData(data.candlestick);
     volumeSeries.setData(data.volume);
     lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
 
     // Update legend on crosshair move
     chart.subscribeCrosshairMove((param) => {
-        if (param.time) {
-            const data = param.seriesData.get(candleSeries!) as CandlestickData;
-            const vol = param.seriesData.get(volumeSeries!) as { value: number };
+        if (param.time && candleSeries && volumeSeries) {
+            const data = param.seriesData.get(candleSeries) as CandlestickData;
+            const vol = param.seriesData.get(volumeSeries) as { value: number };
             if (data) {
                 lastPriceData.value = {
                     open: data.open,
@@ -147,7 +195,7 @@ const initChart = () => {
                     isUp: data.close >= data.open
                 };
             }
-        } else {
+        } else if (data.candlestick.length > 0) {
             const lastData = data.candlestick[data.candlestick.length - 1];
             const lastVol = data.volume[data.volume.length - 1];
             lastPriceData.value = {
@@ -162,6 +210,15 @@ const initChart = () => {
     });
 
     chart.timeScale().fitContent();
+
+    // Subscribe to clicks for price selection
+    chart.subscribeClick((param) => {
+        if (!param.point || !candleSeries) return;
+        const price = candleSeries.coordinateToPrice(param.point.y);
+        if (price) {
+            selectedPrice.value = parseFloat(price.toFixed(2));
+        }
+    });
 };
 
 const handleResize = () => {
@@ -217,9 +274,9 @@ onMounted(() => {
 
     let currentWs = subscribeKline(selectedInterval.value);
 
-    watch(selectedInterval, (newVal) => {
+    watch(selectedInterval, async (newVal) => {
         if (currentWs) currentWs.close();
-        const data = generateMockData(newVal);
+        const data = await fetchKlines(newVal);
         if (candleSeries) candleSeries.setData(data.candlestick);
         if (volumeSeries) volumeSeries.setData(data.volume);
         if (lineSeries) lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));

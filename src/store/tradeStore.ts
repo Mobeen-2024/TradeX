@@ -16,6 +16,7 @@ export const activePositions = ref<{
 
 export const currentPrice = ref(36000.00);
 export const previousPrice = ref(36000.00);
+export const selectedPrice = ref<number | null>(null);
 export const marketData = ref({
     change24h: '+1,240.50 +1.99%',
     high24h: '64,500.00',

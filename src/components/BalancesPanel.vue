@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Wallet, Bitcoin, CheckCircle2, Eye, EyeOff } from 'lucide-vue-next';
 import { currentPrice } from '../store/tradeStore';
+import { balances, totalUsdtBalance } from '../store/accountStore';
 
 const hideBalance = ref(false);
 const toggleHideBalance = () => {
   hideBalance.value = !hideBalance.value;
 };
 
-const btcHolding = 0.34545;
+const btcBalance = computed(() => balances.value.find(b => b.asset === 'BTC')?.free || 0);
+const ethBalance = computed(() => balances.value.find(b => b.asset === 'ETH')?.free || 0);
+const usdtBalance = computed(() => balances.value.find(b => b.asset === 'USDT')?.free || 0);
 </script>
 
 <template>
@@ -28,7 +31,7 @@ const btcHolding = 0.34545;
         </div>
         <div class="text-3xl font-bold text-white flex items-baseline gap-1 mt-1">
           <template v-if="!hideBalance">
-            $227.169,85 <span class="text-sm font-medium text-dash-text-muted">USD</span>
+            {{ totalUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }} <span class="text-sm font-medium text-dash-text-muted">USD</span>
           </template>
           <template v-else>
             ****** USD
@@ -59,14 +62,14 @@ const btcHolding = 0.34545;
       <div class="flex items-end justify-between">
         <div class="text-2xl font-bold text-white flex items-baseline gap-1">
           <template v-if="!hideBalance">
-            {{ btcHolding }} <span class="text-sm font-medium text-dash-text-muted">BTC</span>
+            {{ btcBalance }} <span class="text-sm font-medium text-dash-text-muted">BTC</span>
           </template>
           <template v-else>
             ****** BTC
           </template>
         </div>
         <div class="text-sm text-dash-text-muted font-mono">
-           {{ hideBalance ? '****** USD' : (btcHolding * currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD' }}
+           {{ hideBalance ? '****** USD' : (btcBalance * currentPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD' }}
         </div>
       </div>
     </div>
@@ -85,7 +88,7 @@ const btcHolding = 0.34545;
       <div class="flex items-end justify-between">
         <div class="text-2xl font-bold text-white flex items-baseline gap-1">
            <template v-if="!hideBalance">
-             12,345 <span class="text-sm font-medium text-dash-text-muted">ETH</span>
+             {{ ethBalance }} <span class="text-sm font-medium text-dash-text-muted">ETH</span>
            </template>
            <template v-else>
              ****** ETH
