@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { X, Shield, Key, Zap, Check, AlertCircle, Settings2 } from 'lucide-vue-next';
+import { X, Shield, Key, Zap, Check, AlertCircle, Settings2, Code, Plus, Trash2, Copy } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
+import { useApiStore } from '../store/apiStore';
+
+const { apiKeys, generateKey, deleteKey } = useApiStore();
+const activeTab = ref<'general' | 'developer'>('general');
+const newKeyName = ref('');
+const showNewKey = ref<string | null>(null);
 
 const isOpen = ref(false);
 const apiKey = ref('');
@@ -34,9 +40,21 @@ const saveSettings = () => {
         saveStatus.value = 'saved';
         setTimeout(() => {
             saveStatus.value = 'idle';
-            isOpen.value = false;
+            // Don't close if in developer tab
+            if (activeTab.value === 'general') isOpen.value = false;
         }, 1500);
     }, 800);
+};
+
+const handleGenerateKey = () => {
+    if (!newKeyName.value) return;
+    const key = generateKey(newKeyName.value, ['read', 'trade']);
+    showNewKey.value = key.key;
+    newKeyName.value = '';
+};
+
+const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
 };
 
 defineExpose({ open: () => isOpen.value = true });
@@ -49,25 +67,44 @@ defineExpose({ open: () => isOpen.value = true });
       <div class="absolute inset-0 bg-[#0b0e11]/90 backdrop-blur-md" @click="isOpen = false"></div>
       
       <!-- Content -->
-      <div class="relative bg-[#1e2329] border border-[#2b3139] rounded-xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+      <div class="relative bg-[#1e2329] border border-[#2b3139] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-[#2b3139] flex justify-between items-center bg-[#0b0e11]/30">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-[#F0B90B]/10 flex items-center justify-center text-[#F0B90B]">
-              <Settings2 class="w-5 h-5" />
+        <div class="px-6 py-4 border-b border-[#2b3139] bg-[#0b0e11]/30">
+          <div class="flex justify-between items-center mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg bg-[#F0B90B]/10 flex items-center justify-center text-[#F0B90B]">
+                <Settings2 class="w-5 h-5" />
+              </div>
+              <div>
+                <h2 class="text-[#EAECEF] font-bold">System Settings</h2>
+                <p class="text-[10px] text-[#848e9c] uppercase tracking-widest font-mono">Terminal & Interop</p>
+              </div>
             </div>
-            <div>
-              <h2 class="text-[#EAECEF] font-bold">Terminal Settings</h2>
-              <p class="text-[10px] text-[#848e9c] uppercase tracking-widest font-mono">Environment Configuration</p>
-            </div>
+            <button @click="isOpen = false" class="text-[#848e9c] hover:text-white transition-colors">
+              <X class="w-5 h-5" />
+            </button>
           </div>
-          <button @click="isOpen = false" class="text-[#848e9c] hover:text-white transition-colors">
-            <X class="w-5 h-5" />
-          </button>
+
+          <!-- Tabs -->
+          <div class="flex gap-1 p-1 bg-[#0b0e11] rounded-lg">
+            <button 
+              @click="activeTab = 'general'"
+              :class="cn('flex-1 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all', activeTab === 'general' ? 'bg-[#2b3139] text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]')"
+            >
+              General
+            </button>
+            <button 
+              @click="activeTab = 'developer'"
+              :class="cn('flex-1 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-md transition-all', activeTab === 'developer' ? 'bg-[#2b3139] text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]')"
+            >
+              Developer API
+            </button>
+          </div>
         </div>
 
         <!-- Body -->
-        <div class="p-6 flex flex-col gap-6">
+        <div class="max-h-[60vh] overflow-y-auto no-scrollbar">
+          <div v-if="activeTab === 'general'" class="p-6 flex flex-col gap-6">
           <!-- Environment Toggle -->
           <div class="flex items-center justify-between p-4 bg-[#0b0e11]/50 rounded-lg border border-dashed border-[#474d57]">
             <div class="flex items-center gap-3">
@@ -127,6 +164,81 @@ defineExpose({ open: () => isOpen.value = true });
             </div>
           </div>
         </div>
+
+        <div v-else class="p-6 flex flex-col gap-6">
+          <!-- API Keys List -->
+          <div class="flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+               <div class="flex items-center gap-2 text-[#F0B90B]">
+                <Code class="w-4 h-4" />
+                <span class="text-xs font-bold uppercase tracking-wider">Your API Keys</span>
+              </div>
+              <div class="text-[10px] text-[#848e9c] font-mono">{{ apiKeys.length }}/5 Keys</div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <div v-for="key in apiKeys" :key="key.id" class="flex items-center justify-between p-3 bg-[#0b0e11]/50 border border-[#2b3139] rounded-lg group">
+                <div class="min-w-0">
+                  <div class="text-[13px] font-bold text-[#EAECEF]">{{ key.name }}</div>
+                  <div class="text-[10px] text-[#848e9c] font-mono truncate">Key: tx_...{{ key.key.slice(-6) }}</div>
+                </div>
+                <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button @click="copyToClipboard(key.key)" class="p-1.5 hover:bg-[#2b3139] rounded text-[#848e9c] hover:text-[#F0B90B] transition-colors">
+                    <Copy class="w-3.5 h-3.5" />
+                  </button>
+                  <button @click="deleteKey(key.id)" class="p-1.5 hover:bg-[#2b3139] rounded text-[#848e9c] hover:text-[#f6465d] transition-colors">
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="apiKeys.length === 0" class="py-8 border border-dashed border-[#2b3139] rounded-lg flex flex-col items-center justify-center text-center px-4">
+                <Key class="w-8 h-8 text-[#2b3139] mb-2" />
+                <p class="text-[11px] text-[#848e9c]">No API keys generated yet. Create one to start using the TradeX Interoperability API.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Create New Key -->
+          <div class="p-4 bg-[#F0B90B]/5 border border-[#F0B90B]/20 rounded-lg">
+             <div class="text-[11px] font-bold text-[#F0B90B] uppercase tracking-wider mb-3">Create New API Key</div>
+             <div class="flex gap-2">
+               <input 
+                type="text" 
+                v-model="newKeyName"
+                placeholder="Key Label (e.g. MyTradingBot)"
+                class="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#F0B90B] rounded-lg px-3 py-2 text-[12px] text-[#EAECEF] outline-none"
+               />
+               <button 
+                @click="handleGenerateKey"
+                class="bg-[#F0B90B] text-[#181a20] px-3 py-2 rounded-lg font-bold text-[12px] hover:bg-[#FCD535] transition-colors flex items-center gap-1.5"
+               >
+                 <Plus class="w-3.5 h-3.5" /> Generate
+               </button>
+             </div>
+          </div>
+
+          <!-- New Key Reveal Modal Overlay -->
+          <div v-if="showNewKey" class="p-4 bg-[#0ecb81]/10 border border-[#0ecb81]/30 rounded-lg animate-in slide-in-from-bottom-2">
+            <div class="flex items-center gap-2 text-[#0ecb81] mb-2">
+              <Check class="w-4 h-4" />
+              <span class="text-[11px] font-bold uppercase tracking-wider">Key Generated Successfully</span>
+            </div>
+            <p class="text-[10px] text-[#848e9c] mb-3 leading-relaxed">
+              Copy this key now. For your security, <span class="text-[#EAECEF]">it will not be shown again.</span>
+            </p>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 bg-[#0b0e11] p-2 rounded border border-[#0ecb81]/20 font-mono text-[10px] text-[#EAECEF] break-all">
+                {{ showNewKey }}
+              </div>
+              <button @click="copyToClipboard(showNewKey)" class="p-2 bg-[#2b3139] rounded hover:text-[#0ecb81] transition-colors">
+                <Copy class="w-4 h-4" />
+              </button>
+            </div>
+            <button @click="showNewKey = null" class="w-full mt-3 py-1.5 bg-[#0ecb81] text-[#181a20] rounded font-bold text-[11px] uppercase tracking-tighter hover:bg-[#0ecb81]/90 transition-all">I have saved it</button>
+          </div>
+        </div>
+      </div>
 
         <!-- Footer -->
         <div class="px-6 py-4 bg-[#0b0e11]/30 border-t border-[#2b3139] flex justify-end">
