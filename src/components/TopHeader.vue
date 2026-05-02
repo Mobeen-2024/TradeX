@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown, Search, Download, Bell, User, Globe } from 'lucide-vue-next';
+import { cn } from '../lib/utils';
 import { currentPrice, previousPrice, marketData, isLiveMode } from '../store/tradeStore';
 
 defineProps<{ title?: string }>();

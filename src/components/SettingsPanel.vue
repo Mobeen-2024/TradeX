@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { X, Shield, Key, Zap, Check, AlertCircle } from 'lucide-vue-next';
+import { X, Shield, Key, Zap, Check, AlertCircle, Settings2 } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 
 const isOpen = ref(false);
@@ -151,4 +151,4 @@ defineExpose({ open: () => isOpen.value = true });
       </div>
     </div>
   </Teleport>
-</script>
+</template>
