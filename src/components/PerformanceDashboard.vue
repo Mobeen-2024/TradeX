@@ -64,6 +64,8 @@ const initChart = () => {
     if (!chartContainer.value) return;
 
     chart = createChart(chartContainer.value, {
+        width: chartContainer.value.clientWidth,
+        height: chartContainer.value.clientHeight,
         layout: {
             background: { color: 'transparent' },
             textColor: '#848e9c',
@@ -108,27 +110,32 @@ const updateChart = () => {
 
 watch(() => stats.value.equityCurve, updateChart, { deep: true });
 
+let resizeObserver: ResizeObserver | null = null;
+
 onMounted(() => {
     initChart();
-    const handleResize = () => {
-        if (chart && chartContainer.value) {
-            chart.applyOptions({
-                width: chartContainer.value.clientWidth,
-                height: chartContainer.value.clientHeight
-            });
-        }
-    };
-    window.addEventListener('resize', handleResize);
+    if (chartContainer.value) {
+        resizeObserver = new ResizeObserver((entries) => {
+            if (chart && entries[0].contentRect) {
+                chart.applyOptions({
+                    width: entries[0].contentRect.width,
+                    height: entries[0].contentRect.height
+                });
+            }
+        });
+        resizeObserver.observe(chartContainer.value);
+    }
 });
 
 onUnmounted(() => {
     if (chart) chart.remove();
+    if (resizeObserver) resizeObserver.disconnect();
 });
 
 </script>
 
 <template>
-    <div class="p-6 h-full overflow-y-auto no-scrollbar bg-[#0b0e11] text-[#EAECEF]">
+    <div class="p-4 sm:p-6 h-full overflow-hidden bg-[#0b0e11] text-[#EAECEF]">
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <div>
                 <h2 class="text-2xl font-bold text-white flex items-center gap-2">
@@ -194,7 +201,7 @@ onUnmounted(() => {
         <!-- Main Content -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Equity Curve -->
-            <div class="lg:col-span-2 bg-[#161a1e] rounded-3xl border border-white/5 p-8 flex flex-col">
+            <div class="lg:col-span-2 bg-[#161a1e] rounded-3xl border border-white/5 p-4 sm:p-6 flex flex-col">
                 <div class="flex items-center justify-between mb-8">
                     <div>
                         <h3 class="font-bold text-white text-lg">Equity Curve</h3>

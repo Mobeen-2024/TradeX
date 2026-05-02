@@ -15,6 +15,8 @@ const initChart = () => {
     if (!chartContainer.value) return;
 
     chart = createChart(chartContainer.value, {
+        width: chartContainer.value.clientWidth,
+        height: chartContainer.value.clientHeight,
         layout: {
             background: { color: 'transparent' },
             textColor: '#474d57',
@@ -64,21 +66,26 @@ const fetchData = async () => {
     } catch (e) {}
 };
 
+let resizeObserver: ResizeObserver | null = null;
+
 onMounted(() => {
     initChart();
-    const handleResize = () => {
-        if (chart && chartContainer.value) {
-            chart.applyOptions({
-                width: chartContainer.value.clientWidth,
-                height: chartContainer.value.clientHeight
-            });
-        }
-    };
-    window.addEventListener('resize', handleResize);
+    if (chartContainer.value) {
+        resizeObserver = new ResizeObserver((entries) => {
+            if (chart && entries[0].contentRect) {
+                chart.applyOptions({
+                    width: entries[0].contentRect.width,
+                    height: entries[0].contentRect.height
+                });
+            }
+        });
+        resizeObserver.observe(chartContainer.value);
+    }
 });
 
 onUnmounted(() => {
     if (chart) chart.remove();
+    if (resizeObserver) resizeObserver.disconnect();
 });
 
 watch(currentPrice, (newPrice) => {

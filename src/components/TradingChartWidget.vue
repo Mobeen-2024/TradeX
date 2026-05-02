@@ -163,6 +163,8 @@ const initChart = async () => {
     }
 
     chart = createChart(chartContainer.value, {
+        width: chartContainer.value.clientWidth,
+        height: chartContainer.value.clientHeight,
         layout: {
             background: { color: '#0b0e11' },
             textColor: '#848e9c',
@@ -488,15 +490,6 @@ const toggleIndicator = (type: string) => {
     initChart(); // Re-init to apply pane changes if needed
 };
 
-const handleResize = () => {
-    if (chart && chartContainer.value) {
-        chart.applyOptions({
-            width: chartContainer.value.clientWidth,
-            height: chartContainer.value.clientHeight
-        });
-    }
-};
-
 let currentWs: WebSocket | null = null;
 
 const subscribeKline = (symbol: string, interval: string) => {
@@ -561,6 +554,8 @@ const updateLiquidity = () => {
     heatmapData.value = newData;
 };
 
+let resizeObserver: ResizeObserver | null = null;
+
 watch(currentPrice, () => {
     if (Math.random() > 0.95 || heatmapData.value.length === 0) updateLiquidity();
 });
@@ -575,13 +570,26 @@ onMounted(() => {
     }
     
     initChart();
-    window.addEventListener('resize', handleResize);
+
+    if (chartContainer.value) {
+        resizeObserver = new ResizeObserver((entries) => {
+            if (chart && entries[0].contentRect) {
+                chart.applyOptions({
+                    width: entries[0].contentRect.width,
+                    height: entries[0].contentRect.height
+                });
+                renderHeatmap();
+            }
+        });
+        resizeObserver.observe(chartContainer.value);
+    }
+
     window.addEventListener('keydown', handleKeyDown);
 });
 
 onUnmounted(() => {
     if (currentWs) currentWs.close();
-    window.removeEventListener('resize', handleResize);
+    if (resizeObserver) resizeObserver.disconnect();
     window.removeEventListener('keydown', handleKeyDown);
     if (chart) chart.remove();
 });
