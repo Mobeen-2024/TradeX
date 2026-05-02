@@ -14,7 +14,48 @@ export const activePositions = ref<{
   protocolLimits: [string, string];
 }[]>([]);
 
-export const addPosition = (position: {
+if (typeof window !== 'undefined') {
+    fetch('/api/positions')
+        .then(res => res.json())
+        .then(data => {
+            if (data.positions) {
+                activePositions.value = data.positions;
+            }
+        })
+        .catch(() => {});
+}
+
+let ws: WebSocket;
+export const sharedWs = ref<WebSocket | null>(null);
+
+function connectWs() {
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/trading`;
+    ws = new WebSocket(wsUrl);
+    sharedWs.value = ws;
+
+    ws.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'trade' && data.positions) {
+            activePositions.value = data.positions;
+        } else if (data.type === 'position_opened') {
+            const exists = activePositions.value.find(p => p.id === data.position.id);
+            if (!exists) activePositions.value.push(data.position);
+        }
+      } catch(e) {}
+    });
+
+    ws.addEventListener('close', () => {
+      setTimeout(connectWs, 1000);
+    });
+  }
+}
+
+connectWs();
+
+export const addPosition = async (position: {
   pair: string;
   type: 'LONG' | 'SHORT';
   leverage: string;
@@ -22,21 +63,42 @@ export const addPosition = (position: {
   cost: number;
   entry: number;
 }) => {
-  activePositions.value.push({
-    id: Math.random().toString(36).substr(2, 9),
-    pair: position.pair,
-    type: position.type,
-    leverage: position.leverage,
-    size: position.size,
-    cost: position.cost,
-    entry: position.entry,
-    mark: position.entry + (Math.random() * 10 - 5), // Mock mark
-    liveDelta: Math.random() * 100 - 50,
-    liveDeltaPercent: Math.random() * 5 - 2.5,
-    protocolLimits: ['-', '-'],
-  });
+  try {
+      const response = await fetch('/api/place_order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              ...position,
+              amount: position.size,
+              price: position.entry,
+              side: position.type === 'LONG' ? 'Buy' : 'Sell'
+          })
+      });
+      const data = await response.json();
+      if (data.success && data.position) {
+          activePositions.value.push(data.position);
+      }
+  } catch (err) {
+      console.warn('Fallback: adding locally');
+      activePositions.value.push({
+        id: Math.random().toString(36).substr(2, 9),
+        pair: position.pair,
+        type: position.type,
+        leverage: position.leverage,
+        size: position.size,
+        cost: position.cost,
+        entry: position.entry,
+        mark: position.entry,
+        liveDelta: 0,
+        liveDeltaPercent: 0,
+        protocolLimits: ['-', '-'],
+      });
+  }
 };
 
-export const closePosition = (id: string) => {
+export const closePosition = async (id: string) => {
+  try {
+      await fetch(`/api/close_position/${id}`, { method: 'POST' });
+  } catch (err) {}
   activePositions.value = activePositions.value.filter(p => p.id !== id);
 };

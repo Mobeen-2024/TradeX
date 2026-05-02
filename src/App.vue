@@ -12,28 +12,37 @@ const activeItem = ref('Trade');
 </script>
 
 <template>
-  <div class="flex h-[100dvh] w-full bg-dash-bg overflow-hidden text-dash-text text-sm flex-col md:flex-row">
-    <Sidebar class="order-2 md:order-none" :active-item="activeItem" @update:active-item="activeItem = $event" />
-    <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
+  <div class="flex h-[100dvh] w-full bg-[#0b0e11] overflow-hidden text-[#EAECEF] text-sm flex-col md:flex-row relative">
+    
+    <!-- Magic UI Style Animated Background (Subtle Grid + Glow) -->
+    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+      <div class="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+      <div class="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#F0B90B] opacity-[0.03] blur-[150px] rounded-full mix-blend-screen animate-pulse"></div>
+      <div class="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-[#0ecb81] opacity-[0.02] blur-[150px] rounded-full mix-blend-screen animate-pulse delay-1000"></div>
+    </div>
+
+    <!-- Main Content Container with z-index to overlay background -->
+    <div class="flex h-full w-full z-10 flex-col md:flex-row">
+      <Sidebar class="order-2 md:order-none shrink-0" :active-item="activeItem" @update:active-item="activeItem = $event" />
+      <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
       <TopHeader v-if="activeItem === 'Market'" :title="activeItem" />
       
-      <div v-if="activeItem === 'Market'" class="flex-1 overflow-y-auto overflow-x-hidden p-2 flex flex-col gap-2 no-scrollbar">
-        <!-- Main Workspace Row (Chart + OrderBook + Terminal) -->
-        <div class="flex flex-1 flex-col xl:flex-row gap-2">
-          <!-- Left: Chart -->
-          <div class="flex-[1.5] min-w-0 flex flex-col items-center justify-start">
-            <TradingChartWidget class="w-full" />
+      <div v-if="activeItem === 'Market'" class="flex-1 overflow-y-auto lg:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
+        <!-- Main Workspace Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">
+          <!-- Chart -->
+          <div class="lg:col-span-7 xl:col-span-8 lg:row-start-1 lg:col-start-1 flex flex-col min-h-[450px] lg:min-h-[0]">
+            <TradingChartWidget class="w-full h-full" />
           </div>
 
-          <!-- Right: Orderbook, Trade Execution & Positions -->
-          <div class="w-full xl:w-auto flex flex-col gap-2 shrink-0">
-            <div class="h-auto xl:h-[460px] w-full xl:w-[504px]">
-              <OrderPanel />
-            </div>
-            
-            <div class="h-[300px] xl:h-[auto] xl:flex-1 w-full xl:w-[504px] shrink-0 flex flex-col">
-              <TransactionHistory class="h-full" />
-            </div>
+          <!-- OrderPanel -->
+          <div class="lg:col-span-5 xl:col-span-4 lg:row-start-1 lg:col-start-8 xl:col-start-9 flex flex-col h-[460px] lg:h-full">
+            <OrderPanel class="w-full h-full" />
+          </div>
+          
+          <!-- Transactions -->
+          <div class="lg:col-span-12 lg:row-start-2 lg:col-start-1 flex flex-col h-[300px] lg:h-full">
+            <TransactionHistory class="h-full" />
           </div>
         </div>
       </div>
@@ -54,5 +63,6 @@ const activeItem = ref('Trade');
          Select a section from the sidebar to view.
       </div>
     </div>
+    </div> <!-- Close main content container -->
   </div>
 </template>

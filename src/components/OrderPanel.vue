@@ -1,18 +1,110 @@
 <script setup lang="ts">
-import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X } from 'lucide-vue-next';
+import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
-import { ref, computed, watch } from 'vue';
-import { addPosition } from '../store/tradeStore';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { addPosition, sharedWs, activePositions } from '../store/tradeStore';
 
+const currentMarketPrice = ref(36000.00);
+const previousMarketPrice = ref(36000.00);
 const isPending = ref(false);
-const orderPrice = ref(67412.35);
+const orderPrice = ref(36000.00);
+const lastOrderPrice = ref(36000.00);
 const orderAmount = ref<number | null>(null);
 const orderSide = ref<'Buy' | 'Sell'>('Buy');
-const orderType = ref<'Limit' | 'Market' | 'Stop-Limit'>('Limit');
+
+// Extra specific fields for complex types
+const stopPrice = ref<number | null>(null);
+const limitPrice = ref<number | null>(null);
+const callbackRate = ref<number | null>(1.0);
+const activationPrice = ref<number | null>(null);
+
+const orderBookAsks = ref<Array<{price: number, amount: number}>>(
+  Array.from({ length: 7 }, (_, i) => ({ price: 36000 + (7 - i) * 1.5, amount: 1 + i * 0.5 }))
+);
+const orderBookBids = ref<Array<{price: number, amount: number}>>(
+  Array.from({ length: 7 }, (_, i) => ({ price: 36000 - (i + 1) * 1.5, amount: 1 + i * 0.5 }))
+);
+
+const maxOrderBookAmount = computed(() => {
+  const maxAsk = Math.max(...orderBookAsks.value.map(a => a.amount), 0);
+  const maxBid = Math.max(...orderBookBids.value.map(b => b.amount), 0);
+  return Math.max(maxAsk, maxBid, 1);
+});
+
+// WebSocket implementation
+const handleMessage = (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'trade') {
+        const newPrice = data.price;
+        previousMarketPrice.value = currentMarketPrice.value;
+        currentMarketPrice.value = newPrice;
+        
+        if (!isUpdatingAmountAutomatically.value && orderType.value === 'Market') {
+          orderPrice.value = newPrice;
+        }
+        lastOrderPrice.value = orderPrice.value;
+        if (orderType.value !== 'Market') {
+            // Keep user input unless it's initial load
+        }
+        if (data.orderBook && data.orderBook.asks.length > 0) {
+            orderBookAsks.value = data.orderBook.asks;
+            orderBookBids.value = data.orderBook.bids;
+        }
+      }
+    } catch(e) {}
+};
+
+watch(sharedWs, (newWs, oldWs) => {
+  if (oldWs) {
+    oldWs.removeEventListener('message', handleMessage);
+  }
+  if (newWs) {
+    newWs.addEventListener('message', handleMessage);
+  }
+}, { immediate: true });
+
+onUnmounted(() => {
+  if (sharedWs.value) {
+     sharedWs.value.removeEventListener('message', handleMessage);
+  }
+});
+
+const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
+const orderType = ref<typeof orderTypes[number]>('Limit');
+
+const orderTypeDetails = {
+  'Limit': { desc: 'Buy or Sell at a specific price or better', icon: CornerDownRight },
+  'Market': { desc: 'Buy or Sell at the best available market price', icon: TrendingDown },
+  'Stop-Limit': { desc: 'Triggers a Limit order when Stop price is reached.', icon: GitCommit },
+  'Stop Market': { desc: 'Triggers a Market order when Stop price is reached.', icon: Activity },
+  'Trailing Stop': { desc: 'Places an order when the price reaches the predefined point', icon: Activity },
+  'OCO': { desc: 'Places two orders at once. When either is triggered, the other is canceled.', icon: Waypoints }
+};
+
 const showOrderTypeDropdown = ref(false);
 const marginEnabled = ref(false);
+const leverage = ref(10);
 const iceberg = ref(false);
 const percentage = ref(0);
+
+// Load Preferences
+onMounted(() => {
+  const savedType = localStorage.getItem('defaultOrderType');
+  if (savedType && orderTypes.includes(savedType as any)) {
+      orderType.value = savedType as any;
+  }
+  const savedMargin = localStorage.getItem('defaultMarginEnabled');
+  if (savedMargin !== null) marginEnabled.value = savedMargin === 'true';
+  
+  const savedLeverage = localStorage.getItem('defaultLeverage');
+  if (savedLeverage !== null) leverage.value = parseInt(savedLeverage);
+});
+
+// Save Preferences
+watch(orderType, (val) => localStorage.setItem('defaultOrderType', val));
+watch(marginEnabled, (val) => localStorage.setItem('defaultMarginEnabled', String(val)));
+watch(leverage, (val) => localStorage.setItem('defaultLeverage', String(val)));
 
 const tpSl = ref(false);
 const isTpSlOpen = ref(false);
@@ -23,18 +115,36 @@ const slPercent = ref<number | null>(5);
 
 const availableUsdt = ref(9840.79);
 const availableBtc = ref(0.4521);
-const borrowValue = ref(0.00);
+const shadowBorrowValue = ref(0.00);
+
+const availableMargin = computed(() => {
+    const unrealizedPNL = activePositions.value.reduce((acc, pos) => acc + (pos.liveDelta || 0), 0);
+    return availableUsdt.value + unrealizedPNL;
+});
+
+const borrowValue = computed(() => {
+    if (!marginEnabled.value) return 0.00;
+    return totalCostNumber.value * (leverage.value - 1) / leverage.value;
+});
 
 const maxAmount = computed(() => {
+  const mult = marginEnabled.value ? leverage.value : 1;
+  const currentPrice = orderType.value === 'Market' ? lastOrderPrice.value : orderPrice.value;
+  const usdtBase = marginEnabled.value ? availableMargin.value : availableUsdt.value;
   if (orderSide.value === 'Buy') {
-    return orderPrice.value > 0 ? (availableUsdt.value / orderPrice.value) : 0;
+    return currentPrice > 0 ? ((usdtBase * mult) / currentPrice) : 0;
   }
-  return availableBtc.value;
+  return availableBtc.value * mult;
+});
+
+const totalCostNumber = computed(() => {
+  if (!orderAmount.value || isNaN(orderAmount.value)) return 0;
+  const currentPrice = (orderType.value === 'Market' || orderType.value === 'Trailing Stop') ? lastOrderPrice.value : orderPrice.value;
+  return currentPrice * orderAmount.value;
 });
 
 const totalCost = computed(() => {
-  if (!orderAmount.value || isNaN(orderAmount.value)) return '0.00';
-  return (orderPrice.value * orderAmount.value).toFixed(2);
+  return totalCostNumber.value.toFixed(2);
 });
 
 const tpError = computed(() => {
@@ -48,22 +158,33 @@ const slError = computed(() => {
 });
 
 const orderPriceError = computed(() => {
-  if (orderPrice.value === null || orderPrice.value <= 0) return 'Price must be greater than 0';
+  if (['Limit', 'Stop-Limit', 'OCO'].includes(orderType.value)) {
+     if (orderPrice.value === null || orderPrice.value <= 0) return 'Price must be greater than 0';
+  }
+  if (['Stop-Limit', 'OCO'].includes(orderType.value)) {
+     if (stopPrice.value === null || stopPrice.value <= 0) return 'Stop Price must be greater than 0';
+  }
+  if (orderType.value === 'OCO') {
+     if (limitPrice.value === null || limitPrice.value <= 0) return 'Limit Price must be greater than 0';
+  }
+  if (orderType.value === 'Trailing Stop') {
+     if (callbackRate.value === null || callbackRate.value < 0.1 || callbackRate.value > 5) return 'Callback must be 0.1% - 5.0%';
+  }
   return null;
 });
 
 const orderAmountError = computed(() => {
-  if (orderAmount.value === null) return null; // Don't show error initially
+  if (orderAmount.value === null) return null;
   if (orderAmount.value <= 0) return 'Amount must be greater than 0';
   if (orderAmount.value > maxAmount.value) {
-    return orderSide.value === 'Buy' ? 'Exceeds maximum buy amount' : 'Exceeds available balance';
+    return orderSide.value === 'Buy' ? 'Exceeds max buy amount/margin' : 'Exceeds available balance';
   }
   return null;
 });
 
 const isFormValid = computed(() => {
   if (!orderAmount.value || orderAmount.value <= 0) return false;
-  if (!orderPrice.value || orderPrice.value <= 0) return false;
+  if (orderPriceError.value) return false;
   if (orderAmountError.value) return false;
   if (tpSl.value) {
     if (tpError.value || slError.value) return false;
@@ -74,22 +195,24 @@ const isFormValid = computed(() => {
 const executeTrade = () => {
   if (!isFormValid.value) return;
   
-  // Deduct from local available value for realism
+  const mult = marginEnabled.value ? leverage.value : 1;
+  const marginRequired = totalCostNumber.value / mult;
+
   if (orderSide.value === 'Buy') {
-    availableUsdt.value -= parseFloat(totalCost.value);
+    availableUsdt.value -= marginRequired;
     availableBtc.value += orderAmount.value!;
   } else {
-    availableBtc.value -= orderAmount.value!;
-    availableUsdt.value += parseFloat(totalCost.value);
+    availableBtc.value -= (orderAmount.value! / mult);
+    availableUsdt.value += totalCostNumber.value;
   }
 
   addPosition({
     pair: 'BTC/USDT',
     type: orderSide.value === 'Buy' ? 'LONG' : 'SHORT',
-    leverage: marginEnabled.value ? 'Cross_10x' : 'Spot',
+    leverage: marginEnabled.value ? `Cross_${leverage.value}x` : 'Spot',
     size: orderAmount.value!,
-    cost: parseFloat(totalCost.value),
-    entry: orderPrice.value,
+    cost: marginRequired,
+    entry: orderType.value === 'Market' || orderType.value === 'Trailing Stop' ? lastOrderPrice.value : orderPrice.value,
   });
   
   orderAmount.value = null; // reset
@@ -195,9 +318,9 @@ watch(tpSl, (val) => {
 </script>
 
 <template>
-  <div class="flex flex-row gap-1 sm:gap-2 h-[460px] sm:h-full w-full">
+  <div class="flex flex-row gap-1 sm:gap-2 h-[460px] lg:h-full w-full">
     <!-- Left: Order Book / Trades Panel -->
-    <div class="bg-[#0b0e11] border border-[#1e2329] rounded flex flex-col overflow-hidden w-[calc(50%-1rem)] shrink-0">
+    <div class="bg-[#0b0e11] border border-[#1e2329] rounded flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0">
        <div class="flex w-full border-b border-[#1e2329] shrink-0">
          <button class="flex-1 py-2 sm:py-3 text-[10px] sm:text-[11px] font-semibold border-b-2 border-[#F0B90B] text-[#EAECEF] bg-[#1e2329]/20 tracking-wider">
            ORDER BOOK
@@ -208,34 +331,46 @@ watch(tpSl, (val) => {
        </div>
 
        <div class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
-          <table class="w-full text-xs sm:text-[13px] text-right h-full">
-            <thead class="text-[#848e9c] sticky top-0 bg-[#0b0e11]">
+          <table class="w-full text-[11px] sm:text-[12px] text-right h-full border-collapse" style="table-layout: fixed">
+            <thead class="text-[#848e9c] sticky top-0 bg-[#0b0e11] z-20">
               <tr>
-                <th class="font-medium pb-1.5 sm:pb-2 pt-1 text-left w-1/2 text-[10px] sm:text-xs">Price</th>
-                <th class="font-medium pb-1.5 sm:pb-2 pt-1 w-1/2 text-[10px] sm:text-xs">Total</th>
+                <th class="font-normal pb-1.5 pt-1 text-left w-1/2 text-[10px] pl-1">Price(USDT)</th>
+                <th class="font-normal pb-1.5 pt-1 w-1/2 text-[10px] pr-1">Amount(BTC)</th>
               </tr>
             </thead>
-            <tbody class="font-mono">
-              <tr v-for="i in 7" :key="`ask-${i}`" class="hover:bg-[#1e2329]/50 cursor-pointer group relative">
-                <td class="py-1 sm:py-1.5 text-left text-[#f6465d] border-none">
-                  <div class="absolute top-0 right-0 h-full bg-[#f6465d]/10 group-hover:bg-[#f6465d]/20 -z-10" :style="`width: ${40 + i * 5}%`"></div>
-                  <span class="relative z-10">67412.{{ 90 + i }}</span>
+            <tbody class="font-mono tracking-tight">
+              <tr v-for="(ask, i) in orderBookAsks" :key="`ask-${i}`" class="hover:bg-[#1e2329]/80 cursor-pointer group relative transition-colors duration-150">
+                <td class="py-[3px] text-left text-[#f6465d] border-none pl-1 relative z-10 w-1/2">
+                  <div class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#f6465d]/20 to-transparent group-hover:from-[#f6465d]/30 -z-10 transition-all duration-300 ease-out" :style="`width: ${(ask.amount / maxOrderBookAmount) * 100}%`"></div>
+                  {{ ask.price.toFixed(2) }}
                 </td>
-                <td class="py-1 sm:py-1.5 text-[#848e9c] border-none"><span class="relative z-10">37.65{{ i }}</span></td>
+                <td class="py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ ask.amount.toFixed(4) }}</td>
               </tr>
+              
+              <!-- Middle: Market Price -->
               <tr>
-                <td colspan="2" class="py-1 sm:py-2 border-y border-[#1e2329] my-0.5 sm:my-1">
-                  <div class="flex justify-center items-center gap-1 sm:gap-2">
-                    <span class="text-[#2ebd85] font-bold text-sm sm:text-lg mt-0.5">67412.35 <ArrowUp class="w-3 h-3 sm:w-4 sm:h-4 inline" /></span>
+                <td colspan="2" class="py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent">
+                  <div class="flex flex-col items-center justify-center py-1">
+                    <div class="flex items-center gap-2">
+                      <span :class="cn('font-bold text-lg sm:text-xl transition-colors duration-300 flex items-center', currentMarketPrice >= previousMarketPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                        {{ currentMarketPrice.toFixed(2) }} 
+                        <ArrowUp v-if="currentMarketPrice >= previousMarketPrice" class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
+                        <ArrowDown v-else class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
+                      </span>
+                    </div>
+                    <span class="text-[#848e9c] text-xs mt-0.5 font-medium underline decoration-dashed underline-offset-2 cursor-pointer hover:text-white transition-colors">
+                      ${{ currentMarketPrice.toFixed(2) }}
+                    </span>
                   </div>
                 </td>
               </tr>
-              <tr v-for="i in 7" :key="`bid-${i}`" class="hover:bg-[#1e2329]/50 cursor-pointer group relative">
-                <td class="py-1 sm:py-1.5 text-left text-[#2ebd85] border-none">
-                  <div class="absolute top-0 right-0 h-full bg-[#2ebd85]/10 group-hover:bg-[#2ebd85]/20 -z-10" :style="`width: ${80 - i * 5}%`"></div>
-                  <span class="relative z-10">67412.{{ 35 - i }}</span>
+
+              <tr v-for="(bid, i) in orderBookBids" :key="`bid-${i}`" class="hover:bg-[#1e2329]/80 cursor-pointer group relative transition-colors duration-150">
+                <td class="py-[3px] text-left text-[#0ecb81] border-none pl-1 relative z-10 w-1/2">
+                  <div class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#0ecb81]/20 to-transparent group-hover:from-[#0ecb81]/30 -z-10 transition-all duration-300 ease-out" :style="`width: ${(bid.amount / maxOrderBookAmount) * 100}%`"></div>
+                  {{ bid.price.toFixed(2) }}
                 </td>
-                <td class="py-1 sm:py-1.5 text-[#848e9c] border-none"><span class="relative z-10">37.65{{ i }}</span></td>
+                <td class="py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ bid.amount.toFixed(4) }}</td>
               </tr>
             </tbody>
           </table>
@@ -291,10 +426,10 @@ watch(tpSl, (val) => {
           {{ orderType }} <ChevronDown class="w-3 h-3 ml-0.5" />
         </div>
         
-        <!-- Dropdown Menu -->
-        <div v-if="showOrderTypeDropdown" class="absolute top-full left-0 mt-1 w-32 bg-[#2b3139] border border-[#474d57] rounded shadow-lg z-50 py-1">
+        <!-- Desktop Dropdown -->
+        <div v-if="showOrderTypeDropdown" class="hidden sm:block absolute top-full left-0 mt-1 w-32 bg-[#2b3139] border border-[#474d57] rounded shadow-lg z-50 py-1">
           <div 
-            v-for="type in ['Limit', 'Market', 'Stop-Limit']" 
+            v-for="type in orderTypes" 
             :key="type"
             @click="orderType = type as any; showOrderTypeDropdown = false"
             class="px-3 py-1.5 text-xs hover:bg-[#1e2329] cursor-pointer transition-colors"
@@ -304,32 +439,149 @@ watch(tpSl, (val) => {
           </div>
         </div>
 
-        <Info class="w-4 h-4 text-[#848e9c] cursor-pointer hover:text-white" />
+        <!-- Mobile Bottom Sheet -->
+        <Teleport to="body">
+          <div v-if="showOrderTypeDropdown" class="fixed inset-0 z-[100] flex sm:hidden flex-col justify-end pointer-events-auto">
+            <!-- Backdrop -->
+            <div 
+              class="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity" 
+              @click="showOrderTypeDropdown = false"
+            ></div>
+            
+            <!-- Bottom Sheet -->
+            <div class="relative bg-white dark:bg-[#1e2329] rounded-t-[20px] w-full max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-full duration-300 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
+              <!-- Handle -->
+              <div class="w-full flex justify-center pt-3 pb-2">
+                <div class="w-10 h-1 bg-[#eaecef] dark:bg-[#2b3139] rounded-full"></div>
+              </div>
+              
+              <!-- Header -->
+              <div class="px-5 py-2 flex items-center text-[#1e2329] dark:text-[#EAECEF]">
+                <div class="flex items-center gap-1 font-bold text-[18px]">
+                  Order Type 
+                  <Info class="w-4 h-4 text-[#848e9c] hover:text-inherit cursor-pointer" />
+                </div>
+              </div>
+              
+              <!-- Options List -->
+              <div class="flex flex-col overflow-y-auto pb-8 pt-2">
+                <div 
+                  v-for="type in orderTypes" 
+                  :key="type"
+                  @click="orderType = type as any; showOrderTypeDropdown = false"
+                  class="px-5 py-3.5 flex items-start gap-4 cursor-pointer hover:bg-neutral-100 dark:hover:bg-[#2b3139]/50 transition-colors relative"
+                >
+                  <!-- Icon -->
+                  <div class="mt-0.5 shrink-0">
+                    <component :is="orderTypeDetails[type].icon" class="w-[18px] h-[18px] text-[#1e2329] dark:text-[#EAECEF]" stroke-width="1.5" />
+                  </div>
+                  
+                  <!-- Text -->
+                  <div class="flex flex-col pr-8">
+                    <div class="text-[15px] font-semibold text-[#1e2329] dark:text-[#EAECEF]">{{ type }}</div>
+                    <div class="text-[13px] text-[#707a8a] dark:text-[#848e9c] leading-snug mt-0.5 pr-2">
+                      {{ orderTypeDetails[type].desc }}
+                    </div>
+                  </div>
+                  
+                  <!-- Checkmark (absolute to right) -->
+                  <div v-if="orderType === type" class="absolute right-5 top-1/2 -translate-y-1/2">
+                    <Check class="w-[22px] h-[22px] text-[#1e2329] dark:text-[#EAECEF]" stroke-width="2.5" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Teleport>
       </div>
 
       <!-- Inputs -->
-      <div class="flex flex-col gap-4">
-        <!-- Price Input -->
-        <div class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-1.5 sm:px-3 border', orderPriceError ? 'bg-[#f6465d]/10 border-[#f6465d]' : 'bg-[#1e2329] hover:bg-[#2b3139] border-transparent focus-within:ring-1 focus-within:ring-[#F0B90B]')">
-            <Minus class="w-3 h-3 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderPrice = Math.max(0, parseFloat((orderPrice - 0.1).toFixed(2)))" />
-            <input type="number" step="0.01" min="0" v-model="orderPrice" class="flex-1 text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full min-w-0 px-1 sm:px-2" />
-            <Plus class="w-3 h-3 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0 mr-1 sm:mr-2" @click="orderPrice = parseFloat((orderPrice + 0.1).toFixed(2))" />
-            <div class="h-3 sm:h-4 w-px bg-[#474d57] mx-1 sm:mx-2"></div>
-            <button @click="orderPrice = orderSide === 'Buy' ? 67412.35 : 67412.40" class="text-[#848e9c] font-bold text-[9px] sm:text-[11px] hover:text-white shrink-0 transition-colors">BBO</button>
+      <div class="flex flex-col gap-3 min-h-[120px]">
+        <!-- Setup Inputs based on Type -->
+        
+        <!-- Stop Price (for Stop-Limit and OCO) -->
+        <div v-if="orderType === 'Stop-Limit' || orderType === 'Stop Market' || orderType === 'OCO'" class="flex flex-col gap-1">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (stopPrice === null || stopPrice <= 0) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="stopPrice = Math.max(0, parseFloat(((stopPrice || 0) - 0.1).toFixed(2)))" />
+            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
+              <div v-show="stopPrice !== null && stopPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Stop (USDT)</div>
+              <input type="number" step="0.01" min="0" v-model="stopPrice" placeholder="Stop (USDT)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', stopPrice !== null && stopPrice > 0 ? 'mt-2.5' : '')" />
+            </div>
+            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="stopPrice = parseFloat(((stopPrice || 0) + 0.1).toFixed(2))" />
           </div>
-          <span v-if="orderPriceError" class="text-[#f6465d] text-[10px] ml-1">{{ orderPriceError }}</span>
+        </div>
+        
+        <!-- Limit Price (for OCO) -->
+        <div v-if="orderType === 'OCO'" class="flex flex-col gap-1">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (limitPrice === null || limitPrice <= 0) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="limitPrice = Math.max(0, parseFloat(((limitPrice || 0) - 0.1).toFixed(2)))" />
+            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
+              <div v-show="limitPrice !== null && limitPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Limit (USDT)</div>
+              <input type="number" step="0.01" min="0" v-model="limitPrice" placeholder="Limit (USDT)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', limitPrice !== null && limitPrice > 0 ? 'mt-2.5' : '')" />
+            </div>
+            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="limitPrice = parseFloat(((limitPrice || 0) + 0.1).toFixed(2))" />
+          </div>
+        </div>
+
+        <!-- Callback Rate (for Trailing Stop) -->
+        <div v-if="orderType === 'Trailing Stop'" class="flex flex-col gap-1">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (callbackRate === null || callbackRate < 0.1 || callbackRate > 5) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="callbackRate = Math.max(0.1, parseFloat(((callbackRate || 1) - 0.1).toFixed(1)))" />
+            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
+              <div v-show="callbackRate !== null && callbackRate > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Callback Rate (%)</div>
+              <input type="number" step="0.1" min="0.1" max="5.0" v-model="callbackRate" placeholder="Callback Rate (%)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', callbackRate !== null && callbackRate > 0 ? 'mt-2.5' : '')" />
+            </div>
+            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="callbackRate = Math.min(5.0, parseFloat(((callbackRate || 1) + 0.1).toFixed(1)))" />
+          </div>
+        </div>
+        
+        <!-- Activation Price (for Trailing Stop) -->
+        <div v-if="orderType === 'Trailing Stop'" class="flex flex-col gap-1">
+          <div class="flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] focus-within:border-[#F0B90B]">
+            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="activationPrice = Math.max(0, parseFloat(((activationPrice || 0) - 0.1).toFixed(2)))" />
+            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
+              <div v-show="activationPrice !== null && activationPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Activation (USDT)</div>
+              <input type="number" step="0.01" min="0" v-model="activationPrice" placeholder="Activation Price" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', activationPrice !== null && activationPrice > 0 ? 'mt-2.5' : '')" />
+            </div>
+            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="activationPrice = parseFloat(((activationPrice || 0) + 0.1).toFixed(2))" />
+          </div>
+        </div>
+
+        <!-- Price Input (for Limit, Stop-Limit, OCO) -->
+        <div v-if="['Limit', 'Stop-Limit', 'OCO'].includes(orderType)" class="flex gap-2">
+          <div class="flex-1 flex flex-col gap-1">
+            <div :class="cn('flex items-center transition-colors rounded-lg h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (orderPrice === null || orderPrice <= 0) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+              <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderPrice = Math.max(0, parseFloat(((orderPrice || 0) - 0.1).toFixed(2)))" />
+              <div class="flex-1 flex flex-col justify-center items-center h-full relative">
+                <div v-show="orderPrice !== null && orderPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Limit (USDT)</div>
+                <input type="number" step="0.01" min="0" v-model="orderPrice" placeholder="Limit (USDT)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', orderPrice !== null && orderPrice > 0 ? 'mt-2.5' : '')" />
+              </div>
+              <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderPrice = parseFloat(((orderPrice || 0) + 0.1).toFixed(2))" />
+            </div>
+            <span v-if="orderPriceError" class="text-[#f6465d] text-[10px]">{{ orderPriceError }}</span>
+          </div>
+          <button @click="orderPrice = orderSide === 'Buy' ? 36000.00 : 36000.50" class="h-[40px] px-3 sm:px-4 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] text-[#EAECEF] rounded-lg font-semibold text-xs transition-colors shrink-0">BBO</button>
         </div>
 
         <!-- Amount Input -->
         <div class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-1.5 sm:px-3 border', orderAmountError ? 'bg-[#f6465d]/10 border-[#f6465d]' : 'bg-[#1e2329] hover:bg-[#2b3139] border-transparent focus-within:ring-1 focus-within:ring-[#F0B90B]')">
-            <div class="text-[10px] sm:text-[12px] text-[#848e9c] shrink-0">Amount</div>
-            <input type="number" v-model="orderAmount" placeholder="0.00" class="flex-1 text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full min-w-0 px-1 sm:px-2 placeholder:text-[#474d57]" />
-            <div @click="setPercentage(100)" class="text-[#F0B90B] font-bold text-[9px] sm:text-[11px] cursor-pointer hover:brightness-110 ml-1 sm:ml-2 shrink-0">MAX</div>
-            <div class="text-[#EAECEF] font-medium text-[10px] sm:text-[12px] ml-1 sm:ml-2 shrink-0">BTC</div>
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderAmountError ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderAmount = Math.max(0, parseFloat(((orderAmount || 0) - 1).toFixed(4)))" />
+            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
+              <div v-show="orderAmount !== null && orderAmount > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Amount (BTC)</div>
+              <input type="number" v-model="orderAmount" placeholder="Amount (BTC)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', orderAmount !== null && orderAmount > 0 ? 'mt-2.5' : '')" />
+            </div>
+            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderAmount = parseFloat(((orderAmount || 0) + 1).toFixed(4))" />
           </div>
           <span v-if="orderAmountError" class="text-[#f6465d] text-[10px] ml-1">{{ orderAmountError }}</span>
+        </div>
+
+        <!-- Market Price Field (Read Only) -->
+        <div v-if="orderType === 'Market'" class="flex gap-2">
+          <div class="flex-1 flex items-center justify-center bg-[#1e2329] text-[#848e9c] opacity-80 cursor-not-allowed rounded-lg h-[40px] px-2 sm:px-3 border border-[#2b3139] text-xs font-mono">
+            Market Price (USDT)
+          </div>
+          <div class="h-[40px] px-3 sm:px-4 bg-[#1e2329]/50 border border-[#2b3139] text-[#EAECEF]/50 rounded-lg font-semibold text-xs shrink-0 cursor-not-allowed opacity-50 flex items-center justify-center">BBO</div>
         </div>
 
         <!-- Total -->
@@ -337,13 +589,6 @@ watch(tpSl, (val) => {
           <div class="text-[10px] sm:text-[12px] text-[#848e9c] shrink-0">Total</div>
           <input type="number" :value="totalCost" readonly placeholder="0.00" class="flex-1 text-center ml-1 sm:ml-2 bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full min-w-0 placeholder:text-[#474d57]" />
           <div class="text-[#EAECEF] font-medium text-[10px] sm:text-[12px] ml-1.5 sm:ml-3 shrink-0">USDT</div>
-        </div>
-
-        <!-- Max Display -->
-        <div class="flex items-center bg-[#1e2329] transition-colors rounded-lg w-full h-[40px] px-1.5 sm:px-3 border border-transparent">
-          <div class="text-[10px] sm:text-[12px] text-[#848e9c] shrink-0">Max {{ orderSide === 'Buy' ? 'Buy' : 'Sell' }}</div>
-          <div class="flex-1 text-center text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full min-w-0 px-1 sm:px-2">{{ maxAmount.toFixed(4) }}</div>
-          <div class="text-[#EAECEF] font-medium text-[10px] sm:text-[12px] ml-1 sm:ml-2 shrink-0">BTC</div>
         </div>
       </div>
       
@@ -395,6 +640,10 @@ watch(tpSl, (val) => {
         <div class="flex justify-between text-[10px] sm:text-xs items-center">
            <span class="text-[#848e9c] font-medium flex items-center gap-1 hover:text-white cursor-pointer">Avbl <Edit2 class="w-2.5 h-2.5 text-[#F0B90B]" /></span>
            <span class="text-[#EAECEF] font-mono font-bold text-[9px] sm:text-xs">{{ orderSide === 'Buy' ? availableUsdt.toFixed(2) + ' USDT' : availableBtc.toFixed(4) + ' BTC' }}</span>
+        </div>
+        <div v-if="marginEnabled" class="flex justify-between text-[10px] sm:text-xs items-center">
+           <span class="text-[#848e9c] font-medium">Available Margin</span>
+           <span class="text-[#EAECEF] font-mono font-bold text-[9px] sm:text-xs">{{ availableMargin.toFixed(2) }} USDT</span>
         </div>
         <div class="flex justify-between text-[10px] sm:text-xs items-center">
            <span class="text-[#848e9c] font-medium">Borrow</span>
@@ -457,7 +706,6 @@ watch(tpSl, (val) => {
               <button @click="isTpSlOpen = false" class="w-full bg-[#F0B90B] hover:bg-[#F0B90B]/90 text-black font-semibold rounded py-2 text-xs mt-1 transition-colors">Confirm</button>
           </div>
       </div>
-
     </div>
   </div>
 </template>
