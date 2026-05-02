@@ -36,6 +36,11 @@ function loadSavedLayout(): ChartPanelConfig[] {
 
 export const workspacePanels = ref<ChartPanelConfig[]>(loadSavedLayout());
 export const globalSymbol = ref('BTCUSDT');
+export const activeTool = ref<'none' | 'hline' | 'fib' | 'trend' | 'alert'>('none');
+
+export const setGlobalTool = (tool: 'none' | 'hline' | 'fib' | 'trend' | 'alert') => {
+    activeTool.value = tool;
+};
 
 watch(workspacePanels, (newPanels) => {
   if (typeof window !== 'undefined') {

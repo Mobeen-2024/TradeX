@@ -30,7 +30,7 @@ let rsiSeries: ISeriesApi<"Line"> | null = null;
 const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
 const activeIndicators = ref<string[]>([]);
-const activeTool = ref<'none' | 'hline' | 'fib' | 'trend' | 'alert'>('none');
+import { activeTool, setGlobalTool } from '../store/workspaceStore';
 const drawings = ref<any[]>([]);
 const fibStart = ref<{ price: number, time: any } | null>(null);
 const heatmapData = ref<{ price: number, volume: number }[]>([]);
@@ -538,35 +538,35 @@ watch(showVolume, (val) => {
     <!-- Drawing Toolbar (Floating Sidebar) -->
     <div class="absolute left-3 top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/80 backdrop-blur-md p-1 rounded-lg border border-white/5 shadow-xl">
         <button 
-            @click="activeTool = 'none'"
+            @click="setGlobalTool('none')"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'none' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
             title="Select"
         >
             <MousePointer2 class="w-4 h-4" />
         </button>
         <button 
-            @click="activeTool = 'hline'"
+            @click="setGlobalTool('hline')"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'hline' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
             title="Horizontal Line"
         >
             <Minus class="w-4 h-4" />
         </button>
         <button 
-            @click="activeTool = 'fib'"
+            @click="setGlobalTool('fib')"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'fib' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
             title="Fibonacci Retracement"
         >
             <LineChartIcon class="w-4 h-4" />
         </button>
         <button 
-            @click="activeTool = 'trend'"
+            @click="setGlobalTool('trend')"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'trend' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
             title="Trendline (Coming Soon)"
         >
             <TrendingUp class="w-4 h-4" />
         </button>
         <button 
-            @click="activeTool = 'alert'"
+            @click="setGlobalTool('alert')"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'alert' ? 'bg-[#fcd535] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
             title="Price Alert"
         >

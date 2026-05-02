@@ -8,8 +8,9 @@ import BalancesPanel from './components/BalancesPanel.vue';
 import MultiChartWorkspace from './components/MultiChartWorkspace.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
-import { addPosition, closePosition, currentPrice, activePositions } from './store/tradeStore';
+import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders } from './store/tradeStore';
 import { cn } from './lib/utils';
+import { activeTool, setGlobalTool } from './store/workspaceStore';
 
 const activeItem = ref('Market');
 const mobileTab = ref('Chart');
@@ -40,8 +41,19 @@ const handleKeydown = (e: KeyboardEvent) => {
             entry: currentPrice.value
         });
     } else if (e.key.toLowerCase() === 'c') {
-        // Cancel/Close All Positions
+        // Cancel All Open Orders
+        openOrders.value.forEach(o => cancelOrder(o.id));
+    } else if (e.key.toLowerCase() === 'x') {
+        // Close All Positions
         activePositions.value.forEach(p => closePosition(p.id));
+    } else if (e.altKey && e.key.toLowerCase() === 'h') {
+        setGlobalTool('hline');
+    } else if (e.altKey && e.key.toLowerCase() === 'f') {
+        setGlobalTool('fib');
+    } else if (e.altKey && e.key.toLowerCase() === 'a') {
+        setGlobalTool('alert');
+    } else if (e.key === 'Escape') {
+        setGlobalTool('none');
     }
 };
 
