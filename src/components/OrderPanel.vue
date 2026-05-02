@@ -168,6 +168,7 @@ const tpPrice = ref<number | null>(null);
 const slPrice = ref<number | null>(null);
 const tpPercent = ref<number | null>(5);
 const slPercent = ref<number | null>(5);
+const riskUsdt = ref<number | null>(100);
 
 const availableUsdt = ref(9840.79);
 const availableBtc = ref(0.4521);
@@ -345,6 +346,16 @@ const updateSlFromPrice = () => {
   } else {
     slPercent.value = null;
   }
+};
+
+const updateAmountFromRisk = () => {
+    if (riskUsdt.value && slPrice.value && orderPrice.value) {
+        const diff = Math.abs(orderPrice.value - slPrice.value);
+        if (diff > 0) {
+            orderAmount.value = parseFloat((riskUsdt.value / diff).toFixed(4));
+            isTpSlOpen.value = false;
+        }
+    }
 };
 
 watch([orderPrice, orderSide], () => {
@@ -815,10 +826,35 @@ watch(tpSl, (val) => {
                   <span v-if="slError" class="text-[#f6465d] text-[10px] mt-0.5 leading-tight">Must be {{ orderSide === 'Buy' ? 'less' : 'greater' }} than order price</span>
               </div>
 
+              <!-- Risk Management Section -->
+              <div class="mt-2 pt-4 border-t border-[#2b3139] flex flex-col gap-3">
+                  <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-lg bg-[#F0B90B]/10 flex items-center justify-center text-[#F0B90B]">
+                        <Shield class="w-4 h-4" />
+                      </div>
+                      <span class="text-xs font-bold text-[#EAECEF] uppercase tracking-wider">Risk Management</span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                      <div class="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded flex items-center px-3 hover:border-[#474d57] focus-within:border-[#F0B90B] transition-colors duration-200">
+                        <span class="text-[#848e9c] text-[10px] mr-2">RISK</span>
+                        <input type="number" v-model="riskUsdt" class="w-full bg-transparent py-2 text-xs text-[#EAECEF] outline-none font-mono" placeholder="Risk (USDT)"/>
+                        <span class="text-[#848e9c] text-[10px] ml-2">USDT</span>
+                      </div>
+                      <button 
+                        @click="updateAmountFromRisk"
+                        class="bg-[#F0B90B] hover:bg-[#FCD535] text-[#181a20] px-4 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-lg shadow-[#F0B90B]/10"
+                      >
+                        Auto-Size
+                      </button>
+                  </div>
+                  <p class="text-[9px] text-[#848e9c] leading-relaxed italic">
+                    * Calculates position size so you only lose ${{ riskUsdt || 0 }} if the Stop Loss is hit.
+                  </p>
+              </div>
+
               <button @click="isTpSlOpen = false" class="w-full bg-[#F0B90B] hover:bg-[#F0B90B]/90 text-black font-semibold rounded py-2 text-xs mt-1 transition-colors">Confirm</button>
           </div>
       </div>
     </div>
   </div>
-</template>
 

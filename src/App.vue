@@ -9,6 +9,8 @@ import MultiChartWorkspace from './components/MultiChartWorkspace.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import PortfolioVisualizer from './components/PortfolioVisualizer.vue';
+import MarketSentiment from './components/MarketSentiment.vue';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool } from './store/workspaceStore';
@@ -166,6 +168,7 @@ const icons: Record<string, any> = {
             </div>
           </div>
           
+          <MarketSentiment />
           <TickerRibbon />
           
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
@@ -213,6 +216,7 @@ const icons: Record<string, any> = {
 
       <div v-else-if="activeItem === 'Transactions'" class="flex-1 overflow-y-auto p-4 flex flex-col gap-6 no-scrollbar">
         <h2 class="text-xl font-bold text-white">Asset Management</h2>
+        <PortfolioVisualizer />
         <BalancesPanel />
         
         <div class="flex-1 flex flex-col min-h-0">
