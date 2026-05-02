@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { Wallet, Bitcoin, CheckCircle2 } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { Wallet, Bitcoin, CheckCircle2, Eye, EyeOff } from 'lucide-vue-next';
+
+const hideBalance = ref(false);
+const toggleHideBalance = () => {
+  hideBalance.value = !hideBalance.value;
+};
 </script>
 
 <template>
@@ -11,9 +17,19 @@ import { Wallet, Bitcoin, CheckCircle2 } from 'lucide-vue-next';
         <div class="flex items-center gap-2 text-dash-text-muted text-sm">
           <Wallet class="w-4 h-4" />
           Wallet Balance
+          <component 
+            :is="hideBalance ? EyeOff : Eye" 
+            class="w-4 h-4 ml-2 cursor-pointer hover:text-white transition-colors" 
+            @click="toggleHideBalance"
+          />
         </div>
         <div class="text-3xl font-bold text-white flex items-baseline gap-1 mt-1">
-          $227.169,85 <span class="text-sm font-medium text-dash-text-muted">USD</span>
+          <template v-if="!hideBalance">
+            $227.169,85 <span class="text-sm font-medium text-dash-text-muted">USD</span>
+          </template>
+          <template v-else>
+            ****** USD
+          </template>
         </div>
       </div>
       <div class="flex flex-col gap-2">
@@ -39,9 +55,16 @@ import { Wallet, Bitcoin, CheckCircle2 } from 'lucide-vue-next';
       </div>
       <div class="flex items-end justify-between">
         <div class="text-2xl font-bold text-white flex items-baseline gap-1">
-          0.34545 <span class="text-sm font-medium text-dash-text-muted">BTC</span>
+          <template v-if="!hideBalance">
+            0.34545 <span class="text-sm font-medium text-dash-text-muted">BTC</span>
+          </template>
+          <template v-else>
+            ****** BTC
+          </template>
         </div>
-        <div class="text-sm text-dash-text-muted">21900,84 USD</div>
+        <div class="text-sm text-dash-text-muted">
+           {{ hideBalance ? '****** USD' : '21900,84 USD' }}
+        </div>
       </div>
     </div>
 
@@ -58,9 +81,16 @@ import { Wallet, Bitcoin, CheckCircle2 } from 'lucide-vue-next';
       </div>
       <div class="flex items-end justify-between">
         <div class="text-2xl font-bold text-white flex items-baseline gap-1">
-          12,345 <span class="text-sm font-medium text-dash-text-muted">ETH</span>
+           <template v-if="!hideBalance">
+             12,345 <span class="text-sm font-medium text-dash-text-muted">ETH</span>
+           </template>
+           <template v-else>
+             ****** ETH
+           </template>
         </div>
-        <div class="text-sm text-dash-text-muted">37870,88 USD</div>
+        <div class="text-sm text-dash-text-muted">
+           {{ hideBalance ? '****** USD' : '37870,88 USD' }}
+        </div>
       </div>
     </div>
 

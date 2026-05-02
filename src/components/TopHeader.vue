@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown } from 'lucide-vue-next';
+import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown, Search, Download, Bell, User, Globe } from 'lucide-vue-next';
 import { currentPrice, previousPrice, marketData } from '../store/tradeStore';
 
 defineProps<{ title?: string }>();
@@ -59,6 +59,37 @@ defineProps<{ title?: string }>();
           <div class="text-[11px] text-[#848e9c] mb-[1px]">24h Vol(USDT)</div>
           <div class="text-[12px] text-[#EAECEF] font-medium">{{ marketData.volUsdt24h }}</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Right Section -->
+    <div class="flex items-center gap-2 lg:gap-4 ml-auto">
+      <div class="hidden sm:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
+        <Search class="w-4 h-4" />
+      </div>
+      <div class="hidden sm:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
+        <Download class="w-4 h-4" />
+      </div>
+      <div class="flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors relative">
+        <Bell class="w-4 h-4" />
+        <div class="absolute top-1 right-1 w-2 h-2 bg-[#f6465d] rounded-full border border-[#161a1e]"></div>
+      </div>
+      <div class="hidden md:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
+        <Settings class="w-4 h-4" />
+      </div>
+      <div class="hidden lg:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
+        <Globe class="w-4 h-4" />
+      </div>
+      
+      <div class="h-6 w-[1px] bg-dash-border mx-1"></div>
+      
+      <div class="flex items-center gap-3 ml-1">
+        <button class="text-xs font-medium text-[#EAECEF] hover:text-[#F0B90B] transition-colors">Log In</button>
+        <button class="text-xs font-medium bg-[#F0B90B] text-[#161a1e] px-3 py-1 rounded hover:bg-[#FCD535] transition-colors">Register</button>
+      </div>
+      
+      <div class="flex items-center justify-center w-8 h-8 rounded-full bg-[#2b3139] hover:bg-[#323a43] cursor-pointer ml-1">
+        <User class="w-4 h-4 text-[#EAECEF]" />
       </div>
     </div>
 

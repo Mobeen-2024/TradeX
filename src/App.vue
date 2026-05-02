@@ -36,6 +36,8 @@ const icons: Record<string, any> = {
     <div class="flex h-full w-full z-10 flex-col md:flex-row">
       <Sidebar class="order-2 md:order-none shrink-0" :active-item="activeItem" @update:active-item="activeItem = $event" />
       <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
+      <TopHeader :title="activeItem" />
+      
       <div v-if="activeItem === 'Trade'" class="flex-1 overflow-y-auto lg:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
         <!-- Main Workspace Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">
@@ -56,7 +58,7 @@ const icons: Record<string, any> = {
         </div>
       </div>
 
-      <div v-else-if="activeItem === 'Market'" class="flex-1 overflow-y-auto p-4">
+      <div v-else-if="activeItem === 'Market'" class="flex-1 overflow-y-auto p-6 flex flex-col gap-8 no-scrollbar bg-[#0b0e11]/50 backdrop-blur-sm">
         <div class="flex flex-col gap-6">
           <h2 class="text-xl font-bold text-white mb-2">Market Overview</h2>
           <TickerRibbon />
