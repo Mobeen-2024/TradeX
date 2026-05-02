@@ -6,8 +6,8 @@ defineProps<{ activeItem: string }>();
 defineEmits<{ (e: 'update:active-item', value: string): void }>();
 
 const navItems = [
-  { icon: Activity, label: 'Trade' },
-  { icon: Briefcase, label: 'Market' },
+  { icon: Briefcase, label: 'Trade' },
+  { icon: Activity, label: 'Market' },
   { icon: Trophy, label: 'Tournaments' },
   { icon: BarChart2, label: 'Analytics' },
   { icon: Wallet, label: 'Transactions' },
