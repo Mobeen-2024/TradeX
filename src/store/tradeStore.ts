@@ -26,6 +26,21 @@ export const marketData = ref({
 });
 
 export const openOrders = ref<any[]>([]);
+export const alerts = ref<{ id: string; price: number; side: 'above' | 'below'; triggered: boolean }[]>([]);
+
+export const createAlert = (price: number) => {
+    const side = price > currentPrice.value ? 'above' : 'below';
+    alerts.value.push({
+        id: Math.random().toString(36).substring(7),
+        price,
+        side,
+        triggered: false
+    });
+};
+
+export const removeAlert = (id: string) => {
+    alerts.value = alerts.value.filter(a => a.id !== id);
+};
 
 if (typeof window !== 'undefined') {
     fetch('/api/positions')
@@ -146,3 +161,23 @@ export const cancelOrder = async (id: string) => {
     // In real app, call API
     openOrders.value = openOrders.value.filter(o => o.id !== id);
 };
+
+// Monitor alerts
+import { watch } from 'vue';
+watch(currentPrice, (newPrice) => {
+    alerts.value.forEach(alert => {
+        if (alert.triggered) return;
+        const hit = alert.side === 'above' ? newPrice >= alert.price : newPrice <= alert.price;
+        if (hit) {
+            alert.triggered = true;
+            console.log(`[ALERTS] Price hit ${alert.price}`);
+            if (typeof window !== 'undefined' && 'Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    new Notification('TradeX Alert', { body: `BTC hit ${alert.price}` });
+                } else {
+                    Notification.requestPermission();
+                }
+            }
+        }
+    });
+});

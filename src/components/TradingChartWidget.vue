@@ -2,10 +2,11 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { activePositions, selectedPrice } from '../store/tradeStore';
 import { globalSymbol, workspacePanels } from '../store/workspaceStore';
-import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off, MousePointer2, Minus, TrendingUp, Trash2 } from 'lucide-vue-next';
+import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off, MousePointer2, Minus, TrendingUp, Trash2, Bell } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
 import { calculateEMA, calculateRSI } from '../utils/indicators';
+import { alerts, createAlert, removeAlert } from '../store/tradeStore';
 
 const props = defineProps<{
     panelId?: string;
@@ -29,8 +30,9 @@ let rsiSeries: ISeriesApi<"Line"> | null = null;
 const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
 const activeIndicators = ref<string[]>([]);
-const activeTool = ref<'none' | 'hline' | 'trend'>('none');
-const drawings = ref<{ type: 'hline', price: number, id: string }[]>([]);
+const activeTool = ref<'none' | 'hline' | 'fib' | 'trend' | 'alert'>('none');
+const drawings = ref<any[]>([]);
+const fibStart = ref<{ price: number, time: any } | null>(null);
 let drawingPriceLines: IPriceLine[] = [];
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
 
@@ -221,11 +223,41 @@ const initChart = async () => {
         if (price) {
             if (activeTool.value === 'hline') {
                 addHorizontalLine(price);
+            } else if (activeTool.value === 'fib') {
+                handleFibClick(price, param.time);
+            } else if (activeTool.value === 'alert') {
+                createAlert(price);
+                activeTool.value = 'none';
             } else {
                 selectedPrice.value = parseFloat(price.toFixed(2));
             }
         }
     });
+};
+
+const handleFibClick = (price: number, time: any) => {
+    if (!fibStart.value) {
+        fibStart.value = { price, time };
+    } else {
+        const id = Math.random().toString(36).substring(7);
+        const draw = { 
+            id, 
+            type: 'fib' as const, 
+            points: [fibStart.value, { price, time }] 
+        };
+        drawings.value.push(draw);
+        
+        if (props.panelId) {
+            const panel = workspacePanels.value.find(p => p.id === props.panelId);
+            if (panel) {
+                panel.drawings = [...(panel.drawings || []), draw];
+            }
+        }
+        
+        fibStart.value = null; // reset
+        activeTool.value = 'none'; // switch back to select
+        renderDrawings();
+    }
 };
 
 const addHorizontalLine = (price: number) => {
@@ -249,21 +281,56 @@ const renderDrawings = () => {
     drawingPriceLines.forEach(line => candleSeries?.removePriceLine(line));
     drawingPriceLines = [];
 
-    // Render hlines
+    // Render hlines and fib levels
     drawings.value.forEach(draw => {
         if (draw.type === 'hline') {
             const line = candleSeries?.createPriceLine({
                 price: draw.price,
                 color: 'rgba(240, 185, 11, 0.5)',
                 lineWidth: 1,
-                lineStyle: 0, // Solid
+                lineStyle: 0,
                 axisLabelVisible: true,
                 title: 'Level',
             });
             if (line) drawingPriceLines.push(line);
+        } else if (draw.type === 'fib' && draw.points) {
+            const start = draw.points[0].price;
+            const end = draw.points[1].price;
+            const diff = end - start;
+            const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+            const colors = ['#f6465d', '#848e9c', '#848e9c', '#0ecb81', '#848e9c', '#848e9c', '#0ecb81'];
+
+            levels.forEach((lvl, idx) => {
+                const price = start + (diff * lvl);
+                const line = candleSeries?.createPriceLine({
+                    price: price,
+                    color: colors[idx] || 'rgba(132, 142, 156, 0.3)',
+                    lineWidth: 1,
+                    lineStyle: lvl === 0 || lvl === 1 ? 0 : 2,
+                    axisLabelVisible: true,
+                    title: `Fib ${lvl}`,
+                });
+                if (line) drawingPriceLines.push(line);
+            });
         }
     });
+
+    // Render alerts from store
+    alerts.value.filter(a => !a.triggered).forEach(alert => {
+        const line = candleSeries?.createPriceLine({
+            price: alert.price,
+            color: '#fcd535',
+            lineWidth: 1,
+            lineStyle: 3, // Dotted
+            axisLabelVisible: true,
+            title: 'Alert',
+        });
+        if (line) drawingPriceLines.push(line);
+    });
 };
+
+// Sync alerts
+watch(alerts, () => renderDrawings(), { deep: true });
 
 const clearDrawings = () => {
     drawings.value = [];
@@ -439,11 +506,25 @@ watch(showVolume, (val) => {
             <Minus class="w-4 h-4" />
         </button>
         <button 
+            @click="activeTool = 'fib'"
+            :class="cn('p-2 rounded-md transition-all', activeTool === 'fib' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Fibonacci Retracement"
+        >
+            <LineChartIcon class="w-4 h-4" />
+        </button>
+        <button 
             @click="activeTool = 'trend'"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'trend' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
             title="Trendline (Coming Soon)"
         >
             <TrendingUp class="w-4 h-4" />
+        </button>
+        <button 
+            @click="activeTool = 'alert'"
+            :class="cn('p-2 rounded-md transition-all', activeTool === 'alert' ? 'bg-[#fcd535] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Price Alert"
+        >
+            <Bell class="w-4 h-4" />
         </button>
         <div class="h-px bg-white/5 my-1"></div>
         <button 

@@ -1,11 +1,18 @@
 import { ref, watch } from 'vue';
 
+export interface Drawing {
+  id: string;
+  type: 'hline' | 'fib';
+  price?: number;
+  points?: { price: number; time: any }[];
+}
+
 export interface ChartPanelConfig {
   id: string;
   symbol: string;
   timeframe: string;
   isSynced: boolean;
-  drawings?: { type: 'hline', price: number, id: string }[];
+  drawings?: Drawing[];
 }
 
 const DEFAULT_LAYOUT: ChartPanelConfig[] = [
