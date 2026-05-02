@@ -2,6 +2,10 @@
 import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown, Search, Download, Bell, User, Globe } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { currentPrice, previousPrice, marketData, isLiveMode } from '../store/tradeStore';
+import { activeNotifications, notificationHistory, markAsRead, clearNotifications } from '../store/alertStore';
+import { ref } from 'vue';
+
+const showNotifications = ref(false);
 
 defineProps<{ title?: string }>();
 const emit = defineEmits(['open-settings']);
@@ -72,9 +76,53 @@ const emit = defineEmits(['open-settings']);
       <div class="hidden sm:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
         <Download class="w-4 h-4" />
       </div>
-      <div class="flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors relative">
-        <Bell class="w-4 h-4" />
-        <div class="absolute top-1 right-1 w-2 h-2 bg-[#f6465d] rounded-full border border-[#161a1e]"></div>
+      <div class="flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors relative group">
+        <div @click="showNotifications = !showNotifications" class="relative">
+          <Bell class="w-4 h-4" />
+          <div v-if="activeNotifications.length > 0" class="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-[#f6465d] rounded-full border border-[#161a1e] flex items-center justify-center text-[8px] font-black text-white px-0.5">
+            {{ activeNotifications.length > 9 ? '9+' : activeNotifications.length }}
+          </div>
+        </div>
+
+        <!-- Notification Dropdown -->
+        <div 
+          v-if="showNotifications" 
+          class="absolute top-full right-0 mt-2 w-80 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+        >
+          <div class="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
+            <span class="text-xs font-black text-[#EAECEF] uppercase tracking-widest">Notifications</span>
+            <button @click="clearNotifications" class="text-[10px] text-[#848e9c] hover:text-white transition-colors">Clear All</button>
+          </div>
+          
+          <div class="max-h-[400px] overflow-y-auto no-scrollbar">
+            <div 
+              v-for="notif in notificationHistory" 
+              :key="notif.id"
+              class="px-4 py-3 border-b border-[#2b3139]/50 hover:bg-[#2b3139] transition-colors relative group/item"
+              @click="markAsRead(notif.id)"
+            >
+              <div class="flex items-start gap-3">
+                <div :class="cn('w-2 h-2 rounded-full mt-1.5 shrink-0', notif.read ? 'bg-[#474d57]' : 'bg-[#F0B90B] shadow-[0_0_8px_#F0B90B]')"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2 mb-0.5">
+                    <span class="text-[11px] font-bold text-[#EAECEF]">{{ notif.title }}</span>
+                    <span class="text-[9px] text-[#474d57] font-mono">{{ new Date(notif.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+                  </div>
+                  <p class="text-[10px] text-[#848e9c] leading-tight">{{ notif.message }}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="notificationHistory.length === 0" class="py-12 flex flex-col items-center justify-center text-center px-6">
+              <Bell class="w-8 h-8 text-[#2b3139] mb-3" />
+              <p class="text-xs text-[#474d57] font-bold uppercase tracking-widest">No notifications yet</p>
+            </div>
+          </div>
+          
+          <div class="px-4 py-2 bg-[#2b3139]/50 text-center">
+            <button class="text-[10px] font-bold text-[#F0B90B] hover:underline uppercase tracking-tighter">View All History</button>
+          </div>
+        </div>
       </div>
       <div 
         @click="emit('open-settings')"

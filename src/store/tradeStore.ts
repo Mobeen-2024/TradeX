@@ -1,4 +1,5 @@
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { addNotification } from './alertStore';
 
 export const activePositions = ref<{
   id: string;
@@ -173,8 +174,21 @@ export const placeOrder = async (order: {
       });
       const data = await response.json();
       if (data.success) {
-          if (data.position) activePositions.value.push(data.position);
-          else if (data.order) openOrders.value.push(data.order);
+          if (data.position) {
+              activePositions.value.push(data.position);
+              addNotification({
+                  type: 'success',
+                  title: 'Order Filled',
+                  message: `${order.side} ${order.quantity} ${order.pair} @ ${order.price || currentPrice.value}`
+              });
+          } else if (data.order) {
+              openOrders.value.push(data.order);
+              addNotification({
+                  type: 'info',
+                  title: 'Order Placed',
+                  message: `${order.type} ${order.side} ${order.quantity} ${order.pair}`
+              });
+          }
       }
       return data;
   } catch (err) {
@@ -197,6 +211,11 @@ export const placeOrder = async (order: {
               liveDeltaPercent: 0,
               mark: order.price || currentPrice.value
           });
+          addNotification({
+              type: 'success',
+              title: 'Order Filled',
+              message: `${order.side} ${order.quantity} ${order.pair} @ ${order.price || currentPrice.value}`
+          });
       } else {
           openOrders.value.unshift({
               id,
@@ -210,6 +229,11 @@ export const placeOrder = async (order: {
               status: 'Open',
               tp: order.takeProfitPrice,
               sl: order.stopLossPrice
+          });
+          addNotification({
+              type: 'info',
+              title: 'Order Placed',
+              message: `${order.type} ${order.side} ${order.quantity} ${order.pair}`
           });
       }
       return { success: true };
@@ -240,6 +264,11 @@ export const closePosition = async (id: string) => {
           realizedPnl: pnl,
           closeTime: Date.now()
       });
+      addNotification({
+          type: pnl >= 0 ? 'success' : 'warning',
+          title: 'Position Closed',
+          message: `${pos.pair} ${pos.type} closed. P&L: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT`
+      });
   }
   
   try {
@@ -249,6 +278,14 @@ export const closePosition = async (id: string) => {
 };
 
 export const cancelOrder = async (id: string) => {
+    const order = openOrders.value.find(o => o.id === id);
+    if (order) {
+        addNotification({
+            type: 'info',
+            title: 'Order Cancelled',
+            message: `${order.type} ${order.side} ${order.pair} removed.`
+        });
+    }
     // In real app, call API
     openOrders.value = openOrders.value.filter(o => o.id !== id);
 };
@@ -285,14 +322,17 @@ if (typeof window !== 'undefined') {
 }
 
 // Monitor alerts
-import { watch } from 'vue';
 watch(currentPrice, (newPrice) => {
     alerts.value.forEach(alert => {
         if (alert.triggered) return;
         const hit = alert.side === 'above' ? newPrice >= alert.price : newPrice <= alert.price;
         if (hit) {
             alert.triggered = true;
-            console.log(`[ALERTS] Price hit ${alert.price}`);
+            addNotification({
+                type: 'warning',
+                title: 'Price Target Hit',
+                message: `${alert.side === 'above' ? 'UPWARD' : 'DOWNWARD'} cross on ${alert.price}`
+            });
             if (typeof window !== 'undefined' && 'Notification' in window) {
                 if (Notification.permission === 'granted') {
                     new Notification('TradeX Alert', { body: `BTC hit ${alert.price}` });

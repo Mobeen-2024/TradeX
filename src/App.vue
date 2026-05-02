@@ -13,6 +13,7 @@ import PortfolioVisualizer from './components/PortfolioVisualizer.vue';
 import MarketSentiment from './components/MarketSentiment.vue';
 import PerformanceDashboard from './components/PerformanceDashboard.vue';
 import QuickTradeView from './components/QuickTradeView.vue';
+import ToastProvider from './components/ToastProvider.vue';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool } from './store/workspaceStore';
@@ -250,5 +251,6 @@ const icons: Record<string, any> = {
     <QuickTradeView v-if="quickTradeMode" />
 
     <SettingsPanel ref="settingsPanel" />
+    <ToastProvider />
   </div>
 </template>
