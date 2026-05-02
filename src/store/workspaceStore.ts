@@ -5,6 +5,7 @@ export interface ChartPanelConfig {
   symbol: string;
   timeframe: string;
   isSynced: boolean;
+  drawings?: { type: 'hline', price: number, id: string }[];
 }
 
 const DEFAULT_LAYOUT: ChartPanelConfig[] = [

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { activePositions, selectedPrice } from '../store/tradeStore';
-import { globalSymbol } from '../store/workspaceStore';
-import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off } from 'lucide-vue-next';
+import { globalSymbol, workspacePanels } from '../store/workspaceStore';
+import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off, MousePointer2, Minus, TrendingUp, Trash2 } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
+import { calculateEMA, calculateRSI } from '../utils/indicators';
 
 const props = defineProps<{
     panelId?: string;
@@ -18,12 +19,19 @@ const emit = defineEmits(['update:symbol', 'update:interval', 'update:isSynced',
 const chartContainer = ref<HTMLDivElement | null>(null);
 let chart: IChartApi | null = null;
 let candleSeries: ISeriesApi<"Candlestick"> | null = null;
+const allCandles = ref<CandlestickData[]>([]);
 let lineSeries: ISeriesApi<"Line"> | null = null;
 let volumeSeries: ISeriesApi<"Histogram"> | null = null;
 let positionLines: IPriceLine[] = [];
+let emaSeries: ISeriesApi<"Line"> | null = null;
+let rsiSeries: ISeriesApi<"Line"> | null = null;
 
 const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
+const activeIndicators = ref<string[]>([]);
+const activeTool = ref<'none' | 'hline' | 'trend'>('none');
+const drawings = ref<{ type: 'hline', price: number, id: string }[]>([]);
+let drawingPriceLines: IPriceLine[] = [];
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
 
 // State for legend
@@ -35,6 +43,48 @@ const lastPriceData = ref({
     volume: 0,
     isUp: true
 });
+
+const updateIndicators = (candlestick: CandlestickData[]) => {
+    if (!chart || !candlestick.length) return;
+
+    // Handle EMA
+    if (activeIndicators.value.includes('EMA')) {
+        if (!emaSeries) {
+            emaSeries = chart.addSeries(LineSeries, {
+                color: '#2962FF',
+                lineWidth: 2,
+                title: 'EMA 21',
+            });
+        }
+        const emaData = calculateEMA(candlestick, 21);
+        emaSeries.setData(emaData);
+    } else if (emaSeries) {
+        chart.removeSeries(emaSeries);
+        emaSeries = null;
+    }
+
+    // Handle RSI
+    if (activeIndicators.value.includes('RSI')) {
+        if (!rsiSeries) {
+            rsiSeries = chart.addSeries(LineSeries, {
+                color: '#E91E63',
+                lineWidth: 2,
+                priceScaleId: 'rsi',
+                title: 'RSI 14',
+            });
+            
+            chart.priceScale('rsi').applyOptions({
+                autoScale: true,
+                scaleMargins: { top: 0.75, bottom: 0 },
+            });
+        }
+        const rsiData = calculateRSI(candlestick, 14);
+        rsiSeries.setData(rsiData);
+    } else if (rsiSeries) {
+        chart.removeSeries(rsiSeries);
+        rsiSeries = null;
+    }
+};
 
 const fetchKlines = async (symbol: string, interval: string) => {
     const binanceInterval = interval === '1s' ? '1s' : interval.toLowerCase();
@@ -74,6 +124,17 @@ const fetchKlines = async (symbol: string, interval: string) => {
 const initChart = async () => {
     if (!chartContainer.value) return;
 
+    // Clean up existing chart if re-initializing
+    if (chart) {
+        chart.remove();
+        chart = null;
+        candleSeries = null;
+        lineSeries = null;
+        volumeSeries = null;
+        emaSeries = null;
+        rsiSeries = null;
+    }
+
     chart = createChart(chartContainer.value, {
         layout: {
             background: { color: '#0b0e11' },
@@ -110,10 +171,18 @@ const initChart = async () => {
         wickDownColor: '#f6465d',
     });
 
+    candleSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0.1, bottom: 0.3 },
+    });
+
     lineSeries = chart.addSeries(LineSeries, {
         color: '#F0B90B',
         lineWidth: 2,
         visible: false,
+    });
+
+    lineSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0.1, bottom: 0.3 },
     });
 
     volumeSeries = chart.addSeries(HistogramSeries, {
@@ -127,6 +196,7 @@ const initChart = async () => {
     });
 
     await updateChartData();
+    subscribeKline(props.symbol, props.interval);
 
     chart.subscribeCrosshairMove((param) => {
         if (param.time && candleSeries && volumeSeries) {
@@ -149,18 +219,80 @@ const initChart = async () => {
         if (!param.point || !candleSeries) return;
         const price = candleSeries.coordinateToPrice(param.point.y);
         if (price) {
-            selectedPrice.value = parseFloat(price.toFixed(2));
+            if (activeTool.value === 'hline') {
+                addHorizontalLine(price);
+            } else {
+                selectedPrice.value = parseFloat(price.toFixed(2));
+            }
         }
     });
+};
+
+const addHorizontalLine = (price: number) => {
+    const id = Math.random().toString(36).substring(7);
+    const draw = { type: 'hline' as const, price, id };
+    drawings.value.push(draw);
+    
+    if (props.panelId) {
+        const panel = workspacePanels.value.find(p => p.id === props.panelId);
+        if (panel) {
+            panel.drawings = [...(panel.drawings || []), draw];
+        }
+    }
+    renderDrawings();
+};
+
+const renderDrawings = () => {
+    if (!candleSeries) return;
+    
+    // Clear existing
+    drawingPriceLines.forEach(line => candleSeries?.removePriceLine(line));
+    drawingPriceLines = [];
+
+    // Render hlines
+    drawings.value.forEach(draw => {
+        if (draw.type === 'hline') {
+            const line = candleSeries?.createPriceLine({
+                price: draw.price,
+                color: 'rgba(240, 185, 11, 0.5)',
+                lineWidth: 1,
+                lineStyle: 0, // Solid
+                axisLabelVisible: true,
+                title: 'Level',
+            });
+            if (line) drawingPriceLines.push(line);
+        }
+    });
+};
+
+const clearDrawings = () => {
+    drawings.value = [];
+    if (props.panelId) {
+        const panel = workspacePanels.value.find(p => p.id === props.panelId);
+        if (panel) panel.drawings = [];
+    }
+    renderDrawings();
 };
 
 const updateChartData = async () => {
     if (!candleSeries || !volumeSeries || !lineSeries) return;
     const data = await fetchKlines(props.symbol, props.interval);
+    allCandles.value = data.candlestick;
     candleSeries.setData(data.candlestick);
     volumeSeries.setData(data.volume);
     lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
+    updateIndicators(data.candlestick);
     if (chart) chart.timeScale().fitContent();
+};
+
+const toggleIndicator = (type: string) => {
+    const index = activeIndicators.value.indexOf(type);
+    if (index === -1) {
+        activeIndicators.value.push(type);
+    } else {
+        activeIndicators.value.splice(index, 1);
+    }
+    initChart(); // Re-init to apply pane changes if needed
 };
 
 const handleResize = () => {
@@ -208,13 +340,30 @@ const subscribeKline = (symbol: string, interval: string) => {
             volume: parseFloat(k.v),
             isUp: update.close >= update.open
         };
+
+        // Update indicators in real-time
+        const lastIdx = allCandles.value.findIndex(c => c.time === update.time);
+        if (lastIdx !== -1) {
+            allCandles.value[lastIdx] = update;
+        } else {
+            allCandles.value.push(update);
+            if (allCandles.value.length > 1000) allCandles.value.shift();
+        }
+        updateIndicators(allCandles.value);
     };
 };
 
 onMounted(() => {
+    // Load drawings from store
+    if (props.panelId) {
+        const panel = workspacePanels.value.find(p => p.id === props.panelId);
+        if (panel && panel.drawings) {
+            drawings.value = [...panel.drawings];
+        }
+    }
+    
     initChart();
     window.addEventListener('resize', handleResize);
-    subscribeKline(props.symbol, props.interval);
 });
 
 onUnmounted(() => {
@@ -271,7 +420,41 @@ watch(showVolume, (val) => {
 
 
 <template>
-  <div class="flex flex-col h-full bg-[#0b0e11] text-[#EAECEF] overflow-hidden select-none border border-[#2b3139]/50 hover:border-[#F0B90B]/30 transition-colors rounded-xl m-1 shadow-2xl">
+  <div class="flex flex-col h-full bg-[#0b0e11] text-[#EAECEF] overflow-hidden select-none border border-[#2b3139]/50 hover:border-[#F0B90B]/30 transition-colors rounded-xl m-1 shadow-2xl relative">
+    
+    <!-- Drawing Toolbar (Floating Sidebar) -->
+    <div class="absolute left-3 top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/80 backdrop-blur-md p-1 rounded-lg border border-white/5 shadow-xl">
+        <button 
+            @click="activeTool = 'none'"
+            :class="cn('p-2 rounded-md transition-all', activeTool === 'none' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Select"
+        >
+            <MousePointer2 class="w-4 h-4" />
+        </button>
+        <button 
+            @click="activeTool = 'hline'"
+            :class="cn('p-2 rounded-md transition-all', activeTool === 'hline' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Horizontal Line"
+        >
+            <Minus class="w-4 h-4" />
+        </button>
+        <button 
+            @click="activeTool = 'trend'"
+            :class="cn('p-2 rounded-md transition-all', activeTool === 'trend' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"
+            title="Trendline (Coming Soon)"
+        >
+            <TrendingUp class="w-4 h-4" />
+        </button>
+        <div class="h-px bg-white/5 my-1"></div>
+        <button 
+            @click="clearDrawings"
+            class="p-2 rounded-md text-[#f6465d] hover:bg-[#f6465d]/10 transition-all"
+            title="Clear All"
+        >
+            <Trash2 class="w-4 h-4" />
+        </button>
+    </div>
+
     <!-- Top Toolbar -->
     <div class="flex items-center justify-between px-3 py-1.5 border-b border-[#2b3139] bg-[#161a1e]">
       <div class="flex items-center gap-1 min-w-0 overflow-hidden">
@@ -296,6 +479,24 @@ watch(showVolume, (val) => {
             >
                 {{ int }}
             </button>
+        </div>
+
+        <!-- Indicators Toggle -->
+        <div class="flex items-center gap-1 border-l border-white/10 pl-2 ml-1">
+            <button 
+                @click="toggleIndicator('EMA')"
+                :class="cn(
+                    'px-1.5 py-0.5 rounded text-[9px] font-bold transition-all',
+                    activeIndicators.includes('EMA') ? 'bg-[#2962FF]/20 text-[#2962FF]' : 'text-[#848e9c] hover:bg-[#2b3139]'
+                )"
+            >EMA</button>
+            <button 
+                @click="toggleIndicator('RSI')"
+                :class="cn(
+                    'px-1.5 py-0.5 rounded text-[9px] font-bold transition-all',
+                    activeIndicators.includes('RSI') ? 'bg-[#E91E63]/20 text-[#E91E63]' : 'text-[#848e9c] hover:bg-[#2b3139]'
+                )"
+            >RSI</button>
         </div>
       </div>
       
