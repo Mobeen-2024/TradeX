@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ChevronDown, Settings, PlayCircle } from 'lucide-vue-next';
+import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown } from 'lucide-vue-next';
+import { currentPrice, previousPrice, marketData } from '../store/tradeStore';
 
 defineProps<{ title?: string }>();
 </script>
@@ -22,35 +23,41 @@ defineProps<{ title?: string }>();
         </div>
 
         <div class="flex flex-col justify-center">
-          <div class="text-[#0ECB81] text-base font-semibold leading-tight flex items-center gap-1">
-            63,420.00
+          <div :class="[currentPrice >= previousPrice ? 'text-[#0ECB81]' : 'text-[#f6465d]', 'text-base font-semibold leading-tight flex items-center gap-1 transition-colors duration-300']">
+            {{ currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+            <ArrowUp v-if="currentPrice >= previousPrice" class="w-3 h-3" />
+            <ArrowDown v-else class="w-3 h-3" />
           </div>
-          <div class="text-xs text-[#EAECEF] hover:underline cursor-pointer">$63,420.00</div>
+          <div class="text-xs text-[#EAECEF] hover:underline cursor-pointer transition-colors duration-300">
+            ${{ currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+          </div>
         </div>
 
         <div class="hidden sm:flex flex-col justify-center">
           <div class="text-[11px] text-[#848e9c] mb-[1px]">24h Change</div>
-          <div class="text-[12px] text-[#0ECB81] font-medium">+1,240.50 +1.99%</div>
+          <div :class="[marketData.change24h.startsWith('+') ? 'text-[#0ECB81]' : 'text-[#f6465d]', 'text-[12px] font-medium']">
+            {{ marketData.change24h }}
+          </div>
         </div>
 
         <div class="hidden md:flex flex-col justify-center">
           <div class="text-[11px] text-[#848e9c] mb-[1px]">24h High</div>
-          <div class="text-[12px] text-[#EAECEF] font-medium">64,500.00</div>
+          <div class="text-[12px] text-[#EAECEF] font-medium">{{ marketData.high24h }}</div>
         </div>
 
         <div class="hidden lg:flex flex-col justify-center">
           <div class="text-[11px] text-[#848e9c] mb-[1px]">24h Low</div>
-          <div class="text-[12px] text-[#EAECEF] font-medium">61,800.00</div>
+          <div class="text-[12px] text-[#EAECEF] font-medium">{{ marketData.low24h }}</div>
         </div>
 
         <div class="hidden xl:flex flex-col justify-center">
           <div class="text-[11px] text-[#848e9c] mb-[1px]">24h Vol(BTC)</div>
-          <div class="text-[12px] text-[#EAECEF] font-medium">42,512.14</div>
+          <div class="text-[12px] text-[#EAECEF] font-medium">{{ marketData.volBtc24h }}</div>
         </div>
 
         <div class="hidden xl:flex flex-col justify-center">
           <div class="text-[11px] text-[#848e9c] mb-[1px]">24h Vol(USDT)</div>
-          <div class="text-[12px] text-[#EAECEF] font-medium">2.68B</div>
+          <div class="text-[12px] text-[#EAECEF] font-medium">{{ marketData.volUsdt24h }}</div>
         </div>
       </div>
     </div>

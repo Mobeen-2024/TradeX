@@ -14,6 +14,16 @@ export const activePositions = ref<{
   protocolLimits: [string, string];
 }[]>([]);
 
+export const currentPrice = ref(36000.00);
+export const previousPrice = ref(36000.00);
+export const marketData = ref({
+    change24h: '+1,240.50 +1.99%',
+    high24h: '64,500.00',
+    low24h: '61,800.00',
+    volBtc24h: '42,512.14',
+    volUsdt24h: '2.68B'
+});
+
 if (typeof window !== 'undefined') {
     fetch('/api/positions')
         .then(res => res.json())
@@ -38,8 +48,14 @@ function connectWs() {
     ws.addEventListener('message', (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'trade' && data.positions) {
-            activePositions.value = data.positions;
+        if (data.type === 'trade') {
+            if (data.price) {
+                previousPrice.value = currentPrice.value;
+                currentPrice.value = data.price;
+            }
+            if (data.positions) {
+                activePositions.value = data.positions;
+            }
         } else if (data.type === 'position_opened') {
             const exists = activePositions.value.find(p => p.id === data.position.id);
             if (!exists) activePositions.value.push(data.position);

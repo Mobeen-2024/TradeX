@@ -7,7 +7,7 @@ import {
 } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref } from 'vue';
-import { activePositions } from '../store/tradeStore';
+import { activePositions, closePosition } from '../store/tradeStore';
 
 const activeTab = ref(0);
 </script>
@@ -168,7 +168,10 @@ const activeTab = ref(0);
 
             <!-- Action Buttons -->
             <div class="grid grid-cols-3 gap-3 mt-5">
-              <button class="bg-[#2b3139] hover:bg-[#323a43] text-[#EAECEF] rounded-[5px] py-[6px] text-[14px] font-medium transition-colors">
+              <button 
+                @click="closePosition(pos.id)"
+                class="bg-[#2b3139] hover:bg-[#323a43] text-[#EAECEF] rounded-[5px] py-[6px] text-[14px] font-medium transition-colors"
+              >
                 Close Position
               </button>
               <button class="bg-[#2b3139] hover:bg-[#323a43] text-[#EAECEF] rounded-[5px] py-[6px] text-[14px] font-medium transition-colors">

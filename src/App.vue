@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { ArrowDownLeft, ArrowUpRight, Bitcoin, Activity, Signal, TrendingUp } from 'lucide-vue-next';
 import Sidebar from './components/Sidebar.vue';
 import TopHeader from './components/TopHeader.vue';
 import TickerRibbon from './components/TickerRibbon.vue';
@@ -7,8 +8,18 @@ import BalancesPanel from './components/BalancesPanel.vue';
 import TradingChartWidget from './components/TradingChartWidget.vue';
 import TransactionHistory from './components/TransactionHistory.vue';
 import OrderPanel from './components/OrderPanel.vue';
+import { cn } from './lib/utils';
 
 const activeItem = ref('Trade');
+
+const icons: Record<string, any> = {
+  Bitcoin,
+  Activity,
+  Signal,
+  TrendingUp,
+  ArrowDownLeft,
+  ArrowUpRight
+};
 </script>
 
 <template>
@@ -25,9 +36,7 @@ const activeItem = ref('Trade');
     <div class="flex h-full w-full z-10 flex-col md:flex-row">
       <Sidebar class="order-2 md:order-none shrink-0" :active-item="activeItem" @update:active-item="activeItem = $event" />
       <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
-      <TopHeader v-if="activeItem === 'Market'" :title="activeItem" />
-      
-      <div v-if="activeItem === 'Market'" class="flex-1 overflow-y-auto lg:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
+      <div v-if="activeItem === 'Trade'" class="flex-1 overflow-y-auto lg:overflow-hidden p-2 flex flex-col gap-2 no-scrollbar">
         <!-- Main Workspace Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">
           <!-- Chart -->
@@ -47,15 +56,71 @@ const activeItem = ref('Trade');
         </div>
       </div>
 
-      <div v-else-if="activeItem === 'Transactions'" class="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-4">
-        <h2 class="text-xl font-bold text-white mb-2">Transactions</h2>
-        <BalancesPanel />
+      <div v-else-if="activeItem === 'Market'" class="flex-1 overflow-y-auto p-4">
+        <div class="flex flex-col gap-6">
+          <h2 class="text-xl font-bold text-white mb-2">Market Overview</h2>
+          <TickerRibbon />
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            <!-- Mock Market Cards -->
+            <div v-for="i in 6" :key="i" class="bg-dash-card border border-dash-border p-4 rounded-xl hover:border-dash-primary/50 transition-all cursor-pointer group">
+              <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-dash-surface flex items-center justify-center">
+                      <component :is="icons[['Bitcoin', 'Activity', 'Signal', 'TrendingUp'][i % 4]]" class="w-4 h-4 text-dash-primary" />
+                    </div>
+                  <div>
+                    <div class="font-bold text-white">{{ ['Bitcoin', 'Ethereum', 'Solana', 'Cardano'][i % 4] }}</div>
+                    <div class="text-[10px] text-dash-text-muted uppercase">{{ ['BTC', 'ETH', 'SOL', 'ADA'][i % 4] }}/USDT</div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-dash-primary font-bold">+{{ (Math.random() * 5).toFixed(2) }}%</div>
+                </div>
+              </div>
+              <div class="flex justify-between items-end">
+                <div class="text-lg font-mono text-white">${{ (36000 / (i + 1)).toFixed(2) }}</div>
+                <div class="w-20 h-8 bg-dash-primary/10 rounded flex items-end px-1 pb-1">
+                   <div v-for="j in 8" :key="j" class="flex-1 bg-dash-primary rounded-t-sm mx-[1px]" :style="`height: ${Math.random() * 100}%`"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div v-else-if="activeItem === 'Trade'" class="flex-1 flex items-center justify-center text-dash-text-muted">
-        <div class="text-center">
-          <h2 class="text-xl font-bold text-white mb-2">Trade</h2>
-          <p>Trade execution interface will go here.</p>
+      <div v-else-if="activeItem === 'Transactions'" class="flex-1 overflow-y-auto p-4 flex flex-col gap-6 no-scrollbar">
+        <h2 class="text-xl font-bold text-white">Asset Management</h2>
+        <BalancesPanel />
+        
+        <div class="flex-1 flex flex-col min-h-0">
+           <h3 class="text-lg font-bold text-white mb-4">Transaction History</h3>
+           <div class="flex-1 bg-dash-card border border-dash-border rounded-xl overflow-hidden flex flex-col min-h-[400px]">
+              <div class="grid grid-cols-5 p-4 border-b border-dash-border text-dash-text-muted text-xs font-bold uppercase tracking-wider">
+                <div class="col-span-2">Transaction</div>
+                <div>Amount</div>
+                <div>Status</div>
+                <div class="text-right">Date</div>
+              </div>
+              <div class="flex-1 overflow-y-auto">
+                 <div v-for="i in 10" :key="i" class="grid grid-cols-5 p-4 border-b border-dash-border/50 items-center hover:bg-dash-card-hover transition-colors text-sm">
+                   <div class="col-span-2 flex items-center gap-3">
+                      <div :class="cn('w-8 h-8 rounded-full flex items-center justify-center', i % 2 === 0 ? 'bg-dash-primary/20 text-dash-primary' : 'bg-dash-danger/20 text-dash-danger')">
+                        <component :is="i % 2 === 0 ? icons.ArrowDownLeft : icons.ArrowUpRight" class="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div class="font-bold text-white">{{ i % 2 === 0 ? 'Deposit' : 'Withdrawal' }}</div>
+                        <div class="text-[10px] text-dash-text-muted">ID: #TX-{{ Math.random().toString(36).substr(2, 6).toUpperCase() }}</div>
+                      </div>
+                   </div>
+                   <div class="font-mono text-white">{{ (Math.random() * 2).toFixed(4) }} BTC</div>
+                   <div>
+                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-dash-primary/10 text-dash-primary border border-dash-primary/20">Completed</span>
+                   </div>
+                   <div class="text-right text-dash-text-muted text-xs">May 02, 2026</div>
+                 </div>
+              </div>
+           </div>
         </div>
       </div>
       

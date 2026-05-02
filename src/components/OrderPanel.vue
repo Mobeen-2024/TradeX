@@ -2,10 +2,8 @@
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { addPosition, sharedWs, activePositions } from '../store/tradeStore';
+import { currentPrice, previousPrice, addPosition, sharedWs, activePositions } from '../store/tradeStore';
 
-const currentMarketPrice = ref(36000.00);
-const previousMarketPrice = ref(36000.00);
 const isPending = ref(false);
 const orderPrice = ref(36000.00);
 const lastOrderPrice = ref(36000.00);
@@ -31,43 +29,11 @@ const maxOrderBookAmount = computed(() => {
   return Math.max(maxAsk, maxBid, 1);
 });
 
-// WebSocket implementation
-const handleMessage = (event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'trade') {
-        const newPrice = data.price;
-        previousMarketPrice.value = currentMarketPrice.value;
-        currentMarketPrice.value = newPrice;
-        
-        if (!isUpdatingAmountAutomatically.value && orderType.value === 'Market') {
-          orderPrice.value = newPrice;
-        }
-        lastOrderPrice.value = orderPrice.value;
-        if (orderType.value !== 'Market') {
-            // Keep user input unless it's initial load
-        }
-        if (data.orderBook && data.orderBook.asks.length > 0) {
-            orderBookAsks.value = data.orderBook.asks;
-            orderBookBids.value = data.orderBook.bids;
-        }
-      }
-    } catch(e) {}
-};
-
-watch(sharedWs, (newWs, oldWs) => {
-  if (oldWs) {
-    oldWs.removeEventListener('message', handleMessage);
+watch(currentPrice, (newPrice) => {
+  if (!isUpdatingAmountAutomatically.value && orderType.value === 'Market') {
+    orderPrice.value = newPrice;
   }
-  if (newWs) {
-    newWs.addEventListener('message', handleMessage);
-  }
-}, { immediate: true });
-
-onUnmounted(() => {
-  if (sharedWs.value) {
-     sharedWs.value.removeEventListener('message', handleMessage);
-  }
+  lastOrderPrice.value = orderPrice.value;
 });
 
 const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
@@ -352,14 +318,14 @@ watch(tpSl, (val) => {
                 <td colspan="2" class="py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent">
                   <div class="flex flex-col items-center justify-center py-1">
                     <div class="flex items-center gap-2">
-                      <span :class="cn('font-bold text-lg sm:text-xl transition-colors duration-300 flex items-center', currentMarketPrice >= previousMarketPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
-                        {{ currentMarketPrice.toFixed(2) }} 
-                        <ArrowUp v-if="currentMarketPrice >= previousMarketPrice" class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
+                      <span :class="cn('font-bold text-lg sm:text-xl transition-colors duration-300 flex items-center', currentPrice >= previousPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                        {{ currentPrice.toFixed(2) }} 
+                        <ArrowUp v-if="currentPrice >= previousPrice" class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
                         <ArrowDown v-else class="w-4 h-4 sm:w-5 sm:h-5 ml-1" />
                       </span>
                     </div>
                     <span class="text-[#848e9c] text-xs mt-0.5 font-medium underline decoration-dashed underline-offset-2 cursor-pointer hover:text-white transition-colors">
-                      ${{ currentMarketPrice.toFixed(2) }}
+                      ${{ currentPrice.toFixed(2) }}
                     </span>
                   </div>
                 </td>
