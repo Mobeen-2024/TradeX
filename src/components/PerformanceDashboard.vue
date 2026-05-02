@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { analyticsData } from '../store/analyticsStore';
-import { TrendingUp, TrendingDown, Target, Activity, DollarSign, BarChart3, ShieldAlert, Award, Zap } from 'lucide-vue-next';
+import { TrendingUp, TrendingDown, Target, Activity, DollarSign, BarChart3, ShieldAlert, Award, Zap, History, ExternalLink } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, AreaSeries, Time } from 'lightweight-charts';
+import AssetAllocationDonut from './AssetAllocationDonut.vue';
+import { closedTrades } from '../store/tradeStore';
 
 const chartContainer = ref<HTMLElement | null>(null);
 let chart: IChartApi | null = null;
@@ -218,9 +220,18 @@ onUnmounted(() => {
 
             <!-- Insights & Secondary Metrics -->
             <div class="flex flex-col gap-6">
+                <!-- Asset Allocation -->
+                <div class="bg-[#161a1e] rounded-3xl border border-white/5 p-6 h-fit">
+                    <h3 class="font-bold text-white mb-6 flex items-center gap-2 text-sm">
+                        <BarChart3 class="w-4 h-4 text-[#F0B90B]" />
+                        Asset Allocation
+                    </h3>
+                    <AssetAllocationDonut />
+                </div>
+
                 <!-- AI Insights -->
-                <div class="bg-[#161a1e] rounded-3xl border border-white/5 p-6 shadow-2xl">
-                    <h3 class="font-bold text-white mb-6 flex items-center gap-2">
+                <div class="bg-[#161a1e] rounded-3xl border border-white/5 p-6 shadow-2xl flex-1">
+                    <h3 class="font-bold text-white mb-6 flex items-center gap-2 text-sm">
                         <Zap class="w-4 h-4 text-[#F0B90B]" />
                         Decision Insights
                     </h3>
@@ -230,7 +241,7 @@ onUnmounted(() => {
                                 <div class="p-1.5 rounded-lg" :style="{ backgroundColor: insight.color + '20' }">
                                     <component :is="insight.icon" class="w-4 h-4" :style="{ color: insight.color }" />
                                 </div>
-                                <span class="font-bold text-sm" :style="{ color: insight.color }">{{ insight.title }}</span>
+                                <span class="font-bold text-xs" :style="{ color: insight.color }">{{ insight.title }}</span>
                             </div>
                             <p class="text-[11px] text-[#848e9c] leading-relaxed font-medium">{{ insight.desc }}</p>
                         </div>
@@ -239,26 +250,58 @@ onUnmounted(() => {
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <!-- Drawdown & Efficiency -->
-                <div class="bg-[#F0B90B] rounded-3xl p-6 text-[#0b0e11] shadow-2xl">
-                    <h3 class="font-black text-[10px] uppercase tracking-[0.2em] mb-6 opacity-60">Risk Profile</h3>
-                    <div class="space-y-6">
-                        <div>
-                            <div class="flex justify-between text-xs font-black uppercase mb-2">
-                                <span>Max Drawdown</span>
-                                <span>{{ stats.maxDrawdown.toFixed(2) }}%</span>
-                            </div>
-                            <div class="w-full bg-black/10 h-2 rounded-full overflow-hidden">
-                                <div class="bg-black/40 h-full transition-all duration-1000" :style="{ width: Math.min(stats.maxDrawdown, 100) + '%' }"></div>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between pt-2 border-t border-black/10">
-                            <span class="text-[10px] font-black uppercase tracking-widest opacity-60">System Stability</span>
-                            <span class="text-sm font-black">HIGH</span>
-                        </div>
-                    </div>
-                </div>
+        <!-- Recent Trades -->
+        <div class="mt-8 bg-[#161a1e] rounded-3xl border border-white/5 overflow-hidden">
+            <div class="px-6 py-5 border-b border-white/5 flex items-center justify-between">
+                <h3 class="font-bold text-white flex items-center gap-2">
+                    <History class="w-4 h-4 text-[#F0B90B]" />
+                    Recent Activity
+                </h3>
+                <button class="text-[10px] font-black uppercase text-[#848e9c] hover:text-white transition-colors tracking-widest">View All Trades</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                        <tr class="text-[10px] font-black uppercase text-[#474d57] tracking-[0.15em] border-b border-white/5">
+                            <th class="px-6 py-4">Symbol</th>
+                            <th class="px-6 py-4">Side</th>
+                            <th class="px-6 py-4">Entry / Close</th>
+                            <th class="px-6 py-4">Size</th>
+                            <th class="px-6 py-4">P&L (USDT)</th>
+                            <th class="px-6 py-4">Status</th>
+                            <th class="px-6 py-4"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-xs">
+                        <tr v-for="trade in closedTrades.slice(-5).reverse()" :key="trade.id" class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                            <td class="px-6 py-4 font-bold text-white">{{ trade.pair }}</td>
+                            <td class="px-6 py-4">
+                                <span :class="cn('px-2 py-0.5 rounded font-black text-[10px]', trade.type === 'LONG' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]')">
+                                    {{ trade.type }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 font-mono text-[#848e9c]">
+                                <div class="text-white">{{ trade.entry.toFixed(2) }}</div>
+                                <div class="text-[10px]">{{ trade.closePrice.toFixed(2) }}</div>
+                            </td>
+                            <td class="px-6 py-4 font-mono text-white">{{ trade.size }} BTC</td>
+                            <td :class="cn('px-6 py-4 font-black font-mono', trade.realizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                                {{ trade.realizedPnl >= 0 ? '+' : '' }}{{ trade.realizedPnl.toFixed(2) }}
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-0.5 rounded bg-[#2b3139] text-[#848e9c] text-[10px] font-bold">Closed</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <button class="text-[#474d57] hover:text-[#F0B90B] transition-colors">
+                                    <ExternalLink class="w-4 h-4" />
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

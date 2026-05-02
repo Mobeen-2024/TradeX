@@ -688,6 +688,7 @@ watch(activePositions, (positions) => {
     positionLines = [];
 
     positions.filter(p => p.pair === props.symbol).forEach(pos => {
+        // Entry Line
         const line = candleSeries?.createPriceLine({
             price: pos.entry,
             color: pos.type === 'LONG' ? '#0ecb81' : '#f6465d',
@@ -697,6 +698,32 @@ watch(activePositions, (positions) => {
             title: `${pos.type} ${pos.size}`,
         });
         if (line) positionLines.push(line);
+
+        // TP Line
+        if (pos.tp) {
+            const tpLine = candleSeries?.createPriceLine({
+                price: pos.tp,
+                color: '#0ecb81',
+                lineWidth: 1,
+                lineStyle: 1, // Dotted
+                axisLabelVisible: true,
+                title: `TP ${pos.id.substring(0,4)}`,
+            });
+            if (tpLine) positionLines.push(tpLine);
+        }
+
+        // SL Line
+        if (pos.sl) {
+            const slLine = candleSeries?.createPriceLine({
+                price: pos.sl,
+                color: '#f6465d',
+                lineWidth: 1,
+                lineStyle: 1, // Dotted
+                axisLabelVisible: true,
+                title: `SL ${pos.id.substring(0,4)}`,
+            });
+            if (slLine) positionLines.push(slLine);
+        }
     });
 }, { immediate: true, deep: true });
 

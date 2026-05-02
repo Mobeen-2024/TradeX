@@ -5,13 +5,18 @@ export const activePositions = ref<{
   pair: string;
   type: 'LONG' | 'SHORT';
   leverage: string;
-  liveDelta: number;
-  liveDeltaPercent: number;
   size: number;
   cost: number;
   entry: number;
-  mark: number;
-  protocolLimits: [string, string];
+  mark?: number;
+  liveDelta?: number;
+  liveDeltaPercent?: number;
+  protocolLimits?: [string, string];
+  pnl?: number;
+  pnlPercent?: number;
+  tp?: number;
+  sl?: number;
+  time?: number;
 }[]>([]);
 
 export const closedTrades = ref<any[]>([]);
@@ -187,7 +192,10 @@ export const placeOrder = async (order: {
               sl: order.stopLossPrice,
               time: Date.now(),
               pnl: 0,
-              pnlPercent: 0
+              pnlPercent: 0,
+              liveDelta: 0,
+              liveDeltaPercent: 0,
+              mark: order.price || currentPrice.value
           });
       } else {
           openOrders.value.unshift({
