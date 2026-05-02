@@ -14,14 +14,16 @@ import {
 } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref } from 'vue';
-import { activePositions, closePosition } from '../store/tradeStore';
+import { activePositions, closePosition, openOrders, cancelOrder } from '../store/tradeStore';
 
 const activeTab = ref(0);
 
-const mockOpenOrders = ref([
-  { id: '1', pair: 'BTC/USDT', type: 'Limit', side: 'Buy', price: 62500, amount: 0.1, filled: 0, date: '2026-05-02 12:45' },
-  { id: '2', pair: 'ETH/USDT', type: 'Stop-Limit', side: 'Sell', price: 3450, amount: 1.5, filled: 0, date: '2026-05-02 11:20' }
-]);
+const formatDate = (date: any) => {
+    if (!date) return '-';
+    if (typeof date === 'string') return date;
+    const d = new Date(date);
+    return d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
 </script>
 
 <template>
@@ -47,7 +49,7 @@ const mockOpenOrders = ref([
             activeTab === 1 ? 'text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]'
           )"
         >
-          <span class="text-[13px] font-bold tracking-tight">Open Orders <span class="font-normal opacity-60">({{ mockOpenOrders.length }})</span></span>
+          <span class="text-[13px] font-bold tracking-tight">Open Orders <span class="font-normal opacity-60">({{ openOrders.length }})</span></span>
           <div v-show="activeTab === 1" class="absolute bottom-0 left-0 right-0 h-[2px] bg-[#F0B90B] shadow-[0_0_10px_#F0B90B]"></div>
         </button>
       </div>
@@ -115,7 +117,7 @@ const mockOpenOrders = ref([
                 <span class="text-[10px] sm:text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Size / Value</span>
                 <div class="flex flex-col">
                     <span class="text-xs sm:text-sm font-mono text-[#EAECEF] font-bold leading-none">{{ pos.size.toFixed(4) }} BTC</span>
-                    <span class="text-[10px] font-mono text-[#848e9c] mt-1">≈ {{ (pos.size * pos.mark).toFixed(2) }} USDT</span>
+                    <span class="text-[10px] font-mono text-[#848e9c] mt-1">≈ {{ (pos.size * (pos.mark || pos.entry)).toFixed(2) }} USDT</span>
                 </div>
               </div>
 
@@ -123,7 +125,7 @@ const mockOpenOrders = ref([
                 <span class="text-[10px] sm:text-[11px] text-[#848e9c] font-bold uppercase tracking-wider">Entry / Mark</span>
                 <div class="flex flex-col">
                     <span class="text-xs sm:text-sm font-mono text-[#EAECEF] font-bold leading-none">{{ pos.entry.toFixed(2) }}</span>
-                    <span class="text-[10px] font-mono text-[#F0B90B] mt-1">{{ pos.mark.toFixed(2) }}</span>
+                    <span class="text-[10px] font-mono text-[#F0B90B] mt-1">{{ (pos.mark || pos.entry).toFixed(2) }}</span>
                 </div>
               </div>
 
@@ -132,7 +134,7 @@ const mockOpenOrders = ref([
                 <div class="flex flex-col">
                     <span class="text-xs sm:text-sm font-mono text-[#fcd535] font-bold leading-none">{{ (pos.entry * (pos.type === 'LONG' ? 0.85 : 1.15)).toFixed(2) }}</span>
                     <div class="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
-                        <div class="h-full bg-[#fcd535]" :style="`width: ${Math.max(10, 100 - (Math.abs(pos.mark - pos.entry) / pos.entry * 500))}%`"></div>
+                        <div class="h-full bg-[#fcd535]" :style="`width: ${Math.max(10, 100 - (Math.abs((pos.mark || pos.entry) - pos.entry) / pos.entry * 500))}%`"></div>
                     </div>
                 </div>
               </div>
@@ -164,22 +166,29 @@ const mockOpenOrders = ref([
 
       <!-- Open Orders Tab -->
       <div v-else-if="activeTab === 1" class="flex flex-col h-full overflow-hidden">
+        <div v-if="openOrders.length === 0" class="flex flex-col items-center justify-center py-20 text-[#848e9c] gap-3">
+          <div class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
+            <MoreHorizontal class="w-6 h-6 opacity-20" />
+          </div>
+          <span class="text-xs font-medium uppercase tracking-widest opacity-40">No Open Orders</span>
+        </div>
+        
         <!-- Desktop Table View -->
-        <div class="hidden sm:block flex-1 overflow-auto">
+        <div v-else class="hidden sm:block flex-1 overflow-auto">
             <table class="w-full text-left border-collapse min-w-[600px]">
                 <thead class="bg-[#161a1e]/20 text-[10px] text-[#848e9c] font-bold uppercase tracking-wider sticky top-0 z-10 backdrop-blur-md">
                     <tr>
                         <th class="px-5 py-3">Date</th>
                         <th class="px-5 py-3">Pair</th>
                         <th class="px-5 py-3">Type/Side</th>
-                        <th class="px-5 py-3">Price</th>
+                        <th class="px-5 py-3">Price / Trigger</th>
                         <th class="px-5 py-3">Amount</th>
                         <th class="px-5 py-3 text-right">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/5 font-mono text-[12px]">
-                    <tr v-for="order in mockOpenOrders" :key="order.id" class="hover:bg-white/[0.02] transition-colors">
-                        <td class="px-5 py-4 text-[#848e9c]">{{ order.date }}</td>
+                    <tr v-for="order in openOrders" :key="order.id" class="hover:bg-white/[0.02] transition-colors">
+                        <td class="px-5 py-4 text-[#848e9c]">{{ formatDate(order.date || Date.now()) }}</td>
                         <td class="px-5 py-4 text-[#EAECEF] font-bold">{{ order.pair }}</td>
                         <td class="px-5 py-4">
                             <div class="flex flex-col gap-0.5">
@@ -187,17 +196,20 @@ const mockOpenOrders = ref([
                                 <span :class="order.side === 'Buy' ? 'text-[#0ecb81]' : 'text-[#f6465d]'">{{ order.side }}</span>
                             </div>
                         </td>
-                        <td class="px-5 py-4 text-[#EAECEF]">{{ order.price.toFixed(2) }}</td>
+                        <td class="px-5 py-4 text-[#EAECEF]">
+                            <div class="flex flex-col gap-0.5">
+                                <span v-if="order.type === 'LIMIT'">{{ order.price.toFixed(2) }}</span>
+                                <span v-if="order.stopPrice" class="text-[10px] text-[#fcd535] font-bold">Trigger: {{ order.stopPrice.toFixed(2) }}</span>
+                                <span v-if="order.callbackRate" class="text-[10px] text-[#fcd535] font-bold">Callback: {{ order.callbackRate }}%</span>
+                            </div>
+                        </td>
                         <td class="px-5 py-4">
                             <div class="flex flex-col gap-1">
                                 <span class="text-[#EAECEF]">{{ order.amount.toFixed(4) }}</span>
-                                <div class="w-16 h-1 bg-white/5 rounded-full overflow-hidden">
-                                    <div class="h-full bg-[#F0B90B]" :style="`width: ${order.filled}%`"></div>
-                                </div>
                             </div>
                         </td>
                         <td class="px-5 py-4 text-right">
-                            <button class="text-[#f6465d] hover:bg-[#f6465d]/10 px-3 py-1 rounded-md transition-colors font-bold uppercase text-[10px]">Cancel</button>
+                            <button @click="cancelOrder(order.id)" class="text-[#f6465d] hover:bg-[#f6465d]/10 px-3 py-1 rounded-md transition-colors font-bold uppercase text-[10px]">Cancel</button>
                         </td>
                     </tr>
                 </tbody>
@@ -205,14 +217,14 @@ const mockOpenOrders = ref([
         </div>
 
         <!-- Mobile Card View -->
-        <div class="sm:hidden flex-1 overflow-auto divide-y divide-white/5">
-            <div v-for="order in mockOpenOrders" :key="order.id" class="p-4 flex flex-col gap-3">
+        <div v-if="openOrders.length > 0" class="sm:hidden flex-1 overflow-auto divide-y divide-white/5">
+            <div v-for="order in openOrders" :key="order.id" class="p-4 flex flex-col gap-3">
                 <div class="flex justify-between items-center">
                     <div class="flex flex-col">
                         <span class="text-white font-black text-sm">{{ order.pair }}</span>
-                        <span class="text-[10px] text-[#848e9c] font-mono">{{ order.date }}</span>
+                        <span class="text-[10px] text-[#848e9c] font-mono">{{ formatDate(order.date || Date.now()) }}</span>
                     </div>
-                    <button class="text-[10px] font-bold uppercase text-[#f6465d] bg-[#f6465d]/10 px-2.5 py-1 rounded">Cancel</button>
+                    <button @click="cancelOrder(order.id)" class="text-[10px] font-bold uppercase text-[#f6465d] bg-[#f6465d]/10 px-2.5 py-1 rounded">Cancel</button>
                 </div>
                 <div class="grid grid-cols-3 gap-2">
                     <div class="flex flex-col">
@@ -221,16 +233,14 @@ const mockOpenOrders = ref([
                     </div>
                     <div class="flex flex-col">
                         <span class="text-[9px] text-[#848e9c] uppercase font-bold tracking-wider">Price</span>
-                        <span class="text-[11px] font-mono text-white">{{ order.price.toFixed(2) }}</span>
+                        <span class="text-[11px] font-mono text-white">{{ (order.price || order.stopPrice || 0).toFixed(2) }}</span>
                     </div>
                     <div class="flex flex-col">
                         <span class="text-[9px] text-[#848e9c] uppercase font-bold tracking-wider">Amount</span>
                         <span class="text-[11px] font-mono text-white">{{ order.amount.toFixed(4) }}</span>
                     </div>
                 </div>
-                <div class="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                    <div class="h-full bg-[#F0B90B]" :style="`width: ${order.filled}%`"></div>
-                </div>
+                <div v-if="order.stopPrice" class="text-[9px] text-[#fcd535] font-bold uppercase">Trigger Condition: {{ order.stopPrice }}</div>
             </div>
         </div>
       </div>

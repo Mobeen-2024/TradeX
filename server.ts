@@ -24,19 +24,59 @@ const saveDb = () => {
 };
 
 let globalPrice = 36000.00;
+let openOrders: any[] = [];
 
 setInterval(() => {
     const volatility = globalPrice * 0.001;
     globalPrice += (Math.random() - 0.5) * volatility;
+    const mark = Number(globalPrice.toFixed(2));
     
-    // Update mock positions PNL globally
+    // 1. Process Open Orders (Stop Loss / Take Profit / Trailing)
+    openOrders = openOrders.filter(order => {
+        let triggered = false;
+        
+        if (order.type === 'STOP_MARKET' || order.type === 'STOP') {
+            if (order.side === 'Buy' && mark >= order.stopPrice) triggered = true;
+            if (order.side === 'Sell' && mark <= order.stopPrice) triggered = true;
+        } else if (order.type === 'TAKE_PROFIT_MARKET' || order.type === 'TAKE_PROFIT') {
+            if (order.side === 'Buy' && mark <= order.stopPrice) triggered = true;
+            if (order.side === 'Sell' && mark >= order.stopPrice) triggered = true;
+        } else if (order.type === 'TRAILING_STOP_MARKET') {
+            // Simple mock: trigger if price moves against us by callbackRate
+            // In real logic, we'd track the "peak" price.
+            if (order.side === 'Sell' && mark <= order.activationPrice * (1 - order.callbackRate/100)) triggered = true;
+            if (order.side === 'Buy' && mark >= order.activationPrice * (1 + order.callbackRate/100)) triggered = true;
+        }
+
+        if (triggered) {
+            console.log('Order Triggered:', order.type, 'at', mark);
+            positions.push({
+                id: order.id,
+                pair: order.pair,
+                type: order.side === 'Buy' ? 'LONG' : 'SHORT',
+                leverage: order.leverage,
+                size: order.amount,
+                cost: order.cost,
+                entry: mark,
+                mark: mark,
+                liveDelta: 0,
+                liveDeltaPercent: 0,
+                protocolLimits: ['-', '-']
+            });
+            return false; // Remove from open orders
+        }
+        return true;
+    });
+
+    // 2. Update mock positions PNL globally
     positions = positions.map(pos => {
-       const mark = Number(globalPrice.toFixed(2));
        const diff = pos.type === 'LONG' ? mark - pos.entry : pos.entry - mark;
        const liveDelta = diff * pos.size;
        const liveDeltaPercent = (diff / pos.entry) * 100 * (pos.leverage.includes('10x') ? 10 : 1);
        return { ...pos, mark, liveDelta, liveDeltaPercent };
     });
+    
+    if (openOrders.length > 0 || positions.length > 0) saveDb();
 }, 500);
 
 async function start() {
@@ -50,23 +90,35 @@ async function start() {
   fastify.post('/api/place_order', async (request, reply) => {
     try {
         const order: any = request.body;
-        const newPos = {
-            id: Math.random().toString(36).substr(2, 9),
-            pair: order.pair,
-            type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-            leverage: order.leverage,
-            size: order.amount,
-            cost: order.cost,
-            entry: order.price,
-            mark: order.price,
-            liveDelta: 0,
-            liveDeltaPercent: 0,
-            protocolLimits: ['-', '-']
-        };
-        positions.push(newPos);
-        saveDb();
-        console.log('Position POST added, total positions:', positions.length);
-        return { success: true, position: newPos };
+        const isInstant = order.type === 'Market' || !order.type;
+        
+        if (isInstant) {
+            const newPos = {
+                id: Math.random().toString(36).substr(2, 9),
+                pair: order.pair,
+                type: order.side === 'Buy' ? 'LONG' : 'SHORT',
+                leverage: order.leverage,
+                size: order.amount,
+                cost: order.cost,
+                entry: order.price || globalPrice,
+                mark: order.price || globalPrice,
+                liveDelta: 0,
+                liveDeltaPercent: 0,
+                protocolLimits: ['-', '-']
+            };
+            positions.push(newPos);
+            saveDb();
+            return { success: true, position: newPos };
+        } else {
+            // Advanced Order
+            const newOrder = {
+                id: Math.random().toString(36).substr(2, 9),
+                ...order,
+                activationPrice: order.activationPrice || globalPrice
+            };
+            openOrders.push(newOrder);
+            return { success: true, order: newOrder };
+        }
     } catch(e: any) {
         return reply.status(500).send({ error: e.message });
     }
@@ -135,25 +187,38 @@ async function start() {
             const data = JSON.parse(message.toString());
             console.log('Backend received ws message:', data.type, 'Order data:', data.order ? data.order.pair : '');
             if (data.type === 'place_order') {
-                console.log('Processing place_order');
-                const newPos = {
-                    id: Math.random().toString(36).substr(2, 9),
-                    pair: data.order.pair,
-                    type: data.order.side === 'Buy' ? 'LONG' : 'SHORT',
-                    leverage: data.order.leverage,
-                    size: data.order.amount,
-                    cost: data.order.cost,
-                    entry: data.order.price,
-                    mark: data.order.price,
-                    liveDelta: 0,
-                    liveDeltaPercent: 0,
-                    protocolLimits: ['-', '-']
-                };
-                positions.push(newPos);
-                saveDb();
-                console.log('Position added, total positions:', positions.length);
-                connection.send(JSON.stringify({ type: 'position_opened', position: newPos }));
-            } else if (data.type === 'close_position') {
+                const order = data.order;
+                const isInstant = order.type === 'Market' || !order.type;
+                
+                if (isInstant) {
+                    const newPos = {
+                        id: Math.random().toString(36).substr(2, 9),
+                        pair: order.pair,
+                        type: order.side === 'Buy' ? 'LONG' : 'SHORT',
+                        leverage: order.leverage,
+                        size: order.amount,
+                        cost: order.cost,
+                        entry: order.price || globalPrice,
+                        mark: order.price || globalPrice,
+                        liveDelta: 0,
+                        liveDeltaPercent: 0,
+                        protocolLimits: ['-', '-']
+                    };
+                    positions.push(newPos);
+                    saveDb();
+                    connection.send(JSON.stringify({ type: 'position_opened', position: newPos }));
+                } else {
+                    const newOrder = {
+                        id: Math.random().toString(36).substr(2, 9),
+                        ...order,
+                        activationPrice: order.activationPrice || globalPrice
+                    };
+                    openOrders.push(newOrder);
+                    saveDb();
+                    connection.send(JSON.stringify({ type: 'order_placed', order: newOrder }));
+                }
+            }
+ else if (data.type === 'close_position') {
                 console.log('Processing close_position', data.id);
                 positions = positions.filter(p => p.id !== data.id);
                 saveDb();

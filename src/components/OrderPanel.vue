@@ -2,7 +2,7 @@
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { addPosition, activePositions, currentPrice, previousPrice, orderBook, selectedPrice } from '../store/tradeStore';
+import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice } from '../store/tradeStore';
 
 const isPending = ref(false);
 const orderPrice = ref(36000.00);
@@ -248,7 +248,7 @@ const isFormValid = computed(() => {
   return true;
 });
 
-const executeTrade = () => {
+const executeTrade = async () => {
   if (!isFormValid.value) return;
   
   const mult = marginEnabled.value ? leverage.value : 1;
@@ -256,19 +256,30 @@ const executeTrade = () => {
 
   if (orderSide.value === 'Buy') {
     availableUsdt.value -= marginRequired;
-    availableBtc.value += orderAmount.value!;
   } else {
     availableBtc.value -= (orderAmount.value! / mult);
-    availableUsdt.value += totalCostNumber.value;
   }
 
-  addPosition({
+  const typeMapping: Record<string, string> = {
+    'Limit': 'LIMIT',
+    'Market': 'MARKET',
+    'Stop-Limit': 'STOP',
+    'Stop Market': 'STOP_MARKET',
+    'Trailing Stop': 'TRAILING_STOP_MARKET',
+    'OCO': 'OCO'
+  };
+
+  await placeOrder({
     pair: 'BTC/USDT',
-    type: orderSide.value === 'Buy' ? 'LONG' : 'SHORT',
+    side: orderSide.value,
+    type: typeMapping[orderType.value] || 'MARKET',
+    quantity: orderAmount.value!,
+    price: orderPrice.value,
+    stopPrice: stopPrice.value || undefined,
+    callbackRate: callbackRate.value || undefined,
+    activationPrice: activationPrice.value || undefined,
     leverage: marginEnabled.value ? `Cross_${leverage.value}x` : 'Spot',
-    size: orderAmount.value!,
     cost: marginRequired,
-    entry: orderType.value === 'Market' || orderType.value === 'Trailing Stop' ? lastOrderPrice.value : orderPrice.value,
   });
   
   orderAmount.value = null; // reset

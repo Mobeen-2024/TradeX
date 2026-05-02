@@ -25,13 +25,14 @@ export const marketData = ref({
     volUsdt24h: '2.68B'
 });
 
+export const openOrders = ref<any[]>([]);
+
 if (typeof window !== 'undefined') {
     fetch('/api/positions')
         .then(res => res.json())
         .then(data => {
-            if (data.positions) {
-                activePositions.value = data.positions;
-            }
+            if (data.positions) activePositions.value = data.positions;
+            if (data.openOrders) openOrders.value = data.openOrders;
         })
         .catch(() => {});
 }
@@ -92,50 +93,56 @@ function connectWs() {
 
 connectWs();
 
-export const addPosition = async (position: {
+export const placeOrder = async (order: {
   pair: string;
-  type: 'LONG' | 'SHORT';
+  side: 'Buy' | 'Sell';
+  type: string;
+  quantity: number;
+  price?: number;
+  stopPrice?: number;
+  callbackRate?: number;
+  activationPrice?: number;
   leverage: string;
-  size: number;
   cost: number;
-  entry: number;
 }) => {
   try {
       const response = await fetch('/api/place_order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-              ...position,
-              amount: position.size,
-              price: position.entry,
-              side: position.type === 'LONG' ? 'Buy' : 'Sell'
+              ...order,
+              amount: order.quantity, // map to server expectation
           })
       });
       const data = await response.json();
-      if (data.success && data.position) {
-          activePositions.value.push(data.position);
+      if (data.success) {
+          if (data.position) {
+              activePositions.value.push(data.position);
+          } else if (data.order) {
+              openOrders.value.push(data.order);
+          }
       }
   } catch (err) {
-      console.warn('Fallback: adding locally');
-      activePositions.value.push({
-        id: Math.random().toString(36).substr(2, 9),
-        pair: position.pair,
-        type: position.type,
-        leverage: position.leverage,
-        size: position.size,
-        cost: position.cost,
-        entry: position.entry,
-        mark: position.entry,
-        liveDelta: 0,
-        liveDeltaPercent: 0,
-        protocolLimits: ['-', '-'],
-      });
+      console.warn('PlaceOrder failed:', err);
   }
 };
+
+// Maintain addPosition for compatibility or refactor components
+export const addPosition = (pos: any) => placeOrder({
+    ...pos,
+    side: pos.type === 'LONG' ? 'Buy' : 'Sell',
+    type: 'Market',
+    quantity: pos.size
+});
 
 export const closePosition = async (id: string) => {
   try {
       await fetch(`/api/close_position/${id}`, { method: 'POST' });
   } catch (err) {}
   activePositions.value = activePositions.value.filter(p => p.id !== id);
+};
+
+export const cancelOrder = async (id: string) => {
+    // In real app, call API
+    openOrders.value = openOrders.value.filter(o => o.id !== id);
 };
