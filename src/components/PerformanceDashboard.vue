@@ -74,7 +74,7 @@ const getEquityPoints = () => {
 
 <template>
     <div class="p-6 h-full overflow-y-auto custom-scrollbar bg-[#0b0e11] text-[#EAECEF]">
-        <div class="flex items-center justify-between mb-8">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
             <div>
                 <h2 class="text-2xl font-bold text-white flex items-center gap-2">
                     <Activity class="w-6 h-6 text-[#F0B90B]" />

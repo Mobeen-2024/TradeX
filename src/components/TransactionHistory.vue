@@ -32,7 +32,7 @@ const formatDate = (date: any) => {
     
     <!-- Header Tabs -->
     <div class="flex items-center justify-between px-4 h-[48px] border-b border-white/5 shrink-0 bg-[#161a1e]/30 backdrop-blur-md">
-      <div class="flex items-center gap-8 h-full">
+      <div class="flex items-center gap-4 sm:gap-8 h-full overflow-x-auto no-scrollbar">
         <button 
           @click="activeTab = 0"
           :class="cn(

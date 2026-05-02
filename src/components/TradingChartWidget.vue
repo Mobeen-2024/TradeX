@@ -228,7 +228,7 @@ const initChart = async () => {
                 handleFibClick(price, param.time);
             } else if (activeTool.value === 'alert') {
                 createAlert(price);
-                activeTool.value = 'none';
+                setGlobalTool('none');
             } else {
                 selectedPrice.value = parseFloat(price.toFixed(2));
             }
@@ -256,7 +256,7 @@ const handleFibClick = (price: number, time: any) => {
         }
         
         fibStart.value = null; // reset
-        activeTool.value = 'none'; // switch back to select
+        setGlobalTool('none'); // switch back to select
         renderDrawings();
     }
 };
@@ -536,7 +536,7 @@ watch(showVolume, (val) => {
   <div class="flex flex-col h-full bg-[#0b0e11] text-[#EAECEF] overflow-hidden select-none border border-[#2b3139]/50 hover:border-[#F0B90B]/30 transition-colors rounded-xl m-1 shadow-2xl relative">
     
     <!-- Drawing Toolbar (Floating Sidebar) -->
-    <div class="absolute left-3 top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/80 backdrop-blur-md p-1 rounded-lg border border-white/5 shadow-xl">
+    <div class="absolute left-1 md:left-3 top-16 md:top-20 z-20 flex flex-col gap-1 bg-[#161a1e]/80 backdrop-blur-md p-1 rounded-lg border border-white/5 shadow-xl transform scale-[0.8] md:scale-100 origin-top-left">
         <button 
             @click="setGlobalTool('none')"
             :class="cn('p-2 rounded-md transition-all', activeTool === 'none' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c] hover:bg-white/5')"

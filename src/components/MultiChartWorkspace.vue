@@ -13,10 +13,10 @@ const gridCols = {
 
 const getGridClass = (count: number) => {
     if (count === 1) return 'grid-cols-1 grid-rows-1';
-    if (count === 2) return 'grid-cols-2 grid-rows-1';
-    if (count === 3) return 'grid-cols-3 grid-rows-1';
-    if (count === 4) return 'grid-cols-2 grid-rows-2';
-    return 'grid-cols-3 grid-rows-2';
+    if (count === 2) return 'grid-cols-1 md:grid-cols-2 grid-rows-2 md:grid-rows-1';
+    if (count === 3) return 'grid-cols-1 md:grid-cols-3 grid-rows-3 md:grid-rows-1';
+    if (count === 4) return 'grid-cols-1 md:grid-cols-2 grid-rows-4 md:grid-rows-2';
+    return 'grid-cols-1 md:grid-cols-3 grid-rows-auto md:grid-rows-2';
 };
 </script>
 
@@ -50,7 +50,7 @@ const getGridClass = (count: number) => {
     <!-- Chart Grid -->
     <div 
         :class="cn(
-            'flex-1 grid gap-1 p-1 bg-[#0b0e11] transition-all duration-500 ease-in-out',
+            'flex-1 grid gap-1 p-1 bg-[#0b0e11] transition-all duration-500 ease-in-out overflow-y-auto md:overflow-hidden',
             getGridClass(workspacePanels.length)
         )"
     >
