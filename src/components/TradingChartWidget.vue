@@ -5,7 +5,7 @@ import { globalSymbol, workspacePanels } from '../store/workspaceStore';
 import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, X, Link2, Link2Off, MousePointer2, Minus, TrendingUp, Trash2, Bell } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { createChart, IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine } from 'lightweight-charts';
-import { calculateEMA, calculateRSI } from '../utils/indicators';
+import { calculateEMA, calculateRSI, calculateBollingerBands } from '../utils/indicators';
 import { alerts, createAlert, removeAlert, currentPrice } from '../store/tradeStore';
 
 const props = defineProps<{
@@ -26,6 +26,9 @@ let volumeSeries: ISeriesApi<"Histogram"> | null = null;
 let positionLines: IPriceLine[] = [];
 let emaSeries: ISeriesApi<"Line"> | null = null;
 let rsiSeries: ISeriesApi<"Line"> | null = null;
+let bbUpperSeries: ISeriesApi<"Line"> | null = null;
+let bbMiddleSeries: ISeriesApi<"Line"> | null = null;
+let bbLowerSeries: ISeriesApi<"Line"> | null = null;
 
 const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
@@ -87,6 +90,23 @@ const updateIndicators = (candlestick: CandlestickData[]) => {
         chart.removeSeries(rsiSeries);
         rsiSeries = null;
     }
+
+    // Handle BOLL
+    if (activeIndicators.value.includes('BOLL')) {
+        if (!bbUpperSeries || !bbMiddleSeries || !bbLowerSeries) {
+            bbUpperSeries = chart.addSeries(LineSeries, { color: 'rgba(240, 185, 11, 0.4)', lineWidth: 1, title: 'BB Upper' });
+            bbMiddleSeries = chart.addSeries(LineSeries, { color: 'rgba(240, 185, 11, 0.6)', lineWidth: 1, title: 'BB Middle' });
+            bbLowerSeries = chart.addSeries(LineSeries, { color: 'rgba(240, 185, 11, 0.4)', lineWidth: 1, title: 'BB Lower' });
+        }
+        const { upper, middle, lower } = calculateBollingerBands(candlestick, 20);
+        bbUpperSeries.setData(upper);
+        bbMiddleSeries.setData(middle);
+        bbLowerSeries.setData(lower);
+    } else {
+        if (bbUpperSeries) { chart.removeSeries(bbUpperSeries); bbUpperSeries = null; }
+        if (bbMiddleSeries) { chart.removeSeries(bbMiddleSeries); bbMiddleSeries = null; }
+        if (bbLowerSeries) { chart.removeSeries(bbLowerSeries); bbLowerSeries = null; }
+    }
 };
 
 const fetchKlines = async (symbol: string, interval: string) => {
@@ -136,6 +156,9 @@ const initChart = async () => {
         volumeSeries = null;
         emaSeries = null;
         rsiSeries = null;
+        bbUpperSeries = null;
+        bbMiddleSeries = null;
+        bbLowerSeries = null;
     }
 
     chart = createChart(chartContainer.value, {
@@ -624,6 +647,13 @@ watch(showVolume, (val) => {
                     activeIndicators.includes('RSI') ? 'bg-[#E91E63]/20 text-[#E91E63]' : 'text-[#848e9c] hover:bg-[#2b3139]'
                 )"
             >RSI</button>
+            <button 
+                @click="toggleIndicator('BOLL')"
+                :class="cn(
+                    'px-1.5 py-0.5 rounded text-[9px] font-bold transition-all',
+                    activeIndicators.includes('BOLL') ? 'bg-[#F0B90B]/20 text-[#F0B90B]' : 'text-[#848e9c] hover:bg-[#2b3139]'
+                )"
+            >BOLL</button>
         </div>
       </div>
       
