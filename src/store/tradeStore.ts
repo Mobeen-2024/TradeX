@@ -178,6 +178,37 @@ export const cancelOrder = async (id: string) => {
     openOrders.value = openOrders.value.filter(o => o.id !== id);
 };
 
+// Mock History Generator for Demo
+export const generateMockHistory = () => {
+    if (closedTrades.value.length > 0) return;
+    
+    const count = 15;
+    const startPrice = 35000;
+    const trades = [];
+    
+    for (let i = 0; i < count; i++) {
+        const win = Math.random() > 0.4;
+        const pnl = win ? (Math.random() * 500 + 100) : -(Math.random() * 300 + 50);
+        trades.push({
+            id: `mock-${i}`,
+            pair: 'BTC/USDT',
+            type: Math.random() > 0.5 ? 'LONG' : 'SHORT',
+            size: 0.1,
+            entry: startPrice + (i * 100),
+            closePrice: startPrice + (i * 100) + (pnl / 0.1),
+            realizedPnl: pnl,
+            closeTime: Date.now() - (count - i) * 3600000,
+            leverage: '20x'
+        });
+    }
+    closedTrades.value = trades;
+};
+
+// Auto-populate for first run
+if (typeof window !== 'undefined') {
+    setTimeout(generateMockHistory, 1000);
+}
+
 // Monitor alerts
 import { watch } from 'vue';
 watch(currentPrice, (newPrice) => {
