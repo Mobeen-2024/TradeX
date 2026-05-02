@@ -14,6 +14,7 @@ export function useChartData() {
     });
     
     let currentWs: WebSocket | null = null;
+    let tradeWs: WebSocket | null = null;
 
     const fetchKlines = async (symbol: string, interval: string) => {
         const binanceInterval = interval === '1s' ? '1s' : interval.toLowerCase();
@@ -93,14 +94,33 @@ export function useChartData() {
         };
     };
 
+    const subscribeTrades = (symbol: string, onTrade: (trade: any) => void) => {
+        if (tradeWs) tradeWs.close();
+        
+        const lowSymbol = symbol.toLowerCase();
+        tradeWs = new WebSocket(`wss://stream.binance.com:9443/ws/${lowSymbol}@aggTrade`);
+        
+        tradeWs.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            onTrade({
+                p: parseFloat(data.p),
+                q: parseFloat(data.q),
+                m: data.m, // Buyer is maker? true means SELL (hit bid), false means BUY (hit ask)
+                t: data.T
+            });
+        };
+    };
+
     onUnmounted(() => {
         if (currentWs) currentWs.close();
+        if (tradeWs) tradeWs.close();
     });
 
     return {
         allCandles,
         lastPriceData,
         fetchKlines,
-        subscribeKline
+        subscribeKline,
+        subscribeTrades
     };
 }

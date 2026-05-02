@@ -24,7 +24,7 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:symbol', 'update:interval', 'update:isSynced', 'remove']);
 
-const { allCandles, lastPriceData, fetchKlines, subscribeKline } = useChartData();
+const { allCandles, lastPriceData, fetchKlines, subscribeKline, subscribeTrades } = useChartData();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
 let chart: IChartApi | null = null;
@@ -242,10 +242,55 @@ const internalSubscribe = () => {
         lineSeries?.update({ time: update.time, value: update.close });
         volumeSeries?.update({ time: update.time, value: parseFloat(k.v), color: update.close >= update.open ? 'rgba(14, 203, 129, 0.2)' : 'rgba(246, 70, 93, 0.2)' });
         updateIndicators(allCandles.value);
+        
+        // For historical footprints, if they don't exist yet, we can mock them.
+        // But for the active kline, we rely on the trades stream.
+        if (!footprintDataMap.value.has(update.time as number)) {
+            const allTimes = Array.from(footprintDataMap.value.keys()).sort((a, b) => a - b);
+            const prevFp = allTimes.length > 0 ? footprintDataMap.value.get(allTimes[allTimes.length - 1]) : null;
+            
+            // Initialize empty footprint for the new kline
+            footprintDataMap.value.set(update.time as number, {
+                time: update.time as number,
+                isUp: update.close >= update.open,
+                cells: [],
+                delta: 0,
+                maxVolume: 0,
+                hvnPrice: 0,
+                isMultipleHVN: false
+            });
+        } else {
+            const fp = footprintDataMap.value.get(update.time as number);
+            fp.isUp = update.close >= update.open;
+        }
+        
+        renderHeatmap();
+    });
+
+    subscribeTrades(props.symbol, (trade) => {
+        if (!showFootprint.value || allCandles.value.length === 0) return;
+        
+        const lastCandle = allCandles.value[allCandles.value.length - 1];
+        let currentFp = footprintDataMap.value.get(lastCandle.time as number);
+        
+        if (!currentFp) {
+            currentFp = {
+                time: lastCandle.time as number,
+                isUp: lastCandle.close >= lastCandle.open,
+                cells: [],
+                delta: 0,
+                maxVolume: 0,
+                hvnPrice: 0,
+                isMultipleHVN: false
+            };
+            footprintDataMap.value.set(lastCandle.time as number, currentFp);
+        }
+
         const allTimes = Array.from(footprintDataMap.value.keys()).sort((a, b) => a - b);
-        const currIdx = allTimes.indexOf(update.time as number);
+        const currIdx = allTimes.indexOf(lastCandle.time as number);
         const prevFp = currIdx > 0 ? footprintDataMap.value.get(allTimes[currIdx - 1]) : null;
-        footprintDataMap.value.set(update.time as number, FootprintRenderer.generateMock(update, parseFloat(k.v), footprintSettings.value, prevFp));
+
+        FootprintRenderer.updateLiveFootprint(currentFp, trade, footprintSettings.value, prevFp);
         renderHeatmap();
     });
 };

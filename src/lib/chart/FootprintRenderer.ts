@@ -81,6 +81,67 @@ export class FootprintRenderer {
             }
         }
         
+        const fp: FootprintData = {
+            time: candle.time as number,
+            isUp: candle.close >= candle.open,
+            cells,
+            delta,
+            maxVolume: maxVol,
+            hvnPrice,
+            isMultipleHVN: prevFp ? prevFp.hvnPrice === hvnPrice : false
+        };
+
+        this.recalculateAnalytics(fp, settings);
+        return fp;
+    }
+
+    static updateLiveFootprint(fp: FootprintData, trade: any, settings: any, prevFp?: FootprintData) {
+        const tickSize = settings.tickSize || 10;
+        const targetPrice = Math.round(trade.p / tickSize) * tickSize;
+        
+        let cell = fp.cells.find(c => c.price === targetPrice);
+        if (!cell) {
+            cell = {
+                price: targetPrice,
+                bidVolume: 0,
+                askVolume: 0,
+                totalVolume: 0,
+                isBuyImbalance: false,
+                isSellImbalance: false,
+                isPartOfStackedBuy: false,
+                isPartOfStackedSell: false,
+                isUnfinishedBusiness: false
+            };
+            fp.cells.push(cell);
+            fp.cells.sort((a, b) => b.price - a.price);
+        }
+        
+        if (trade.m) cell.bidVolume += trade.q;
+        else cell.askVolume += trade.q;
+        cell.totalVolume += trade.q;
+        
+        if (cell.totalVolume > fp.maxVolume) {
+            fp.maxVolume = cell.totalVolume;
+            fp.hvnPrice = cell.price;
+        }
+        
+        fp.delta = fp.cells.reduce((acc, c) => acc + (c.askVolume - c.bidVolume), 0);
+        fp.isMultipleHVN = prevFp ? prevFp.hvnPrice === fp.hvnPrice : false;
+
+        this.recalculateAnalytics(fp, settings);
+    }
+
+    private static recalculateAnalytics(fp: FootprintData, settings: any) {
+        const cells = fp.cells;
+        // Reset flags
+        cells.forEach(c => {
+            c.isBuyImbalance = false;
+            c.isSellImbalance = false;
+            c.isPartOfStackedBuy = false;
+            c.isPartOfStackedSell = false;
+            c.isUnfinishedBusiness = false;
+        });
+
         // Imbalances Logic
         const ratio = settings.imbalanceRatio || 3;
         for (let i = 0; i < cells.length - 1; i++) {
@@ -95,35 +156,21 @@ export class FootprintRenderer {
 
         // Stacked Imbalances Logic
         const stackCount = settings.stackedImbalanceCount || 3;
-        let buyStack = 0;
-        let sellStack = 0;
-
+        let buyStack = 0, sellStack = 0;
         for (let i = 0; i < cells.length; i++) {
-            if (cells[i].isBuyImbalance) {
-                buyStack++;
-            } else {
-                if (buyStack >= stackCount) {
-                    for (let j = i - buyStack; j < i; j++) cells[j].isPartOfStackedBuy = true;
-                }
+            if (cells[i].isBuyImbalance) buyStack++;
+            else {
+                if (buyStack >= stackCount) for (let j = i - buyStack; j < i; j++) cells[j].isPartOfStackedBuy = true;
                 buyStack = 0;
             }
-
-            if (cells[i].isSellImbalance) {
-                sellStack++;
-            } else {
-                if (sellStack >= stackCount) {
-                    for (let j = i - sellStack; j < i; j++) cells[j].isPartOfStackedSell = true;
-                }
+            if (cells[i].isSellImbalance) sellStack++;
+            else {
+                if (sellStack >= stackCount) for (let j = i - sellStack; j < i; j++) cells[j].isPartOfStackedSell = true;
                 sellStack = 0;
             }
         }
-        // Final check for stacks at end of candle
-        if (buyStack >= stackCount) {
-            for (let j = cells.length - buyStack; j < cells.length; j++) cells[j].isPartOfStackedBuy = true;
-        }
-        if (sellStack >= stackCount) {
-            for (let j = cells.length - sellStack; j < cells.length; j++) cells[j].isPartOfStackedSell = true;
-        }
+        if (buyStack >= stackCount) for (let j = cells.length - buyStack; j < cells.length; j++) cells[j].isPartOfStackedBuy = true;
+        if (sellStack >= stackCount) for (let j = cells.length - sellStack; j < cells.length; j++) cells[j].isPartOfStackedSell = true;
 
         // Unfinished Business Logic
         if (cells.length > 0) {
@@ -132,16 +179,6 @@ export class FootprintRenderer {
             if (top.bidVolume > 0) top.isUnfinishedBusiness = true;
             if (bottom.askVolume > 0) bottom.isUnfinishedBusiness = true;
         }
-        
-        return {
-            time: candle.time as number,
-            isUp: candle.close >= candle.open,
-            cells,
-            delta,
-            maxVolume: maxVol,
-            hvnPrice,
-            isMultipleHVN: prevFp ? prevFp.hvnPrice === hvnPrice : false
-        };
     }
 
     static render(
