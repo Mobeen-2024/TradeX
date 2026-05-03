@@ -86,11 +86,15 @@ const icons: Record<string, any> = {
 <template>
   <div class="flex h-[100dvh] w-full bg-[#0b0e11] overflow-hidden text-[#EAECEF] text-sm flex-col md:flex-row relative">
     
-    <!-- Magic UI Style Animated Background (Subtle Grid + Glow) -->
-    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-      <div class="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
-      <div class="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#F0B90B] opacity-[0.03] blur-[150px] rounded-full mix-blend-screen animate-pulse"></div>
-      <div class="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-[#0ecb81] opacity-[0.02] blur-[150px] rounded-full mix-blend-screen animate-pulse delay-1000"></div>
+    <!-- Premium Dynamic Glassmorphism Background -->
+    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505]">
+      <!-- Animated Mesh Gradient Orbs -->
+      <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-gradient-to-br from-[#F0B90B]/10 to-[#F0B90B]/5 blur-[120px] rounded-full mix-blend-screen animate-float"></div>
+      <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-gradient-to-tl from-[#0ecb81]/10 to-[#0ecb81]/5 blur-[150px] rounded-full mix-blend-screen animate-float" style="animation-delay: 2s;"></div>
+      <div class="absolute top-[20%] right-[20%] w-[30%] h-[30%] bg-gradient-to-tr from-[#627EEA]/10 to-transparent blur-[100px] rounded-full mix-blend-screen animate-pulse" style="animation-duration: 8s;"></div>
+      
+      <!-- Subtle Tech Grid -->
+      <div class="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_40%,transparent_100%)]"></div>
     </div>
 
     <!-- Main Content Container with z-index to overlay background -->
@@ -184,7 +188,7 @@ const icons: Record<string, any> = {
               { name: 'Binance Coin', symbol: 'BNB', price: '580.44', change: '+0.15%', icon: 'TrendingUp', color: '#F3BA2F' },
               { name: 'Cardano', symbol: 'ADA', price: '0.45', change: '-1.12%', icon: 'Signal', color: '#0033AD' },
               { name: 'Ripple', symbol: 'XRP', price: '0.62', change: '+0.88%', icon: 'Activity', color: '#23292F' }
-            ]" :key="pair.symbol" class="bg-[#161a1e] border border-[#2b3139] p-4 rounded-xl hover:border-[#F0B90B]/30 transition-all cursor-pointer group hover:bg-[#1e2329] relative overflow-hidden">
+            ]" :key="pair.symbol" class="bg-[#161a1e]/60 backdrop-blur-md border border-[#2b3139]/50 p-4 rounded-2xl hover:border-[#F0B90B]/40 transition-all duration-300 cursor-pointer group hover:bg-[#1e2329]/80 relative overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1">
               <!-- Glow Effect -->
               <div class="absolute -right-4 -top-4 w-16 h-16 opacity-10 blur-2xl rounded-full" :style="`background-color: ${pair.color}`"></div>
               

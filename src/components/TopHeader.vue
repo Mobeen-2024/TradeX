@@ -27,7 +27,7 @@ const emit = defineEmits(['open-settings']);
 </script>
 
 <template>
-  <header class="h-[60px] border-b border-dash-border flex items-center justify-between pl-4 pr-4 shrink-0 z-10 bg-[#161a1e] text-[#848e9c]">
+  <header class="h-[60px] border-b border-white/5 flex items-center justify-between pl-4 pr-4 shrink-0 z-10 bg-[#0b0e11]/60 backdrop-blur-2xl text-[#848e9c]">
     <!-- Left Section -->
     <div class="flex items-center h-full overflow-hidden">
       <!-- Removed Logo per user request -->

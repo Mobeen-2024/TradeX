@@ -442,7 +442,7 @@ onUnmounted(() => {
 <template>
   <div class="flex flex-row gap-1 sm:gap-2 h-[460px] lg:h-full w-full">
     <!-- Left: Order Book / Trades Panel -->
-    <div class="bg-[#0b0e11] border border-[#1e2329] rounded flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0">
+    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0">
         <!-- View Mode Toggle -->
         <div class="flex items-center justify-between px-1 sm:px-2 py-1.5 sm:py-2 border-b border-[#1e2329] bg-[#161a1e]/30">
           <div class="flex items-center gap-1 sm:gap-2">
@@ -527,7 +527,7 @@ onUnmounted(() => {
       </div>
 
     <!-- Right: Order Panel -->
-    <div class="bg-[#0b0e11] border border-[#1e2329] rounded p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-y-auto no-scrollbar">
+    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-y-auto no-scrollbar">
       <!-- Header -->
       <div class="flex items-center justify-between mb-2 sm:mb-4 border-b border-[#1e2329] pb-2 sm:pb-3 transition-all duration-300">
         <span class="text-white text-[17px] leading-[22.2857px] font-mono font-normal pl-[10px] text-left no-underline truncate">

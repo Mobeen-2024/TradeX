@@ -15,7 +15,7 @@
   --color-dash-danger: #f6465d;
   --color-dash-danger-hover: #c9384b;
 
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Space Grotesk", "Inter", system-ui, -apple-system, sans-serif;
 
   --animate-shimmer: shimmer 2s linear infinite;
   --animate-float: float 6s ease-in-out infinite;

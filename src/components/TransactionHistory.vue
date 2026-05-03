@@ -28,7 +28,7 @@ const formatDate = (date: any) => {
 </script>
 
 <template>
-  <div class="bg-[#0b0e11] flex-1 flex flex-col min-h-0 sm:border sm:border-white/5 sm:rounded-2xl overflow-hidden font-sans shadow-2xl">
+  <div class="bg-[#0b0e11]/60 backdrop-blur-2xl flex-1 flex flex-col min-h-0 sm:border sm:border-white/5 sm:rounded-[16px] overflow-hidden font-sans shadow-2xl">
     
     <!-- Header Tabs -->
     <div class="flex items-center justify-between px-4 h-[48px] border-b border-white/5 shrink-0 bg-[#161a1e]/30 backdrop-blur-md">
@@ -70,7 +70,7 @@ const formatDate = (date: any) => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto no-scrollbar bg-[#0b0e11]">
+    <div class="flex-1 overflow-y-auto no-scrollbar bg-transparent">
       
       <!-- Positions Tab -->
       <div v-if="activeTab === 0" class="flex flex-col">

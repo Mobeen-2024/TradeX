@@ -378,7 +378,7 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0b0e11] text-[#EAECEF] overflow-hidden select-none border border-[#2b3139]/50 hover:border-[#F0B90B]/30 transition-colors rounded-xl m-1 shadow-2xl relative">
+  <div class="flex flex-col h-full bg-[#0b0e11]/60 backdrop-blur-md text-[#EAECEF] overflow-hidden select-none border border-white/5 hover:border-[#F0B90B]/30 transition-colors rounded-[16px] m-1 shadow-2xl relative">
     
     <div v-if="hoveredCell && showFootprint" 
          class="absolute z-50 bg-[#161a1e]/95 backdrop-blur-md border border-white/10 p-2.5 rounded-lg shadow-2xl pointer-events-none text-[10px] min-w-[120px]"
@@ -424,7 +424,7 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
 
     <ChartLegend :data="lastPriceData" />
 
-    <div class="flex-grow flex relative overflow-hidden bg-[#0b0e11]">
+    <div class="flex-grow flex relative overflow-hidden bg-transparent">
         <div class="flex-grow relative h-full overflow-hidden">
             <canvas :id="`heatmap-${panelId}`" class="absolute inset-0 pointer-events-none z-10 w-full h-full"></canvas>
             <div ref="chartContainer" class="absolute inset-0"></div>

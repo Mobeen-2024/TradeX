@@ -21,7 +21,7 @@ const getGridClass = (count: number) => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0b0e11] overflow-hidden">
+  <div class="flex flex-col h-full bg-transparent overflow-hidden">
     <!-- Workspace Toolbar -->
     <div class="flex items-center justify-between px-4 py-2 border-b border-[#2b3139] bg-[#161a1e]/50 backdrop-blur-xl">
         <div class="flex items-center gap-3">
@@ -50,7 +50,7 @@ const getGridClass = (count: number) => {
     <!-- Chart Grid -->
     <div 
         :class="cn(
-            'flex-1 grid gap-1 p-1 bg-[#0b0e11] transition-all duration-500 ease-in-out overflow-y-auto md:overflow-hidden',
+            'flex-1 grid gap-1 p-1 bg-transparent transition-all duration-500 ease-in-out overflow-y-auto md:overflow-hidden',
             getGridClass(workspacePanels.length)
         )"
     >
