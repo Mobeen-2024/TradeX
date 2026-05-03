@@ -23,14 +23,25 @@ const saveDb = () => {
   }
 };
 
-let globalPrice = 36000.00;
+let globalPrice = 76222.65;
+let openPrice = 75000.00;
+let high24h = 78500.00;
+let low24h = 73800.00;
+let volBtc = 42512.14;
+let volUsdt = 3180000000;
+
 let openOrders: any[] = [];
 
 setInterval(() => {
-    const volatility = globalPrice * 0.001;
+    const volatility = globalPrice * 0.0001; // reduced volatility slightly
     globalPrice += (Math.random() - 0.5) * volatility;
+    if (globalPrice > high24h) high24h = globalPrice;
+    if (globalPrice < low24h) low24h = globalPrice;
+    
     const mark = Number(globalPrice.toFixed(2));
     
+    let dbChanged = false;
+
     // 1. Process Open Orders (Stop Loss / Take Profit / Trailing)
     openOrders = openOrders.filter(order => {
         let triggered = false;
@@ -63,6 +74,7 @@ setInterval(() => {
                 liveDeltaPercent: 0,
                 protocolLimits: ['-', '-']
             });
+            dbChanged = true;
             return false; // Remove from open orders
         }
         return true;
@@ -76,7 +88,7 @@ setInterval(() => {
        return { ...pos, mark, liveDelta, liveDeltaPercent };
     });
     
-    if (openOrders.length > 0 || positions.length > 0) saveDb();
+    if (dbChanged) saveDb();
 }, 500);
 
 async function start() {
@@ -169,6 +181,14 @@ async function start() {
                   amount: Number((Math.random() * 2).toFixed(4)),
                   side: Math.random() > 0.5 ? 'buy' : 'sell',
                   timestamp: Date.now(),
+                  ticker: {
+                      p: (globalPrice - openPrice).toFixed(2),
+                      P: (((globalPrice - openPrice) / openPrice) * 100).toFixed(2),
+                      h: high24h.toFixed(2),
+                      l: low24h.toFixed(2),
+                      v: volBtc.toFixed(2),
+                      q: volUsdt.toFixed(2)
+                  },
                   orderBook: {
                       asks,
                       bids

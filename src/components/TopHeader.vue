@@ -3,9 +3,24 @@ import { ChevronDown, Settings, PlayCircle, ArrowUp, ArrowDown, Search, Download
 import { cn } from '../lib/utils';
 import { currentPrice, previousPrice, marketData, isLiveMode } from '../store/tradeStore';
 import { activeNotifications, notificationHistory, markAsRead, clearNotifications } from '../store/alertStore';
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 
 const showNotifications = ref(false);
+const currentTime = ref('');
+let timer: any;
+
+onMounted(() => {
+  const updateTime = () => {
+    const d = new Date();
+    currentTime.value = d.toLocaleTimeString('en-US', { hour12: false });
+  };
+  updateTime();
+  timer = setInterval(updateTime, 1000);
+});
+
+onUnmounted(() => {
+  clearInterval(timer);
+});
 
 defineProps<{ title?: string }>();
 const emit = defineEmits(['open-settings']);
@@ -70,6 +85,9 @@ const emit = defineEmits(['open-settings']);
 
     <!-- Right Section -->
     <div class="flex items-center gap-2 lg:gap-4 ml-auto">
+      <div class="flex items-center text-[#848e9c] text-xs font-mono px-2">
+        {{ currentTime }}
+      </div>
       <div class="hidden sm:flex items-center gap-1 hover:bg-[#2b3139] px-2 py-1 rounded cursor-pointer transition-colors">
         <Search class="w-4 h-4" />
       </div>

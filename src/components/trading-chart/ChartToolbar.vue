@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, Link2, Link2Off, X, GripHorizontal, ChevronDown, Footprints } from 'lucide-vue-next';
+import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, Link2, Link2Off, X, GripHorizontal, ChevronDown, Footprints, Activity } from 'lucide-vue-next';
 import { cn } from '../../lib/utils';
 
 defineProps<{
@@ -12,6 +12,7 @@ defineProps<{
     activeIndicators: string[];
     chartType: 'candle' | 'line';
     showVolume: boolean;
+    showTape: boolean;
     panelId?: string;
 }>();
 
@@ -24,6 +25,7 @@ defineEmits([
     'toggleIndicator',
     'update:chartType',
     'toggleVolume',
+    'toggleTape',
     'remove'
 ]);
 </script>
@@ -73,6 +75,16 @@ defineEmits([
             <Settings2 class="w-3 h-3" />
           </button>
         </div>
+
+        <button 
+            @click="$emit('toggleTape')"
+            :class="cn(
+              'px-1.5 py-1 rounded text-[9px] font-bold transition-all ml-1',
+              showTape ? 'bg-[#F0B90B]/20 text-[#F0B90B]' : 'text-[#848e9c] hover:bg-[#2b3139]'
+            )"
+          >
+            <Activity class="w-3.5 h-3.5" />
+        </button>
 
         <button 
           v-for="ind in ['EMA', 'RSI', 'BOLL']"

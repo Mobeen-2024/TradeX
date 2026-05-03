@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { activePositions, selectedPrice } from '../store/tradeStore';
+import { activePositions, selectedPrice, openOrders, alerts, createAlert, currentPrice, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 import { globalSymbol, workspacePanels, activeTool, setGlobalTool } from '../store/workspaceStore';
 import { IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine, createChart } from 'lightweight-charts';
 import { calculateEMA, calculateRSI, calculateBollingerBands } from '../utils/indicators';
-import { alerts, createAlert, currentPrice, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 import { useChartData } from '../composables/useChartData';
 import { FootprintRenderer } from '../lib/chart/FootprintRenderer';
 import { DrawingManager } from '../lib/chart/DrawingManager';
+import { OrderLinesRenderer } from '../lib/chart/OrderLinesRenderer';
 
 // Sub-components
 import ChartToolbar from './trading-chart/ChartToolbar.vue';
 import ChartLegend from './trading-chart/ChartLegend.vue';
 import DrawingToolbar from './trading-chart/DrawingToolbar.vue';
 import FootprintSettings from './trading-chart/FootprintSettings.vue';
+import TimeAndSales from './trading-chart/TimeAndSales.vue';
 
 const props = defineProps<{
     panelId?: string;
@@ -41,6 +42,8 @@ const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
 const activeIndicators = ref<string[]>([]);
 const showFootprint = ref(false);
+const showTape = ref(false);
+const recentTrades = ref<any[]>([]);
 const footprintDataMap = ref<Map<number, any>>(new Map());
 const footprintSettings = ref({
     tickSize: 10,
@@ -68,6 +71,10 @@ let drawingManager: DrawingManager | null = null;
 let riskSlLine: IPriceLine | null = null;
 let isDraggingSl = false;
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
+
+watch([activePositions, openOrders, alerts, currentPrice], () => {
+    renderHeatmap();
+}, { deep: true });
 
 const updateIndicators = (candlestick: CandlestickData[]) => {
     if (!chart || !candlestick.length) return;
@@ -201,6 +208,18 @@ const renderHeatmap = () => {
     });
 
     renderDrawingsInternal(ctx);
+
+    // 2. Render Order Lines (Positions, Orders, Alerts)
+    OrderLinesRenderer.render(
+        ctx, 
+        chart, 
+        candleSeries, 
+        activePositions.value, 
+        openOrders.value, 
+        alerts.value, 
+        currentPrice.value,
+        canvas.width
+    );
 };
 
 const renderDrawingsInternal = (ctx: CanvasRenderingContext2D) => {
@@ -268,6 +287,10 @@ const internalSubscribe = () => {
     });
 
     subscribeTrades(props.symbol, (trade) => {
+        // Update Recent Trades (Tape)
+        recentTrades.value.unshift(trade);
+        if (recentTrades.value.length > 50) recentTrades.value.pop();
+
         if (!showFootprint.value || allCandles.value.length === 0) return;
         
         const lastCandle = allCandles.value[allCandles.value.length - 1];
@@ -385,11 +408,13 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
     <ChartToolbar 
         :symbol="symbol" :interval="interval" :intervals="intervals" :isSynced="isSynced"
         :showFootprint="showFootprint" :showFootprintSettings="showFootprintSettings"
+        :showTape="showTape"
         :activeIndicators="activeIndicators" :chartType="chartType" :showVolume="showVolume" :panelId="panelId"
         @update:symbol="s => emit('update:symbol', s)"
         @update:interval="i => emit('update:interval', i)"
         @update:isSynced="v => emit('update:isSynced', v)"
         @toggleFootprint="() => { showFootprint = !showFootprint; renderHeatmap(); }"
+        @toggleTape="() => showTape = !showTape"
         @toggleFootprintSettings="showFootprintSettings = !showFootprintSettings"
         @toggleIndicator="toggleIndicator"
         @update:chartType="t => chartType = t"
@@ -399,9 +424,14 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
 
     <ChartLegend :data="lastPriceData" />
 
-    <div class="flex-grow relative overflow-hidden">
-        <canvas :id="`heatmap-${panelId}`" class="absolute inset-0 pointer-events-none z-10 w-full h-full"></canvas>
-        <div ref="chartContainer" class="w-full h-full"></div>
+    <div class="flex-grow flex relative overflow-hidden bg-[#0b0e11]">
+        <div class="flex-grow relative h-full overflow-hidden">
+            <canvas :id="`heatmap-${panelId}`" class="absolute inset-0 pointer-events-none z-10 w-full h-full"></canvas>
+            <div ref="chartContainer" class="absolute inset-0"></div>
+        </div>
+        <transition enter-active-class="transition-all duration-300 ease-out" enter-from-class="translate-x-full opacity-0" enter-to-class="translate-x-0 opacity-100" leave-active-class="transition-all duration-300 ease-in" leave-from-class="translate-x-0 opacity-100" leave-to-class="translate-x-full opacity-0">
+            <TimeAndSales v-if="showTape" :trades="recentTrades" :minLargeTrade="footprintSettings.minTradeFilter" class="shrink-0 z-20" />
+        </transition>
     </div>
   </div>
 </template>

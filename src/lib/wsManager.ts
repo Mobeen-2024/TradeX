@@ -55,12 +55,12 @@ class WebSocketManager {
                     const tickerData = {
                         s: 'BTCUSDT',
                         c: data.price.toString(),
-                        p: '0.00',
-                        P: '0.00',
-                        h: data.price.toString(),
-                        l: data.price.toString(),
-                        v: '0',
-                        q: '0'
+                        p: data.ticker?.p || '0.00',
+                        P: data.ticker?.P || '0.00',
+                        h: data.ticker?.h || data.price.toString(),
+                        l: data.ticker?.l || data.price.toString(),
+                        v: data.ticker?.v || '0',
+                        q: data.ticker?.q || '0'
                     };
                     this.dispatch('btcusdt@ticker', tickerData);
 

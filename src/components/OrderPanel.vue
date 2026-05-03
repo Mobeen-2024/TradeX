@@ -14,6 +14,9 @@ const priceChangeClass = ref('');
 const isRiskMode = isRiskModeActive;
 const riskPercentOfBalance = ref(1); // 1% default
 const riskAmountAbsolute = ref(100); // $100 default
+
+const currentTime = ref('');
+let timer: any;
 const riskInputMode = ref<'percent' | 'absolute'>('percent');
 
 // Extra specific fields for complex types
@@ -421,6 +424,19 @@ watch(tpSl, (val) => {
   }
 });
 
+onMounted(() => {
+  const updateTime = () => {
+    const d = new Date();
+    currentTime.value = d.toLocaleTimeString('en-US', { hour12: false });
+  };
+  updateTime();
+  timer = setInterval(updateTime, 1000);
+});
+
+onUnmounted(() => {
+  clearInterval(timer);
+});
+
 </script>
 
 <template>
@@ -428,19 +444,24 @@ watch(tpSl, (val) => {
     <!-- Left: Order Book / Trades Panel -->
     <div class="bg-[#0b0e11] border border-[#1e2329] rounded flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0">
         <!-- View Mode Toggle -->
-        <div class="flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-1.5 sm:py-2 border-b border-[#1e2329] bg-[#161a1e]/30">
-          <button 
-            @click="viewMode = 'orderbook'"
-            :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'orderbook' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
-          >
-            Order Book
-          </button>
-          <button 
-            @click="viewMode = 'depth'"
-            :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'depth' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
-          >
-            Depth Chart
-          </button>
+        <div class="flex items-center justify-between px-1 sm:px-2 py-1.5 sm:py-2 border-b border-[#1e2329] bg-[#161a1e]/30">
+          <div class="flex items-center gap-1 sm:gap-2">
+            <button 
+              @click="viewMode = 'orderbook'"
+              :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'orderbook' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
+            >
+              Order Book
+            </button>
+            <button 
+              @click="viewMode = 'depth'"
+              :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'depth' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
+            >
+              Depth Chart
+            </button>
+          </div>
+          <div class="text-[#848e9c] text-[9px] sm:text-[10px] font-mono mr-1">
+            {{ currentTime }}
+          </div>
         </div>
 
         <div v-if="viewMode === 'orderbook'" class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
