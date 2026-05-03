@@ -549,18 +549,18 @@ onUnmounted(() => {
       </div>
 
       <!-- Buy / Sell Tabs -->
-      <div class="flex rounded bg-[#1e2329] p-0.5 mb-2 sm:mb-4">
+      <div class="flex rounded-xl bg-[#0b0e11]/50 backdrop-blur-md border border-white/5 p-1 mb-2 sm:mb-4">
         <button 
           @click="orderSide = 'Buy'"
-          class="flex-1 py-1 sm:py-1.5 rounded font-bold text-xs sm:text-sm transition-colors text-center"
-          :class="orderSide === 'Buy' ? 'bg-[#2ebd85] text-white' : 'text-[#848e9c] hover:text-white'"
+          class="flex-1 py-1.5 sm:py-2 rounded-lg font-black text-xs uppercase tracking-wider transition-all duration-300 text-center"
+          :class="orderSide === 'Buy' ? 'bg-[#0ecb81] text-[#0b0e11] shadow-lg shadow-[#0ecb81]/20' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'"
         >
           Buy
         </button>
         <button 
           @click="orderSide = 'Sell'"
-          class="flex-1 py-1 sm:py-1.5 rounded font-bold text-xs sm:text-sm transition-colors text-center"
-          :class="orderSide === 'Sell' ? 'bg-[#f6465d] text-white' : 'text-[#848e9c] hover:text-white'"
+          class="flex-1 py-1.5 sm:py-2 rounded-lg font-black text-xs uppercase tracking-wider transition-all duration-300 text-center"
+          :class="orderSide === 'Sell' ? 'bg-[#f6465d] text-white shadow-lg shadow-[#f6465d]/20' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'"
         >
           Sell
         </button>
@@ -897,10 +897,15 @@ onUnmounted(() => {
       <button 
         @click="executeTrade"
         :disabled="!isFormValid"
-        class="w-full py-2 sm:py-3 rounded text-[#181a20] font-bold text-xs sm:text-sm tracking-widest sm:tracking-wide transition-all transform active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-        :class="orderSide === 'Buy' ? 'bg-[#2ebd85] hover:bg-[#2ebd85]/90' : 'bg-[#f6465d] hover:bg-[#f6465d]/90 text-white'"
+        class="w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm tracking-[0.1em] uppercase transition-all duration-300 transform active:scale-[0.97] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed shadow-lg overflow-hidden group relative mt-4"
+        :class="orderSide === 'Buy' ? 'bg-gradient-to-r from-[#0ecb81] to-[#0ecb81]/80 text-[#0b0e11] shadow-[#0ecb81]/20' : 'bg-gradient-to-r from-[#f6465d] to-[#f6465d]/80 text-white shadow-[#f6465d]/20'"
       >
-        {{ orderSide === 'Buy' ? 'Buy' : 'Sell' }}
+        <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <span class="relative z-10 flex items-center justify-center gap-2">
+          {{ orderSide === 'Buy' ? 'Open Long' : 'Open Short' }}
+          <ArrowUp v-if="orderSide === 'Buy'" class="w-4 h-4" />
+          <ArrowDown v-else class="w-4 h-4" />
+        </span>
       </button>
 
       <!-- TP/SL Popup Overlay -->

@@ -32,35 +32,37 @@ const formatDate = (date: any) => {
     
     <!-- Header Tabs -->
     <div class="flex items-center justify-between px-4 h-[48px] border-b border-white/5 shrink-0 bg-[#161a1e]/30 backdrop-blur-md">
-      <div class="flex items-center gap-4 sm:gap-8 h-full overflow-x-auto no-scrollbar">
+      <div class="flex items-center gap-2 h-full overflow-x-auto no-scrollbar">
         <button 
           @click="activeTab = 0"
           :class="cn(
-            'h-full relative transition-all duration-300 flex items-center group',
-            activeTab === 0 ? 'text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]'
+            'px-4 h-[32px] rounded-lg text-xs font-black uppercase tracking-widest transition-all duration-300 relative overflow-hidden flex items-center',
+            activeTab === 0 ? 'bg-white/10 text-[#F0B90B] shadow-inner' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'
           )"
         >
-          <span class="text-[13px] font-bold tracking-tight">Positions <span class="font-normal opacity-60">({{ activePositions.length }})</span></span>
+          Positions
+          <span class="ml-2 text-[10px] opacity-40">({{ activePositions.length }})</span>
           <div v-show="activeTab === 0" class="absolute bottom-0 left-0 right-0 h-[2px] bg-[#F0B90B] shadow-[0_0_10px_#F0B90B]"></div>
         </button>
         <button 
           @click="activeTab = 1"
           :class="cn(
-            'h-full relative transition-all duration-300 flex items-center group',
-            activeTab === 1 ? 'text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]'
+            'px-4 h-[32px] rounded-lg text-xs font-black uppercase tracking-widest transition-all duration-300 relative overflow-hidden flex items-center',
+            activeTab === 1 ? 'bg-white/10 text-[#F0B90B] shadow-inner' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'
           )"
         >
-          <span class="text-[13px] font-bold tracking-tight">Open Orders <span class="font-normal opacity-60">({{ openOrders.length }})</span></span>
+          Open Orders
+          <span class="ml-2 text-[10px] opacity-40">({{ openOrders.length }})</span>
           <div v-show="activeTab === 1" class="absolute bottom-0 left-0 right-0 h-[2px] bg-[#F0B90B] shadow-[0_0_10px_#F0B90B]"></div>
         </button>
         <button 
           @click="activeTab = 2"
           :class="cn(
-            'h-full relative transition-all duration-300 flex items-center group',
-            activeTab === 2 ? 'text-[#F0B90B]' : 'text-[#848e9c] hover:text-[#EAECEF]'
+            'px-4 h-[32px] rounded-lg text-xs font-black uppercase tracking-widest transition-all duration-300 relative overflow-hidden flex items-center',
+            activeTab === 2 ? 'bg-white/10 text-[#F0B90B] shadow-inner' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'
           )"
         >
-          <span class="text-[13px] font-bold tracking-tight">Performance</span>
+          Performance
           <div v-show="activeTab === 2" class="absolute bottom-0 left-0 right-0 h-[2px] bg-[#F0B90B] shadow-[0_0_10px_#F0B90B]"></div>
         </button>
       </div>
@@ -88,7 +90,7 @@ const formatDate = (date: any) => {
             class="flex flex-col p-4 sm:p-5 hover:bg-white/[0.02] transition-colors relative group"
           >
             <!-- Badge Status -->
-            <div class="absolute top-4 right-4 sm:top-5 sm:right-5 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#0ecb81]/10 border border-[#0ecb81]/20">
+            <div class="absolute top-4 right-4 sm:top-5 sm:right-5 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#0ecb81]/10 border border-[#0ecb81]/20 shadow-[0_0_10px_rgba(14,203,129,0.1)]">
                 <div class="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse"></div>
                 <span class="text-[9px] sm:text-[10px] font-bold text-[#0ecb81] uppercase tracking-tighter">Live</span>
             </div>

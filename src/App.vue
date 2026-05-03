@@ -161,8 +161,8 @@ const icons: Record<string, any> = {
         <div class="flex flex-col gap-6">
           <div class="flex justify-between items-end">
             <div>
-              <h2 class="text-xl sm:text-2xl font-bold text-white">Market Overview</h2>
-              <p class="text-xs text-[#848e9c]">Real-time market performance and top gainers</p>
+              <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight">Market Overview</h2>
+              <p class="text-xs text-[#848e9c] font-medium uppercase tracking-[0.2em] mt-1 opacity-60">Live market analytics and top movers</p>
             </div>
             <div class="hidden sm:flex gap-4">
                <div class="text-right">
@@ -188,7 +188,7 @@ const icons: Record<string, any> = {
               { name: 'Binance Coin', symbol: 'BNB', price: '580.44', change: '+0.15%', icon: 'TrendingUp', color: '#F3BA2F' },
               { name: 'Cardano', symbol: 'ADA', price: '0.45', change: '-1.12%', icon: 'Signal', color: '#0033AD' },
               { name: 'Ripple', symbol: 'XRP', price: '0.62', change: '+0.88%', icon: 'Activity', color: '#23292F' }
-            ]" :key="pair.symbol" class="bg-[#161a1e]/60 backdrop-blur-md border border-[#2b3139]/50 p-4 rounded-2xl hover:border-[#F0B90B]/40 transition-all duration-300 cursor-pointer group hover:bg-[#1e2329]/80 relative overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1">
+            ]" :key="pair.symbol" class="bg-white/5 backdrop-blur-2xl border border-white/5 p-5 rounded-[24px] hover:border-[#F0B90B]/40 transition-all duration-500 cursor-pointer group hover:bg-white/10 relative overflow-hidden hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] hover:-translate-y-2">
               <!-- Glow Effect -->
               <div class="absolute -right-4 -top-4 w-16 h-16 opacity-10 blur-2xl rounded-full" :style="`background-color: ${pair.color}`"></div>
               

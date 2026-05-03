@@ -155,12 +155,12 @@ const emit = defineEmits(['open-settings']);
       <div class="h-6 w-[1px] bg-dash-border mx-1"></div>
       
       <div class="flex items-center gap-3 ml-1">
-        <button class="text-xs font-medium text-[#EAECEF] hover:text-[#F0B90B] transition-colors">Log In</button>
-        <button class="text-xs font-medium bg-[#F0B90B] text-[#161a1e] px-3 py-1 rounded hover:bg-[#FCD535] transition-colors">Register</button>
+        <button class="text-xs font-bold text-[#EAECEF] hover:text-[#F0B90B] transition-all duration-300">Log In</button>
+        <button class="text-xs font-black bg-[#F0B90B] text-[#0b0e11] px-4 py-1.5 rounded-lg hover:bg-[#FCD535] transition-all duration-300 shadow-lg shadow-[#F0B90B]/10 active:scale-95">Register</button>
       </div>
       
-      <div class="flex items-center justify-center w-8 h-8 rounded-full bg-[#2b3139] hover:bg-[#323a43] cursor-pointer ml-1">
-        <User class="w-4 h-4 text-[#EAECEF]" />
+      <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[#F0B90B]/30 cursor-pointer ml-1 transition-all duration-300 group">
+        <User class="w-4 h-4 text-[#EAECEF] group-hover:text-[#F0B90B]" />
       </div>
     </div>
 

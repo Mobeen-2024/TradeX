@@ -121,14 +121,15 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
               @keydown.up.prevent="index > 0 && (($event.target as HTMLElement).previousElementSibling as HTMLElement)?.focus()"
               @keydown.down.prevent="index < navItems.length - 1 && (($event.target as HTMLElement).nextElementSibling as HTMLElement)?.focus()"
               :class="cn(
-                'group/item flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-left font-medium outline-none h-[44px] relative',
+                'group/item flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 text-left font-bold outline-none h-[48px] relative overflow-hidden',
                 activeItem === item.label 
-                  ? 'bg-[#2b3139] text-[#EAECEF]' 
-                  : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-[#2b3139]/50'
+                  ? 'bg-white/10 text-[#F0B90B] shadow-inner border border-white/5' 
+                  : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'
               )"
               :aria-current="activeItem === item.label ? 'page' : undefined"
             >
-              <component :is="item.icon" :class="cn('w-5 h-5 shrink-0 transition-transform duration-200 group-hover/item:scale-110', activeItem === item.label ? 'text-[#F0B90B]' : 'text-[#848e9c]')" />
+              <div v-if="activeItem === item.label" class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#F0B90B] rounded-r-full shadow-[0_0_15px_rgba(240,185,11,0.5)]"></div>
+              <component :is="item.icon" :class="cn('w-5 h-5 shrink-0 transition-all duration-300 group-hover/item:scale-110', activeItem === item.label ? 'text-[#F0B90B] drop-shadow-[0_0_8px_rgba(240,185,11,0.3)]' : 'text-[#848e9c] group-hover/item:text-[#EAECEF]')" />
               
               <span 
                 class="flex-1 transition-opacity duration-300 whitespace-nowrap text-sm"
