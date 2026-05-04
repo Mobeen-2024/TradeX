@@ -6,6 +6,7 @@ import { activeNotifications, notificationHistory, markAsRead, clearNotification
 import { isLoggedIn, userProfile, login, logout } from '../store/authStore';
 import SearchModal from './SearchModal.vue';
 import NotificationHistoryModal from './NotificationHistoryModal.vue';
+import MarketTicker from './MarketTicker.vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 
 const showNotifications = ref(false);
@@ -90,7 +91,8 @@ const emit = defineEmits(['open-settings']);
     </div>
 
     <!-- Right Section -->
-    <div class="flex items-center gap-2 lg:gap-4 ml-auto">
+    <div class="flex items-center gap-3 ml-auto">
+      <MarketTicker />
       <div class="flex items-center text-[#848e9c] text-xs font-mono px-2">
         {{ currentTime }}
       </div>

@@ -248,8 +248,24 @@ async function start() {
          }
       });
 
+      let isAlive = true;
+      connection.on('pong', () => {
+          isAlive = true;
+      });
+
+      const pingInterval = setInterval(() => {
+          if (!isAlive) {
+              clearInterval(interval);
+              clearInterval(pingInterval);
+              return connection.terminate();
+          }
+          isAlive = false;
+          connection.ping();
+      }, 15000);
+
       connection.on('close', () => {
           clearInterval(interval);
+          clearInterval(pingInterval);
           console.log('WS Connection closed');
       });
       connection.on('error', (err) => {
