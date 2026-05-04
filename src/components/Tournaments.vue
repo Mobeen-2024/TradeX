@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Trophy, Clock, Target, Gift, ChevronRight } from 'lucide-vue-next';
+import { cn } from '../lib/utils';
 
 const tournaments = [
   { id: 1, title: 'Global Futures Masters', prizePool: '$500,000', participants: '4,200', timeLeft: '2d 14h', status: 'Active', image: 'bg-gradient-to-br from-[#F0B90B] to-[#917107]' },
