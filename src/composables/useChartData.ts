@@ -62,35 +62,52 @@ export function useChartData() {
         const lowSymbol = symbol.toLowerCase();
         currentWs = new WebSocket(`wss://stream.binance.com:9443/ws/${lowSymbol}@kline_${binanceInterval}`);
         
+        let pendingUpdate: any = null;
+        let pendingK: any = null;
+        let rafId: number | null = null;
+
+        const flushUpdate = () => {
+            if (!pendingUpdate) return;
+            
+            // Update local state
+            const lastIdx = allCandles.value.findIndex(c => c.time === pendingUpdate.time);
+            if (lastIdx !== -1) {
+                allCandles.value[lastIdx] = pendingUpdate;
+            } else {
+                allCandles.value.push(pendingUpdate);
+                if (allCandles.value.length > 1000) allCandles.value.shift();
+            }
+
+            lastPriceData.value = {
+                ...pendingUpdate,
+                volume: parseFloat(pendingK.v),
+                isUp: pendingUpdate.close >= pendingUpdate.open
+            };
+
+            onUpdate(pendingUpdate, pendingK);
+            
+            pendingUpdate = null;
+            pendingK = null;
+            rafId = null;
+        };
+
         currentWs.onmessage = (event) => {
             const data = JSON.parse(event.data);
             const k = data.k;
             if (!k) return;
 
-            const update = {
+            pendingUpdate = {
                 time: (k.t / 1000) as Time,
                 open: parseFloat(k.o),
                 high: parseFloat(k.h),
                 low: parseFloat(k.l),
                 close: parseFloat(k.c)
             };
+            pendingK = k;
 
-            // Update local state
-            const lastIdx = allCandles.value.findIndex(c => c.time === update.time);
-            if (lastIdx !== -1) {
-                allCandles.value[lastIdx] = update;
-            } else {
-                allCandles.value.push(update);
-                if (allCandles.value.length > 1000) allCandles.value.shift();
+            if (!rafId) {
+                rafId = requestAnimationFrame(flushUpdate);
             }
-
-            lastPriceData.value = {
-                ...update,
-                volume: parseFloat(k.v),
-                isUp: update.close >= update.open
-            };
-
-            onUpdate(update, k);
         };
     };
 

@@ -129,3 +129,27 @@
   background: #474d57;
 }
 
+
+/* ── Hardware-Accelerated Glassmorphism ────────────────────── */
+
+/* Apply to all elements using backdrop-blur that animate or update frequently */
+.gpu-glass {
+  transform: translateZ(0);       /* Force compositing layer */
+  will-change: transform;         /* Pre-allocate GPU memory */
+  backface-visibility: hidden;    /* Prevent layer flip artifacts */
+  -webkit-backface-visibility: hidden;
+}
+
+/* Promote tooltip/overlay elements that animate */
+.gpu-overlay {
+  transform: translate3d(0, 0, 0);
+  will-change: opacity, transform;
+  isolation: isolate;             /* Create stacking context */
+}
+
+/* For elements using blur that never animate (static panels) */
+.gpu-static-glass {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}

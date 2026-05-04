@@ -34,7 +34,7 @@ const emit = defineEmits(['open-settings']);
 </script>
 
 <template>
-  <header class="h-[60px] border-b border-white/5 flex items-center justify-between pl-4 pr-4 shrink-0 z-10 bg-[#0b0e11]/60 backdrop-blur-2xl text-[#848e9c]">
+  <header class="h-[60px] border-b border-white/5 flex items-center justify-between pl-4 pr-4 shrink-0 z-10 bg-[#0b0e11]/60 backdrop-blur-2xl text-[#848e9c] gpu-glass">
     <!-- Left Section -->
     <div class="flex items-center h-full overflow-hidden">
       <!-- Removed Logo per user request -->
@@ -116,7 +116,7 @@ const emit = defineEmits(['open-settings']);
         <!-- Notification Dropdown -->
         <div 
           v-if="showNotifications" 
-          class="absolute top-full right-0 mt-2 w-80 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+          class="absolute top-full right-0 mt-2 w-80 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200 gpu-overlay"
         >
           <div class="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
             <span class="text-xs font-black text-[#EAECEF] uppercase tracking-widest">Notifications</span>
@@ -182,7 +182,7 @@ const emit = defineEmits(['open-settings']);
         <!-- User Dropdown -->
         <div 
           v-if="showUserDropdown" 
-          class="absolute top-full right-0 mt-2 w-56 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+          class="absolute top-full right-0 mt-2 w-56 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200 gpu-overlay"
         >
           <div class="px-4 py-3 border-b border-[#2b3139] bg-[#2b3139]/20">
             <div class="flex items-center gap-3">

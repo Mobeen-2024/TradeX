@@ -32,11 +32,6 @@ const orderBookBids = computed(() => {
   return orderBook.value.bids.slice(0, 15).map(b => ({ price: b[0], amount: b[1] }));
 });
 
-const maxOrderBookAmount = computed(() => {
-  const maxAsk = Math.max(...orderBookAsks.value.map(a => a.amount), 0);
-  const maxBid = Math.max(...orderBookBids.value.map(b => b.amount), 0);
-  return Math.max(maxAsk, maxBid, 0.001);
-});
 
 const marketSentiment = computed(() => {
   const totalBids = orderBookBids.value.reduce((acc, b) => acc + b.amount, 0);
@@ -438,12 +433,64 @@ onUnmounted(() => {
   clearInterval(timer);
 });
 
+// ── Virtual Scrolling ──────────────────────────────────────────
+const ROW_HEIGHT = 20; // px — fixed row height
+const OVERSCAN = 3;    // extra rows above/below viewport
+
+const obContainer = ref<HTMLDivElement | null>(null);
+const scrollTop = ref(0);
+const containerHeight = ref(300); // measured on mount
+
+const onObScroll = () => {
+  scrollTop.value = obContainer.value?.scrollTop ?? 0;
+};
+
+// Source of truth: full sorted order book arrays (unbounded)
+const allAsks = computed(() => orderBook.value.asks.map(a => ({ price: a[0], amount: a[1] })));
+const allBids = computed(() => orderBook.value.bids.map(b => ({ price: b[0], amount: b[1] })));
+
+// Windowed slices
+const virtualAsks = computed(() => {
+  const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN);
+  const end = start + Math.ceil(containerHeight.value / ROW_HEIGHT) + OVERSCAN * 2;
+  return allAsks.value.slice(start, end);
+});
+
+const virtualBids = computed(() => {
+  const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN);
+  const end = start + Math.ceil(containerHeight.value / ROW_HEIGHT) + OVERSCAN * 2;
+  return allBids.value.slice(start, end);
+});
+
+// Spacers (keep scrollbar accurate)
+const askPaddingTop = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN) * ROW_HEIGHT);
+const askPaddingBottom = computed(() => Math.max(0, allAsks.value.length - virtualAsks.value.length) * ROW_HEIGHT - askPaddingTop.value);
+const bidPaddingTop = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN) * ROW_HEIGHT);
+const bidPaddingBottom = computed(() => Math.max(0, allBids.value.length - virtualBids.value.length) * ROW_HEIGHT - bidPaddingTop.value);
+
+const maxObVisualAmount = computed(() => {
+  const allAmounts = [...allAsks.value, ...allBids.value].map(r => r.amount);
+  return Math.max(...allAmounts, 0.001);
+});
+
+// Measure container on mount
+onMounted(() => {
+  if (obContainer.value) {
+    containerHeight.value = obContainer.value.clientHeight;
+    const ro = new ResizeObserver(entries => {
+      containerHeight.value = entries[0].contentRect.height;
+    });
+    ro.observe(obContainer.value);
+    onUnmounted(() => ro.disconnect());
+  }
+});
+
 </script>
 
 <template>
   <div class="flex flex-row gap-1 sm:gap-2 h-[460px] lg:h-full w-full">
     <!-- Left: Order Book / Trades Panel -->
-    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0">
+    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0 gpu-glass">
         <!-- View Mode Toggle -->
         <div class="flex items-center justify-between px-1 sm:px-2 py-1.5 sm:py-2 border-b border-[#1e2329] bg-[#161a1e]/30">
           <div class="flex items-center gap-1 sm:gap-2">
@@ -466,46 +513,69 @@ onUnmounted(() => {
         </div>
 
         <div v-if="viewMode === 'orderbook'" class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
-          <table class="w-full text-[11px] sm:text-[12px] text-right h-full border-collapse" style="table-layout: fixed">
-            <thead class="text-[#848e9c] sticky top-0 bg-[#0b0e11] z-20">
-              <tr>
-                <th class="font-normal pb-1 sm:pb-1.5 pt-1 text-left w-1/2 text-[9px] sm:text-[10px] pl-1">Price(USDT)</th>
-                <th class="font-normal pb-1 sm:pb-1.5 pt-1 w-1/2 text-[9px] sm:text-[10px] pr-1">Amount(BTC)</th>
-              </tr>
-            </thead>
-            <tbody class="font-mono tracking-tight">
-              <tr v-for="(ask, i) in orderBookAsks" :key="`ask-${i}`" class="hover:bg-[#1e2329]/80 cursor-pointer group relative transition-colors duration-150">
-                <td class="py-[2px] sm:py-[3px] text-left text-[#f6465d] border-none pl-1 relative z-10 w-1/2">
-                  <div class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#f6465d]/20 to-transparent group-hover:from-[#f6465d]/30 -z-10 transition-all duration-300 ease-out" :style="`width: ${(ask.amount / maxOrderBookAmount) * 100}%`"></div>
-                  {{ ask.price.toFixed(2) }}
-                </td>
-                <td class="py-[2px] sm:py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ ask.amount.toFixed(4) }}</td>
-              </tr>
-              
-              <!-- Middle: Market Price -->
-              <tr>
-                <td colspan="2" class="py-1 sm:py-2 border-y border-[#1e2329] my-0.5 text-center relative bg-transparent transition-all duration-300" :class="priceChangeClass">
-                  <div class="flex flex-col items-center justify-center py-0.5 sm:py-1">
-                    <div class="flex items-center gap-1 sm:gap-2">
-                      <span :class="cn('font-bold text-base sm:text-xl transition-colors duration-300 flex items-center', currentPrice >= previousPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
-                        {{ currentPrice.toFixed(2) }} 
-                        <ArrowUp v-if="currentPrice >= previousPrice" class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
-                        <ArrowDown v-else class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
-                      </span>
-                    </div>
-                  </div>
-                </td>
-              </tr>
+          <!-- Table Headers -->
+          <div class="flex justify-between px-1 mb-1 text-[#848e9c] text-[9px] sm:text-[10px] uppercase font-bold sticky top-0 bg-[#0b0e11] z-30">
+            <span>Price(USDT)</span>
+            <span>Amount(BTC)</span>
+          </div>
 
-              <tr v-for="(bid, i) in orderBookBids" :key="`bid-${i}`" class="hover:bg-[#1e2329]/80 cursor-pointer group relative transition-colors duration-150">
-                <td class="py-[2px] sm:py-[3px] text-left text-[#0ecb81] border-none pl-1 relative z-10 w-1/2">
-                  <div class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#0ecb81]/20 to-transparent group-hover:from-[#0ecb81]/30 -z-10 transition-all duration-300 ease-out" :style="`width: ${(bid.amount / maxOrderBookAmount) * 100}%`"></div>
-                  {{ bid.price.toFixed(2) }}
-                </td>
-                <td class="py-[2px] sm:py-[3px] text-[#EAECEF] border-none pr-1 relative z-10 w-1/2">{{ bid.amount.toFixed(4) }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <!-- NEW: Virtual Order Book Container -->
+          <div 
+            ref="obContainer" 
+            class="flex-1 overflow-y-auto no-scrollbar relative font-mono tracking-tight"
+            @scroll.passive="onObScroll"
+          >
+            <!-- Asks (spacers + slice) -->
+            <div :style="{ paddingTop: askPaddingTop + 'px', paddingBottom: askPaddingBottom + 'px' }">
+              <div
+                v-for="ask in virtualAsks"
+                :key="ask.price"
+                class="flex justify-between px-1 py-[2px] cursor-pointer relative group hover:bg-[#1e2329]/80 transition-colors duration-150"
+                style="height: 20px;"
+                @click="selectedPrice = ask.price"
+              >
+                <!-- Volume bar background -->
+                <div 
+                  class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#f6465d]/20 to-transparent group-hover:from-[#f6465d]/30 z-0 transition-all duration-300 ease-out"
+                  :style="{ width: `${(ask.amount / maxObVisualAmount) * 100}%` }"
+                />
+                <span class="text-[#f6465d] text-[11px] sm:text-[12px] relative z-10">{{ ask.price.toFixed(2) }}</span>
+                <span class="text-[#EAECEF] text-[11px] sm:text-[12px] relative z-10">{{ ask.amount.toFixed(4) }}</span>
+              </div>
+            </div>
+
+            <!-- Middle: Market Price (sticky) -->
+            <div class="sticky top-0 z-20 py-1 sm:py-2 border-y border-[#1e2329] my-0.5 text-center bg-[#0b0e11]/90 backdrop-blur-md transition-all duration-300 gpu-glass" :class="priceChangeClass">
+              <div class="flex flex-col items-center justify-center py-0.5 sm:py-1">
+                <div class="flex items-center gap-1 sm:gap-2">
+                  <span :class="cn('font-bold text-base sm:text-xl transition-colors duration-300 flex items-center', currentPrice >= previousPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
+                    {{ currentPrice.toFixed(2) }} 
+                    <ArrowUp v-if="currentPrice >= previousPrice" class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
+                    <ArrowDown v-else class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bids (spacers + slice) -->
+            <div :style="{ paddingTop: bidPaddingTop + 'px', paddingBottom: bidPaddingBottom + 'px' }">
+              <div
+                v-for="bid in virtualBids"
+                :key="bid.price"
+                class="flex justify-between px-1 py-[2px] cursor-pointer relative group hover:bg-[#1e2329]/80 transition-colors duration-150"
+                style="height: 20px;"
+                @click="selectedPrice = bid.price"
+              >
+                <!-- Volume bar background -->
+                <div 
+                  class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#0ecb81]/20 to-transparent group-hover:from-[#0ecb81]/30 z-0 transition-all duration-300 ease-out"
+                  :style="{ width: `${(bid.amount / maxObVisualAmount) * 100}%` }"
+                />
+                <span class="text-[#0ecb81] text-[11px] sm:text-[12px] relative z-10">{{ bid.price.toFixed(2) }}</span>
+                <span class="text-[#EAECEF] text-[11px] sm:text-[12px] relative z-10">{{ bid.amount.toFixed(4) }}</span>
+              </div>
+            </div>
+          </div>
           
           <!-- Sentiment Bar -->
           <div class="px-2 py-1.5 border-t border-[#1e2329] bg-[#0b0e11] shrink-0">
@@ -528,7 +598,7 @@ onUnmounted(() => {
       </div>
 
     <!-- Right: Order Panel -->
-    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-y-auto no-scrollbar">
+    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass">
       <!-- Header -->
       <div class="flex items-center justify-between mb-2 sm:mb-4 border-b border-[#1e2329] pb-2 sm:pb-3 transition-all duration-300">
         <span class="text-white text-[17px] leading-[22.2857px] font-mono font-normal pl-[10px] text-left no-underline truncate">
@@ -550,7 +620,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Buy / Sell Tabs -->
-      <div class="flex rounded-xl bg-[#0b0e11]/50 backdrop-blur-md border border-white/5 p-1 mb-2 sm:mb-4">
+      <div class="flex rounded-xl bg-[#0b0e11]/50 backdrop-blur-md border border-white/5 p-1 mb-2 sm:mb-4 gpu-glass">
         <button 
           @click="orderSide = 'Buy'"
           class="flex-1 py-1.5 sm:py-2 rounded-lg font-black text-xs uppercase tracking-wider transition-all duration-300 text-center"

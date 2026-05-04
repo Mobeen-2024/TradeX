@@ -8,7 +8,7 @@ const activeTab = ref<'intent' | 'alerts'>('intent');
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-slate-900/50 backdrop-blur-xl border-l border-white/5 overflow-hidden">
+  <div class="flex flex-col h-full bg-slate-900/50 backdrop-blur-xl border-l border-white/5 overflow-hidden gpu-glass">
     <!-- Header -->
     <div class="flex items-center justify-between p-4 border-b border-white/5">
       <div class="flex items-center gap-2">
@@ -82,7 +82,7 @@ const activeTab = ref<'intent' | 'alerts'>('intent');
                <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" />
              </div>
           </div>
-          <div class="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 relative group overflow-hidden">
+          <div class="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 relative group overflow-hidden gpu-glass">
             <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <p class="text-sm leading-relaxed text-indigo-100/90 font-medium italic relative z-10">
               "{{ aiNarration || 'Analyzing market microstructure for institutional footprints...' }}"

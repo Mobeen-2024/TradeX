@@ -70,42 +70,41 @@ const fibStart = ref<{ price: number, time: any } | null>(null);
 const trendStart = ref<{ price: number, time: any } | null>(null);
 const heatmapData = ref<{ price: number, volume: number }[]>([]);
 let drawingManager: DrawingManager | null = null;
+let ohlcvWorker: Worker | null = null;
+let heatmapRafId: number | null = null;
+
+const scheduleHeatmap = () => {
+    if (heatmapRafId) return;
+    heatmapRafId = requestAnimationFrame(() => {
+        heatmapRafId = null;
+        renderHeatmap();
+    });
+};
+
 let riskSlLine: IPriceLine | null = null;
 let isDraggingSl = false;
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
 
 watch([activePositions, openOrders, alerts, currentPrice, aiLevels], () => {
-    renderHeatmap();
+    scheduleHeatmap();
 }, { deep: true });
 
 const updateIndicators = (candlestick: CandlestickData[]) => {
-    if (!chart || !candlestick.length) return;
+    if (!ohlcvWorker || !candlestick.length) return;
 
-    if (activeIndicators.value.includes('EMA')) {
-        if (!emaSeries) emaSeries = chart.addSeries(LineSeries, { color: '#2962FF', lineWidth: 2, title: 'EMA 21' });
-        emaSeries.setData(calculateEMA(candlestick, 21));
-    } else if (emaSeries) { chart.removeSeries(emaSeries); emaSeries = null; }
-
-    if (activeIndicators.value.includes('RSI')) {
-        if (!rsiSeries) {
-            rsiSeries = chart.addSeries(LineSeries, { color: '#E91E63', lineWidth: 2, priceScaleId: 'rsi', title: 'RSI 14' });
-            chart.priceScale('rsi').applyOptions({ autoScale: true, scaleMargins: { top: 0.75, bottom: 0 } });
+    ohlcvWorker.postMessage({
+        type: 'compute_indicators',
+        requestId: Date.now(),
+        candles: candlestick,
+        config: {
+            ema: activeIndicators.value.includes('EMA'),
+            rsi: activeIndicators.value.includes('RSI'),
+            bollinger: activeIndicators.value.includes('BOLL'),
+            emaPeriod: 21,
+            rsiPeriod: 14,
+            bbPeriod: 20
         }
-        rsiSeries.setData(calculateRSI(candlestick, 14));
-    } else if (rsiSeries) { chart.removeSeries(rsiSeries); rsiSeries = null; }
-
-    if (activeIndicators.value.includes('BOLL')) {
-        if (!bbUpperSeries || !bbMiddleSeries || !bbLowerSeries) {
-            bbUpperSeries = chart.addSeries(LineSeries, { color: 'rgba(240, 185, 11, 0.4)', lineWidth: 1, title: 'BB Upper' });
-            bbMiddleSeries = chart.addSeries(LineSeries, { color: 'rgba(240, 185, 11, 0.6)', lineWidth: 1, title: 'BB Middle' });
-            bbLowerSeries = chart.addSeries(LineSeries, { color: 'rgba(240, 185, 11, 0.4)', lineWidth: 1, title: 'BB Lower' });
-        }
-        const { upper, middle, lower } = calculateBollingerBands(candlestick, 20);
-        bbUpperSeries.setData(upper); bbMiddleSeries.setData(middle); bbLowerSeries.setData(lower);
-    } else if (bbUpperSeries) {
-        chart.removeSeries(bbUpperSeries); chart.removeSeries(bbMiddleSeries!); chart.removeSeries(bbLowerSeries!);
-        bbUpperSeries = null; bbMiddleSeries = null; bbLowerSeries = null;
-    }
+    });
 };
 
 const initChart = async () => {
@@ -156,7 +155,7 @@ const initChart = async () => {
         }
     });
 
-    chart.timeScale().subscribeVisibleTimeRangeChange(() => renderHeatmap());
+    chart.timeScale().subscribeVisibleTimeRangeChange(() => scheduleHeatmap());
     await updateChartData();
 };
 
@@ -351,7 +350,7 @@ const internalSubscribe = () => {
         const prevFp = currIdx > 0 ? footprintDataMap.value.get(allTimes[currIdx - 1]) : null;
 
         FootprintRenderer.updateLiveFootprint(currentFp, trade, footprintSettings.value, prevFp);
-        renderHeatmap();
+        scheduleHeatmap();
     });
 };
 
@@ -372,7 +371,7 @@ const handleFibClick = (price: number, time: any) => {
     if (!fibStart.value) fibStart.value = { price, time };
     else {
         drawings.value.push({ type: 'fib', points: [fibStart.value, { price, time }] });
-        fibStart.value = null; setGlobalTool('none'); renderHeatmap();
+        fibStart.value = null; setGlobalTool('none'); scheduleHeatmap();
     }
 };
 
@@ -380,19 +379,36 @@ const handleTrendClick = (price: number, time: any) => {
     if (!trendStart.value) trendStart.value = { price, time };
     else {
         drawings.value.push({ type: 'trend', points: [trendStart.value, { price, time }] });
-        trendStart.value = null; setGlobalTool('none'); renderHeatmap();
+        trendStart.value = null; setGlobalTool('none'); scheduleHeatmap();
     }
 };
 
 let resizeObserver: ResizeObserver | null = null;
 onMounted(async () => {
+    ohlcvWorker = new Worker(
+        new URL('../workers/ohlcvWorker.ts', import.meta.url),
+        { type: 'module' }
+    );
+
+    ohlcvWorker.onmessage = ({ data }) => {
+        if (data.type === 'indicators_ready') {
+            if (data.ema && emaSeries) emaSeries.setData(data.ema);
+            if (data.rsi && rsiSeries) rsiSeries.setData(data.rsi);
+            if (data.bollinger) {
+                bbUpperSeries?.setData(data.bollinger.upper);
+                bbMiddleSeries?.setData(data.bollinger.middle);
+                bbLowerSeries?.setData(data.bollinger.lower);
+            }
+        }
+    };
+
     await initChart();
     internalSubscribe();
     if (chartContainer.value) {
         resizeObserver = new ResizeObserver(() => {
             if (chart && chartContainer.value) {
                 chart.applyOptions({ width: chartContainer.value.clientWidth, height: chartContainer.value.clientHeight });
-                renderHeatmap();
+                scheduleHeatmap();
             }
         });
         resizeObserver.observe(chartContainer.value);
@@ -400,6 +416,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    if (ohlcvWorker) ohlcvWorker.terminate();
     if (resizeObserver) resizeObserver.disconnect();
     if (chart) chart.remove();
 });
@@ -415,10 +432,10 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0b0e11]/60 backdrop-blur-md text-[#EAECEF] overflow-hidden select-none border border-white/5 hover:border-[#F0B90B]/30 transition-colors rounded-[16px] m-1 shadow-2xl relative">
+  <div class="flex flex-col h-full bg-[#0b0e11]/60 backdrop-blur-md text-[#EAECEF] overflow-hidden select-none border border-white/5 hover:border-[#F0B90B]/30 transition-colors rounded-[16px] m-1 shadow-2xl relative gpu-glass">
     
     <div v-if="hoveredCell && showFootprint" 
-         class="absolute z-50 bg-[#161a1e]/95 backdrop-blur-md border border-white/10 p-2.5 rounded-lg shadow-2xl pointer-events-none text-[10px] min-w-[120px]"
+         class="absolute z-50 bg-[#161a1e]/95 backdrop-blur-md border border-white/10 p-2.5 rounded-lg shadow-2xl pointer-events-none text-[10px] min-w-[120px] gpu-overlay"
          :style="{ left: `${tooltipPosition.x + 15}px`, top: `${tooltipPosition.y + 15}px` }">
         <div class="flex justify-between border-b border-white/5 pb-1 mb-1">
             <span class="text-[#848e9c]">Price</span>
@@ -450,7 +467,7 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
         @update:symbol="s => emit('update:symbol', s)"
         @update:interval="i => emit('update:interval', i)"
         @update:isSynced="v => emit('update:isSynced', v)"
-        @toggleFootprint="() => { showFootprint = !showFootprint; renderHeatmap(); }"
+        @toggleFootprint="() => { showFootprint = !showFootprint; scheduleHeatmap(); }"
         @toggleTape="() => showTape = !showTape"
         @toggleFootprintSettings="showFootprintSettings = !showFootprintSettings"
         @toggleIndicator="toggleIndicator"

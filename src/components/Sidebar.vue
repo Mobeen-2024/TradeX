@@ -50,7 +50,7 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
       <div 
         @mouseenter="setHovered(true)"
         @mouseleave="setHovered(false)"
-        class="fixed left-0 top-0 h-screen bg-[#0b0e11]/60 backdrop-blur-2xl border-r border-white/5 flex flex-col justify-between py-4 select-none transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar z-50 shadow-[10px_0_30px_rgba(0,0,0,0.5)]"
+        class="fixed left-0 top-0 h-screen bg-[#0b0e11]/60 backdrop-blur-2xl border-r border-white/5 flex flex-col justify-between py-4 select-none transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar z-50 shadow-[10px_0_30px_rgba(0,0,0,0.5)] gpu-glass"
         :class="isExpanded ? 'w-[240px]' : 'w-[64px]'"
         role="navigation"
         aria-label="Main Navigation"
@@ -150,7 +150,7 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
               </span>
 
               <!-- Tooltip (Mobile/Collapsed) -->
-              <div v-if="!isExpanded" class="absolute left-16 px-2 py-1 bg-[#2b3139] text-white text-xs rounded opacity-0 group-hover/item:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] shadow-xl">
+              <div v-if="!isExpanded" class="absolute left-16 px-2 py-1 bg-[#2b3139] text-white text-xs rounded opacity-0 group-hover/item:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] shadow-xl gpu-overlay">
                 {{ item.label }}
               </div>
             </button>
