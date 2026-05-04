@@ -19,6 +19,7 @@ import Tournaments from './components/Tournaments.vue';
 import TradingSignals from './components/TradingSignals.vue';
 import MarketIntelPanel from './components/MarketIntelPanel.vue';
 import { initAIStore } from './store/aiStore';
+import { initSystemStore } from './store/systemStore';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode, quickTradePreferences } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool, globalSymbol } from './store/workspaceStore';
@@ -86,6 +87,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 onMounted(() => {
     initAIStore();
+    initSystemStore();
     window.addEventListener('keydown', handleKeydown);
 });
 

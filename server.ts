@@ -21,6 +21,9 @@ import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.js';
 import { smartOrderRouter } from './src/lib/smartOrderRouter.js';
 import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.js';
 import { startAIAnalytics } from './src/lib/aiAnalytics.js';
+import { circuitBreakers } from './src/lib/circuitBreaker.js';
+import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSchema } from './src/lib/schemas.js';
+import { z } from 'zod';
 
 async function start() {
   const fastify = Fastify({ logger: false });
@@ -43,6 +46,20 @@ async function start() {
     for (const client of clients) {
       if (client.readyState === 1) client.send(payload);
     }
+  });
+
+  // ── Circuit Breaker Broadcast ──────────────────────────────
+  Object.values(circuitBreakers).forEach(cb => {
+    cb.onStateChange((state) => {
+      const payload = JSON.stringify({ 
+        type: 'app@circuit_breaker', 
+        name: cb.getState().name, 
+        state 
+      });
+      for (const client of clients) {
+        if (client.readyState === 1) client.send(payload);
+      }
+    });
   });
 
   // ── Gateway → Broadcast pipe ──────────────────────────────
@@ -102,10 +119,25 @@ async function start() {
     }
   });
 
+  // ── Validation Guard ──────────────────────────────────────
+  const zodGuard = (schema: z.ZodTypeAny) => {
+    return async (request: any, reply: any) => {
+      const result = schema.safeParse(request.body);
+      if (!result.success) {
+        return reply.status(400).send({ 
+          success: false, 
+          error: 'INVALID_PAYLOAD', 
+          issues: result.error.issues 
+        });
+      }
+      request.body = result.data;
+    };
+  };
+
   // ── Phase 2 API Endpoints ──────────────────────────────────
 
   // ── Institutional order execution (risk → SOR) ────────────
-  fastify.post('/api/place_order', async (request, reply) => {
+  fastify.post('/api/place_order', { preHandler: zodGuard(PlaceOrderSchema) }, async (request, reply) => {
     try {
       const req: any = request.body;
       const globalState = await getGlobalState();
@@ -158,7 +190,11 @@ async function start() {
     return { accounts: await credentialVault.listAccounts() };
   });
 
-  fastify.post('/api/vault/accounts', async (request, reply) => {
+  fastify.get('/api/circuit-breakers', async () => {
+    return { breakers: Object.values(circuitBreakers).map(cb => cb.getState()) };
+  });
+
+  fastify.post('/api/vault/accounts', { preHandler: zodGuard(AddVaultAccountSchema) }, async (request, reply) => {
     try {
       const { label, exchange, apiKey, apiSecret, passphrase, permissions, subAccount } = request.body as any;
       const account = await credentialVault.addAccount(
@@ -187,7 +223,7 @@ async function start() {
   });
 
   // ── Risk Profiles ────────────────────────────────────────
-  fastify.post('/api/risk/profile', async (request, reply) => {
+  fastify.post('/api/risk/profile', { preHandler: zodGuard(RiskProfileSchema) }, async (request, reply) => {
     try {
       const profile = request.body as any;
       await setRiskProfile(profile);
@@ -234,21 +270,21 @@ async function start() {
   });
 
   // ── SOR: Institutional multi-account order ────────────────
-  fastify.post('/api/sor/execute', async (request, reply) => {
+  fastify.post('/api/sor/execute', { preHandler: zodGuard(PlaceOrderSchema) }, async (request, reply) => {
     try {
-      const { order, accountIds, sorConfig } = request.body as any;
+      const req = request.body as any; // Now validated
       const globalState = await getGlobalState();
       const currentPrice = parseFloat(globalState.price ?? '0');
 
       const rawOrder = {
-        accountId:  accountIds?.[0] ?? 'default',
-        symbol:     order.symbol ?? 'btcusdt',
-        side:       order.side,
-        type:       order.type ?? 'Market',
-        quantity:   order.quantity,
-        price:      order.price || currentPrice,
-        leverage:   order.leverage ?? 1,
-        notionalUsd: order.quantity * (order.price || currentPrice),
+        accountId:  req.accountIds?.[0] ?? 'default',
+        symbol:     req.pair ?? 'btcusdt',
+        side:       req.side,
+        type:       req.type ?? 'Market',
+        quantity:   req.quantity,
+        price:      req.price || currentPrice,
+        leverage:   req.leverage ?? 1,
+        notionalUsd: req.quantity * (req.price || currentPrice),
       };
 
       // Risk check on primary account
@@ -257,7 +293,7 @@ async function start() {
         return reply.status(422).send({ success: false, error: riskResult.reason, code: 'RISK_BLOCKED' });
       }
 
-      const sorResult = await smartOrderRouter.route(rawOrder, accountIds ?? [rawOrder.accountId], sorConfig ?? { strategy: 'market' });
+      const sorResult = await smartOrderRouter.route(rawOrder, req.accountIds ?? [rawOrder.accountId], req.sorConfig ?? { strategy: 'market' });
       return { success: true, sorResult };
     } catch (e: any) {
       return reply.status(500).send({ error: e.message });
@@ -295,7 +331,16 @@ async function start() {
 
     connection.on('message', async (message) => {
       try {
-        const data = JSON.parse(message.toString());
+        const raw = JSON.parse(message.toString());
+        
+        // WebSocket Validation — Discriminated Union for all WS message types
+        const wsResult = WsMessageSchema.safeParse(raw);
+        if (!wsResult.success) {
+          console.warn('[WS] Dropped invalid message:', wsResult.error.issues[0].message);
+          return;
+        }
+
+        const data = wsResult.data;
         if (data.type === 'place_order') {
           const order = data.order;
           const globalState = await getGlobalState();
@@ -308,7 +353,7 @@ async function start() {
               pair: order.pair,
               type: order.side === 'Buy' ? 'LONG' : 'SHORT',
               leverage: order.leverage,
-              size: order.amount,
+              size: order.quantity || order.amount,
               cost: order.cost,
               entry: order.price || currentPrice,
               mark: order.price || currentPrice,

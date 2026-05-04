@@ -17,6 +17,7 @@ import { randomBytes } from 'crypto';
 import { getGlobalState, setPosition, setOpenOrder, redis } from './redis.js';
 import { writeExecutionLog } from './questdb.js';
 import type { RawOrder } from './riskEngine.js';
+import { circuitBreakers } from './circuitBreaker.js';
 
 // ── Types ─────────────────────────────────────────────────────────
 export type RoutingStrategy = 'market' | 'iceberg' | 'twap';
@@ -67,30 +68,32 @@ async function finalizeParentOrder(parentId: string, status: 'complete' | 'parti
 // ── Execution Simulator (replaces real exchange API calls) ────────
 // In production: replace with `credentialVault.decryptCredentials(accountId)` + exchange SDK calls
 async function executeChildOrder(child: ChildOrder, price: number): Promise<string> {
-  const execId = `exec_${randomBytes(5).toString('hex')}`;
+  return circuitBreakers.exchangeRest.execute(async () => {
+    const execId = `exec_${randomBytes(5).toString('hex')}`;
 
-  // Simulated fill — in production, this calls the exchange REST API
-  await setPosition(execId, {
-    id:           execId,
-    pair:         child.symbol,
-    type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
-    leverage:     `${child.quantity}x`, // placeholder
-    size:         child.quantity,
-    cost:         child.quantity * price,
-    entry:        price,
-    mark:         price,
-    liveDelta:    0,
-    liveDeltaPercent: 0,
-    accountId:    child.accountId,
-    parentOrderId: child.parentId,
-    sliceIdx:     child.sliceIdx,
-    protocolLimits: ['-', '-'],
+    // Simulated fill — in production, this calls the exchange REST API
+    await setPosition(execId, {
+      id:           execId,
+      pair:         child.symbol,
+      type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
+      leverage:     `${child.quantity}x`, // placeholder
+      size:         child.quantity,
+      cost:         child.quantity * price,
+      entry:        price,
+      mark:         price,
+      liveDelta:    0,
+      liveDeltaPercent: 0,
+      accountId:    child.accountId,
+      parentOrderId: child.parentId,
+      sliceIdx:     child.sliceIdx,
+      protocolLimits: ['-', '-'],
+    });
+
+    // Log to QuestDB
+    writeExecutionLog(execId, child.symbol, child.side, price, child.quantity, 'filled');
+
+    return execId;
   });
-
-  // Log to QuestDB
-  writeExecutionLog(execId, child.symbol, child.side, price, child.quantity, 'filled');
-
-  return execId;
 }
 
 // ── Iceberg Slicer ────────────────────────────────────────────────
