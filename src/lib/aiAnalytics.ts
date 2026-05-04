@@ -9,9 +9,11 @@
  * Uses @google/genai with strict schemas for institutional reliability.
  */
 
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const client = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY || '' 
+});
 
 // ── Models ────────────────────────────────────────────────────────
 const MODEL_NAME = 'gemini-2.0-flash'; // High-speed flash for real-time loops
@@ -32,7 +34,6 @@ export async function streamIntentAnalysis(
   onChunk: (text: string) => void,
   onComplete: (fullText: string) => void,
 ): Promise<void> {
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
   const prompt = `You are an institutional market microstructure analyst.
 Analyze this real-time order book snapshot for ${snapshot.symbol}:
 - Price: $${snapshot.price}
@@ -45,10 +46,18 @@ Analyze this real-time order book snapshot for ${snapshot.symbol}:
 In ONE sentence (max 20 words), identify institutional intent: accumulation, distribution, absorption, or neutral. No fluff.`;
 
   try {
-    const result = await model.generateContentStream(prompt);
+    const response = await client.models.generateContentStream({
+      model: MODEL_NAME,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.2,
+        maxOutputTokens: 120,
+      }
+    });
+
     let fullText = '';
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
+    for await (const chunk of response) {
+      const chunkText = chunk.text;
       fullText += chunkText;
       onChunk(chunkText);
     }
@@ -73,13 +82,6 @@ export async function validateLevelsWithAI(
   zones: StructuralZone[],
   candles: any[],
 ): Promise<StructuralZone[]> {
-  const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
-    generationConfig: {
-      responseMimeType: 'application/json',
-    },
-  });
-
   const prompt = `Given these detected structural zones and the last 200 candles:
 Zones: ${JSON.stringify(zones)}
 
@@ -91,9 +93,16 @@ Rules:
 - Use this JSON schema: [{ "price": number, "upperBound": number, "lowerBound": number, "type": string, "strength": number, "touches": number, "reasoning": string }]`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    return JSON.parse(responseText);
+    const response = await client.models.generateContent({
+      model: MODEL_NAME,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      }
+    });
+
+    return JSON.parse(response.text);
   } catch (e) {
     console.error('[AI] Level Validation Error:', e);
     return zones; // Fallback to raw zones
@@ -114,13 +123,6 @@ export async function scanForPatternsAI(
   candles: any[],
   currentPrice: number,
 ): Promise<PatternAlert[]> {
-  const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
-    generationConfig: {
-      responseMimeType: 'application/json',
-    },
-  });
-
   const prompt = `Analyze the last 10 candles for institutional exhaustion patterns.
 Price: $${currentPrice}
 Patterns to look for: Institutional Engulfing, Rejection Wicks, Volume Exhaustion, Fair Value Gaps.
@@ -130,9 +132,16 @@ Return a JSON array of alerts using this schema:
 If no strong patterns, return [].`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    return JSON.parse(responseText);
+    const response = await client.models.generateContent({
+      model: MODEL_NAME,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.15,
+        responseMimeType: 'application/json',
+      }
+    });
+
+    return JSON.parse(response.text);
   } catch (e) {
     console.error('[AI] Pattern Scan Error:', e);
     return [];
