@@ -5,17 +5,21 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { gateway } from './src/lib/exchangeGateway.js';
-import { 
-  redis, 
-  KEYS, 
-  getPositions, 
-  getGlobalState, 
-  setPosition, 
-  deletePosition, 
-  getOpenOrders, 
-  setOpenOrder, 
-  deleteOpenOrder 
+import {
+  redis,
+  KEYS,
+  getPositions,
+  getGlobalState,
+  setPosition,
+  deletePosition,
+  getOpenOrders,
+  setOpenOrder,
+  deleteOpenOrder
 } from './src/lib/redis.js';
+import { credentialVault } from './src/lib/credentialVault.js';
+import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.js';
+import { smartOrderRouter } from './src/lib/smartOrderRouter.js';
+import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.js';
 
 async function start() {
   const fastify = Fastify({ logger: false });
@@ -25,6 +29,13 @@ async function start() {
 
   const isProd = process.env.NODE_ENV === 'production';
   const clients = new Set<any>();
+
+  // ── Wire worker manager broadcast to WS clients ───────────
+  setWorkerBroadcast((payload) => {
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
 
   // ── Gateway → Broadcast pipe ──────────────────────────────
   gateway.on('trade', async (tick) => {
@@ -83,39 +94,40 @@ async function start() {
     }
   });
 
-  // ── API Endpoints ──────────────────────────────────────────
+  // ── Phase 2 API Endpoints ──────────────────────────────────
+
+  // ── Institutional order execution (risk → SOR) ────────────
   fastify.post('/api/place_order', async (request, reply) => {
     try {
-      const order: any = request.body;
+      const req: any = request.body;
       const globalState = await getGlobalState();
       const currentPrice = parseFloat(globalState.price ?? '0');
-      const isInstant = order.type === 'Market' || !order.type;
-      
-      if (isInstant) {
-        const newPos = {
-          id: Math.random().toString(36).substr(2, 9),
-          pair: order.pair,
-          type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-          leverage: order.leverage,
-          size: order.amount,
-          cost: order.cost,
-          entry: order.price || currentPrice,
-          mark: order.price || currentPrice,
-          liveDelta: 0,
-          liveDeltaPercent: 0,
-          protocolLimits: ['-', '-']
-        };
-        await setPosition(newPos.id, newPos);
-        return { success: true, position: newPos };
-      } else {
-        const newOrder = {
-          id: Math.random().toString(36).substr(2, 9),
-          ...order,
-          activationPrice: order.activationPrice || currentPrice
-        };
-        await setOpenOrder(newOrder.id, newOrder);
-        return { success: true, order: newOrder };
+      const accountIds: string[] = req.accountIds ?? [req.accountId ?? 'default'];
+
+      const rawOrder = {
+        accountId:  accountIds[0],
+        symbol:     req.pair ?? req.symbol ?? 'btcusdt',
+        side:       req.side,
+        type:       req.type ?? 'Market',
+        quantity:   req.amount ?? req.quantity,
+        price:      req.price || currentPrice,
+        leverage:   parseInt((req.leverage ?? '1x').replace('x', '').replace('Cross_', '')) || 1,
+        notionalUsd: (req.amount ?? req.quantity) * (req.price || currentPrice),
+      };
+
+      // 1. Pre-flight risk checks
+      const riskResult = await runRiskChecks(rawOrder);
+      if (!riskResult.approved) {
+        return reply.status(422).send({ success: false, error: riskResult.reason, code: 'RISK_BLOCKED' });
       }
+
+      // 2. Determine routing strategy
+      const sorConfig = req.sorConfig ?? { strategy: 'market' };
+
+      // 3. Route through SOR (multi-account fanout if multiple accountIds)
+      const sorResult = await smartOrderRouter.route(rawOrder, accountIds, sorConfig);
+
+      return { success: true, sorResult, warnings: riskResult.warnings };
     } catch(e: any) {
       return reply.status(500).send({ error: e.message });
     }
@@ -132,6 +144,118 @@ async function start() {
     const positions = await getPositions();
     return { positions };
   });
+
+  // ── Credential Vault ──────────────────────────────────────
+  fastify.get('/api/vault/accounts', async () => {
+    return { accounts: await credentialVault.listAccounts() };
+  });
+
+  fastify.post('/api/vault/accounts', async (request, reply) => {
+    try {
+      const { label, exchange, apiKey, apiSecret, passphrase, permissions, subAccount } = request.body as any;
+      const account = await credentialVault.addAccount(
+        label, exchange,
+        { apiKey, apiSecret, passphrase },
+        permissions, subAccount
+      );
+      const { encryptedCredentials, authTag, iv, ...safe } = account;
+      return { success: true, account: safe };
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message });
+    }
+  });
+
+  fastify.delete('/api/vault/accounts/:id', async (request, reply) => {
+    const { id } = request.params as any;
+    await credentialVault.removeAccount(id);
+    return { success: true };
+  });
+
+  fastify.patch('/api/vault/accounts/:id/status', async (request, reply) => {
+    const { id } = request.params as any;
+    const { status } = request.body as any;
+    await credentialVault.updateStatus(id, status);
+    return { success: true };
+  });
+
+  // ── Risk Profiles ────────────────────────────────────────
+  fastify.post('/api/risk/profile', async (request, reply) => {
+    try {
+      const profile = request.body as any;
+      await setRiskProfile(profile);
+      return { success: true };
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message });
+    }
+  });
+
+  // ── Algorithm Workers ────────────────────────────────────
+  fastify.get('/api/workers', async () => {
+    return { workers: workerManager.list() };
+  });
+
+  fastify.post('/api/workers/start', async (request, reply) => {
+    try {
+      const { type, config } = request.body as any;
+      const workerId = await workerManager.start(type, config);
+      return { success: true, workerId };
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message });
+    }
+  });
+
+  fastify.post('/api/workers/:id/stop', async (request, reply) => {
+    try {
+      const { id } = request.params as any;
+      await workerManager.stop(id);
+      return { success: true };
+    } catch (e: any) {
+      return reply.status(404).send({ error: e.message });
+    }
+  });
+
+  fastify.patch('/api/workers/:id/config', async (request, reply) => {
+    try {
+      const { id } = request.params as any;
+      const config = request.body as any;
+      workerManager.updateConfig(id, config);
+      return { success: true };
+    } catch (e: any) {
+      return reply.status(404).send({ error: e.message });
+    }
+  });
+
+  // ── SOR: Institutional multi-account order ────────────────
+  fastify.post('/api/sor/execute', async (request, reply) => {
+    try {
+      const { order, accountIds, sorConfig } = request.body as any;
+      const globalState = await getGlobalState();
+      const currentPrice = parseFloat(globalState.price ?? '0');
+
+      const rawOrder = {
+        accountId:  accountIds?.[0] ?? 'default',
+        symbol:     order.symbol ?? 'btcusdt',
+        side:       order.side,
+        type:       order.type ?? 'Market',
+        quantity:   order.quantity,
+        price:      order.price || currentPrice,
+        leverage:   order.leverage ?? 1,
+        notionalUsd: order.quantity * (order.price || currentPrice),
+      };
+
+      // Risk check on primary account
+      const riskResult = await runRiskChecks(rawOrder);
+      if (!riskResult.approved) {
+        return reply.status(422).send({ success: false, error: riskResult.reason, code: 'RISK_BLOCKED' });
+      }
+
+      const sorResult = await smartOrderRouter.route(rawOrder, accountIds ?? [rawOrder.accountId], sorConfig ?? { strategy: 'market' });
+      return { success: true, sorResult };
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message });
+    }
+  });
+
 
   // ── WebSocket Handler ──────────────────────────────────────
   fastify.get('/ws/trading', { websocket: true }, async (connection, req) => {
@@ -270,6 +394,7 @@ async function start() {
   });
 
   const shutdown = async () => {
+    await workerManager.stopAll();
     gateway.terminate();
     await fastify.close();
     process.exit(0);
