@@ -20,6 +20,7 @@ import { credentialVault } from './src/lib/credentialVault.js';
 import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.js';
 import { smartOrderRouter } from './src/lib/smartOrderRouter.js';
 import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.js';
+import { startAIAnalytics } from './src/lib/aiAnalytics.js';
 
 async function start() {
   const fastify = Fastify({ logger: false });
@@ -32,6 +33,13 @@ async function start() {
 
   // ── Wire worker manager broadcast to WS clients ───────────
   setWorkerBroadcast((payload) => {
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
+
+  // ── Start Background Services ──────────────────────────────
+  startAIAnalytics((payload) => {
     for (const client of clients) {
       if (client.readyState === 1) client.send(payload);
     }

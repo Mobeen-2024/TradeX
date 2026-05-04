@@ -4,6 +4,7 @@ import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 import { useOrderExecution } from '../composables/useOrderExecution';
+import { vaultAccounts, fetchVaultAccounts } from '../store/accountStore';
 
 const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
 const orderPrice = ref(75000.00);
@@ -24,6 +25,14 @@ const stopPrice = ref<number | null>(null);
 const limitPrice = ref<number | null>(null);
 const callbackRate = ref<number | null>(1.0);
 const activationPrice = ref<number | null>(null);
+
+// Institutional / SOR state
+const selectedAccountIds = ref<string[]>(['master_main']);
+const sorStrategy = ref<'market' | 'iceberg' | 'twap'>('market');
+const icebergSlices = ref(10);
+const twapDuration = ref(5); // minutes
+const showInstitutionalSettings = ref(false);
+const isInstitutionalMode = ref(false);
 
 const orderBookAsks = computed(() => {
   return orderBook.value.asks.slice(0, 15).map(a => ({ price: a[0], amount: a[1] }));
@@ -144,7 +153,6 @@ watch([orderBook, viewMode], () => {
         nextTick(drawDepthChart);
     }
 }, { deep: true });
-const iceberg = ref(false);
 const percentage = ref(0);
 
 // Load Preferences
@@ -158,6 +166,8 @@ onMounted(() => {
   
   const savedLeverage = localStorage.getItem('defaultLeverage');
   if (savedLeverage !== null) leverage.value = parseInt(savedLeverage);
+
+  fetchVaultAccounts();
 });
 
 // Save Preferences
@@ -300,12 +310,18 @@ const executeTrade = async () => {
     price: orderPrice.value,
     leverage: leverage.value,
     marginEnabled: marginEnabled.value,
+    accountIds: isInstitutionalMode.value ? selectedAccountIds.value : undefined,
+    sorConfig: isInstitutionalMode.value ? {
+        strategy: sorStrategy.value,
+        icebergSlices: sorStrategy.value === 'iceberg' ? icebergSlices.value : undefined,
+        twapWindowMs: sorStrategy.value === 'twap' ? twapDuration.value * 60 * 1000 : undefined
+    } : undefined,
     stopPrice: stopPrice.value || undefined,
     callbackRate: callbackRate.value || undefined,
     activationPrice: activationPrice.value || undefined,
     takeProfitPrice: finalTp || undefined,
     stopLossPrice: finalSl || undefined,
-    iceberg: iceberg.value,
+    iceberg: sorStrategy.value === 'iceberg'
   });
 
   if (result?.success) {
@@ -925,27 +941,87 @@ onMounted(() => {
       <div class="flex flex-col gap-2 mb-2 sm:mb-4">
          <div class="flex items-center justify-between group">
              <label class="flex items-center gap-2 cursor-pointer">
-               <input type="checkbox" v-model="tpSl" class="hidden" @change="handleTpSlToggle" />
-               <div class="w-4 h-4 rounded-sm border flex items-center justify-center transition-colors" :class="tpSl ? 'bg-[#F0B90B] border-[#F0B90B]' : 'border-[#848e9c] group-hover:border-[#EAECEF] bg-transparent'">
-                 <svg v-if="tpSl" viewBox="0 0 14 14" class="w-3 h-3 fill-[#181a20]"><path d="M5.533 10.68L2 7.147l1.067-1.067 2.466 2.453L10.933 3.14l1.067 1.067-6.467 6.473z"/></svg>
-               </div>
-               <div class="flex items-center gap-1.5">
-                 <span class="text-[#848e9c] hover:text-[#EAECEF] text-xs font-semibold transition-colors">TP/SL</span>
-                 <span v-if="tpSl && !tpError && !slError" class="text-[10px] text-[#2ebd85] font-medium hidden sm:inline-block">Active</span>
-                 <span v-if="tpSl && (tpError || slError)" class="text-[10px] text-[#f6465d] font-medium hidden sm:inline-block">Invalid</span>
-               </div>
+                <input type="checkbox" v-model="tpSl" class="hidden" @change="handleTpSlToggle" />
+                <div class="w-4 h-4 rounded-sm border flex items-center justify-center transition-colors" :class="tpSl ? 'bg-[#F0B90B] border-[#F0B90B]' : 'border-[#848e9c] group-hover:border-[#EAECEF] bg-transparent'">
+                  <svg v-if="tpSl" viewBox="0 0 14 14" class="w-3 h-3 fill-[#181a20]"><path d="M5.533 10.68L2 7.147l1.067-1.067 2.466 2.453L10.933 3.14l1.067 1.067-6.467 6.473z"/></svg>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[#848e9c] hover:text-[#EAECEF] text-xs font-semibold transition-colors">TP/SL</span>
+                  <span v-if="tpSl && !tpError && !slError" class="text-[10px] text-[#2ebd85] font-medium hidden sm:inline-block">Active</span>
+                </div>
              </label>
              <button v-if="tpSl" class="text-[#848e9c] hover:text-white" @click="isTpSlOpen = true"><Edit2 class="w-3 h-3"/></button>
          </div>
 
+         <!-- Institutional Settings Toggle -->
+         <div class="flex items-center justify-between group mt-1">
+             <label class="flex items-center gap-2 cursor-pointer">
+               <input type="checkbox" v-model="isInstitutionalMode" class="hidden" />
+               <div class="w-4 h-4 rounded-sm border flex items-center justify-center transition-colors" :class="isInstitutionalMode ? 'bg-[#F0B90B] border-[#F0B90B]' : 'border-[#848e9c] group-hover:border-[#EAECEF] bg-transparent'">
+                 <Shield v-if="isInstitutionalMode" class="w-3 h-3 text-[#181a20]" />
+               </div>
+               <span class="text-[#848e9c] hover:text-[#EAECEF] text-xs font-semibold transition-colors">Institutional Mode</span>
+             </label>
+             <button v-if="isInstitutionalMode" class="text-[#848e9c] hover:text-white" @click="showInstitutionalSettings = !showInstitutionalSettings">
+               <Settings class="w-3 h-3" :class="showInstitutionalSettings ? 'animate-spin-slow' : ''" />
+             </button>
+         </div>
 
-         <label class="flex items-center gap-2 cursor-pointer group mt-1">
-           <input type="checkbox" v-model="iceberg" class="hidden" />
-           <div class="w-4 h-4 rounded-sm border flex items-center justify-center transition-colors" :class="iceberg ? 'bg-[#F0B90B] border-[#F0B90B]' : 'border-[#848e9c] group-hover:border-[#EAECEF] bg-transparent'">
-             <svg v-if="iceberg" viewBox="0 0 14 14" class="w-3 h-3 fill-[#181a20]"><path d="M5.533 10.68L2 7.147l1.067-1.067 2.466 2.453L10.933 3.14l1.067 1.067-6.467 6.473z"/></svg>
+         <!-- Institutional Settings Panel -->
+         <div v-if="isInstitutionalMode && showInstitutionalSettings" class="p-3 bg-[#1e2329] border border-[#F0B90B]/20 rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-300" style="margin-bottom: 8px;">
+           <!-- Account Selection -->
+           <div class="space-y-2">
+             <span class="text-[10px] font-bold text-[#848e9c] uppercase tracking-widest">Multi-Account Selection</span>
+             <div class="flex flex-wrap gap-2">
+               <div 
+                 v-for="acc in vaultAccounts" 
+                 :key="acc.id"
+                 @click="selectedAccountIds.includes(acc.id) ? selectedAccountIds = selectedAccountIds.filter(id => id !== acc.id) : selectedAccountIds.push(acc.id)"
+                 :class="cn(
+                   'px-2 py-1 rounded-md border text-[10px] font-bold cursor-pointer transition-all',
+                   selectedAccountIds.includes(acc.id) ? 'bg-[#F0B90B]/10 border-[#F0B90B] text-[#F0B90B]' : 'bg-black/20 border-white/5 text-[#474d57]'
+                 )"
+               >
+                 {{ acc.name }}
+               </div>
+             </div>
            </div>
-           <span class="text-[#848e9c] hover:text-[#EAECEF] text-[10px] sm:text-xs font-semibold">Iceberg <span class="text-[#474d57] font-normal ml-1 xl:inline hidden">(Hide)</span></span>
-         </label>
+
+           <!-- SOR Strategy -->
+           <div class="space-y-2">
+             <span class="text-[10px] font-bold text-[#848e9c] uppercase tracking-widest">Routing Strategy</span>
+             <div class="flex p-1 bg-black/20 rounded-lg border border-white/5">
+               <button 
+                 v-for="s in ['market', 'iceberg', 'twap']" 
+                 :key="s"
+                 @click="sorStrategy = s as any"
+                 :class="cn(
+                   'flex-1 py-1 text-[10px] font-bold rounded transition-all capitalize',
+                   sorStrategy === s ? 'bg-white/10 text-white' : 'text-[#474d57]'
+                 )"
+               >
+                 {{ s }}
+               </button>
+             </div>
+           </div>
+
+           <!-- Strategy Params -->
+           <div v-if="sorStrategy === 'iceberg'" class="space-y-2">
+             <div class="flex justify-between items-center">
+               <span class="text-[10px] font-bold text-[#848e9c]">Slices</span>
+               <span class="text-[10px] font-bold text-[#F0B90B]">{{ icebergSlices }} slices</span>
+             </div>
+             <input type="range" v-model.number="icebergSlices" min="2" max="50" step="1" class="w-full accent-[#F0B90B] h-1" />
+           </div>
+
+           <div v-if="sorStrategy === 'twap'" class="space-y-2">
+             <div class="flex justify-between items-center">
+               <span class="text-[10px] font-bold text-[#848e9c]">Duration</span>
+               <span class="text-[10px] font-bold text-[#F0B90B]">{{ twapDuration }} min</span>
+             </div>
+             <input type="range" v-model.number="twapDuration" min="1" max="60" step="1" class="w-full accent-[#F0B90B] h-1" />
+           </div>
+         </div>
       </div>
 
       <!-- Balances -->

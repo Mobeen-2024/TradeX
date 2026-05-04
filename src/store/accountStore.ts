@@ -13,6 +13,29 @@ export const balances = ref<Balance[]>([
   { asset: 'ETH', free: 12.345, locked: 0 },
 ]);
 
+export interface VaultAccount {
+  id: string;
+  name: string;
+  exchange: string;
+  isDefault?: boolean;
+}
+
+export const vaultAccounts = ref<VaultAccount[]>([
+  { id: 'master_main', name: 'Master Main', exchange: 'Binance', isDefault: true }
+]);
+
+export const fetchVaultAccounts = async () => {
+    try {
+        const { apiClient } = await import('../lib/apiClient');
+        const res = await apiClient.get<{ accounts: VaultAccount[] }>('/vault/accounts');
+        if (res.success && res.data) {
+            vaultAccounts.value = res.data.accounts;
+        }
+    } catch (e) {
+        console.error('Failed to fetch vault accounts:', e);
+    }
+};
+
 export const totalUsdtBalance = computed(() => {
     // Basic mock calculation for total value
     return balances.value.reduce((acc, b) => {

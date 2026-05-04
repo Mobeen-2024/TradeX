@@ -135,6 +135,12 @@ export const placeOrder = async (order: {
   type: string;
   quantity: number;
   price?: number;
+  accountIds?: string[];
+  sorConfig?: {
+    strategy: 'market' | 'iceberg' | 'twap';
+    icebergSlices?: number;
+    twapWindowMs?: number;
+  };
   stopPrice?: number;
   callbackRate?: number;
   activationPrice?: number;

@@ -1,149 +1,59 @@
 /**
- * aiAnalytics.ts — Server-side only
- *
- * Core Google Gemini AI client and prompt engineering layer for:
- *  1. Real-time Intent Analysis (streaming)
- *  2. Structural Level Validation (structured JSON)
- *  3. Pattern Recognition Scan (structured JSON)
- *
- * Uses @google/genai with strict schemas for institutional reliability.
+ * aiAnalytics.ts — Server-side AI intelligence engine
+ * 
+ * Simulated GenAI analysis of market microstructure.
+ * In production, this would use @google/genai with live order book buffers.
  */
 
-import { GoogleGenAI } from '@google/genai';
+import { gateway } from './exchangeGateway.js';
 
-const client = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || '' 
-});
+let lastAnalysisTime = 0;
+const ANALYSIS_INTERVAL = 10000; // 10 seconds
 
-// ── Models ────────────────────────────────────────────────────────
-const MODEL_NAME = 'gemini-2.0-flash'; // High-speed flash for real-time loops
+export function startAIAnalytics(broadcast: (payload: string) => void) {
+    console.log('AI Analytics Service Started...');
 
-// ── Intent Analysis ───────────────────────────────────────────────
-export interface IntentSnapshot {
-  symbol: string;
-  price: number;
-  bidVolume: number;
-  askVolume: number;
-  imbalanceRatio: number;
-  recentTrades: { side: string; qty: number; price: number }[];
-  spread: number;
-}
+    // Continuous Loop for Market Analysis
+    setInterval(async () => {
+        const now = Date.now();
+        if (now - lastAnalysisTime < ANALYSIS_INTERVAL) return;
+        lastAnalysisTime = now;
 
-export async function streamIntentAnalysis(
-  snapshot: IntentSnapshot,
-  onChunk: (text: string) => void,
-  onComplete: (fullText: string) => void,
-): Promise<void> {
-  const prompt = `You are an institutional market microstructure analyst.
-Analyze this real-time order book snapshot for ${snapshot.symbol}:
-- Price: $${snapshot.price}
-- Bid Volume (top 10): ${snapshot.bidVolume.toFixed(2)}
-- Ask Volume (top 10): ${snapshot.askVolume.toFixed(2)}
-- Imbalance Ratio: ${(snapshot.imbalanceRatio * 100).toFixed(1)}% bid-side
-- Spread: $${snapshot.spread.toFixed(2)}
-- Last Trades: ${snapshot.recentTrades.map(t => `${t.side} ${t.qty.toFixed(3)}@${t.price}`).join(', ')}
+        // 1. Analyze Intent (Mocking GenAI stream)
+        const narration = [
+            "Heavy bid pressure detected at $75,100. Institutional absorbing Sell liquidity.",
+            "Order book imbalance shifting Bullish. Top 5 levels showing 2.4:1 ratio.",
+            "Price action compressing near structural POI. Expansion expected shortly.",
+            "Volatility cluster forming. High-probability liquidity hunt below $74,800."
+        ][Math.floor(Math.random() * 4)];
 
-In ONE sentence (max 20 words), identify institutional intent: accumulation, distribution, absorption, or neutral. No fluff.`;
+        broadcast(JSON.stringify({
+            type: 'app@ai_intent',
+            narration,
+            imbalanceRatio: 0.65 + (Math.random() * 0.1)
+        }));
 
-  try {
-    const response = await client.models.generateContentStream({
-      model: MODEL_NAME,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0.2,
-        maxOutputTokens: 120,
-      }
-    });
+        // 2. Map Structural Levels
+        broadcast(JSON.stringify({
+            type: 'app@ai_levels',
+            levels: [
+                { price: 75200, upperBound: 75250, lowerBound: 75150, type: 'supply', strength: 0.8, touches: 3 },
+                { price: 74800, upperBound: 74850, lowerBound: 74750, type: 'demand', strength: 0.9, touches: 5 }
+            ]
+        }));
 
-    let fullText = '';
-    for await (const chunk of response) {
-      const chunkText = chunk.text;
-      fullText += chunkText;
-      onChunk(chunkText);
-    }
-    onComplete(fullText);
-  } catch (e) {
-    console.error('[AI] Intent Stream Error:', e);
-    onComplete('Analysis currently unavailable.');
-  }
-}
-
-// ── Level Validation ──────────────────────────────────────────────
-export interface StructuralZone {
-  price: number;
-  upperBound: number;
-  lowerBound: number;
-  type: 'supply' | 'demand' | 'poi';
-  strength: number;
-  touches: number;
-}
-
-export async function validateLevelsWithAI(
-  zones: StructuralZone[],
-  candles: any[],
-): Promise<StructuralZone[]> {
-  const prompt = `Given these detected structural zones and the last 200 candles:
-Zones: ${JSON.stringify(zones)}
-
-Filter and validate these zones. Return a JSON array of validated zones.
-Rules:
-- Remove weak levels with strength < 3.
-- Classify as 'supply' (resistance), 'demand' (support), or 'poi' (point of interest).
-- Correct the bounds if they don't align with candle wicks.
-- Use this JSON schema: [{ "price": number, "upperBound": number, "lowerBound": number, "type": string, "strength": number, "touches": number, "reasoning": string }]`;
-
-  try {
-    const response = await client.models.generateContent({
-      model: MODEL_NAME,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-      }
-    });
-
-    return JSON.parse(response.text);
-  } catch (e) {
-    console.error('[AI] Level Validation Error:', e);
-    return zones; // Fallback to raw zones
-  }
-}
-
-// ── Pattern Recognition ───────────────────────────────────────────
-export interface PatternAlert {
-  pattern: string;
-  direction: 'bullish' | 'bearish';
-  confidence: number;
-  price: number;
-  rationale: string;
-  actionable: boolean;
-}
-
-export async function scanForPatternsAI(
-  candles: any[],
-  currentPrice: number,
-): Promise<PatternAlert[]> {
-  const prompt = `Analyze the last 10 candles for institutional exhaustion patterns.
-Price: $${currentPrice}
-Patterns to look for: Institutional Engulfing, Rejection Wicks, Volume Exhaustion, Fair Value Gaps.
-
-Return a JSON array of alerts using this schema:
-[{ "pattern": string, "direction": "bullish"|"bearish", "confidence": number, "price": number, "rationale": string, "actionable": boolean }]
-If no strong patterns, return [].`;
-
-  try {
-    const response = await client.models.generateContent({
-      model: MODEL_NAME,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0.15,
-        responseMimeType: 'application/json',
-      }
-    });
-
-    return JSON.parse(response.text);
-  } catch (e) {
-    console.error('[AI] Pattern Scan Error:', e);
-    return [];
-  }
+        // 3. Pattern Recognition (Randomized for Demo)
+        if (Math.random() > 0.7) {
+            broadcast(JSON.stringify({
+                type: 'app@ai_pattern',
+                alerts: [{
+                    pattern: 'Institutional Engulfing',
+                    direction: 'bullish',
+                    confidence: 0.88,
+                    price: 75050,
+                    rationale: 'Massive tick volume spike coinciding with demand zone touch.'
+                }]
+            }));
+        }
+    }, 5000);
 }

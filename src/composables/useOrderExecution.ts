@@ -22,6 +22,12 @@ export function useOrderExecution() {
         price: number;
         leverage: number;
         marginEnabled: boolean;
+        accountIds?: string[];
+        sorConfig?: {
+            strategy: 'market' | 'iceberg' | 'twap';
+            icebergSlices?: number;
+            twapWindowMs?: number;
+        };
         stopPrice?: number;
         callbackRate?: number;
         activationPrice?: number;
@@ -59,6 +65,8 @@ export function useOrderExecution() {
                 type: params.type,
                 quantity: params.amount,
                 price: params.price,
+                accountIds: params.accountIds,
+                sorConfig: params.sorConfig,
                 stopPrice: params.stopPrice,
                 callbackRate: params.callbackRate,
                 activationPrice: params.activationPrice,
