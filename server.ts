@@ -42,11 +42,7 @@ async function start() {
   });
 
   // ── Start Background Services ──────────────────────────────
-  startAIAnalytics((payload) => {
-    for (const client of clients) {
-      if (client.readyState === 1) client.send(payload);
-    }
-  });
+  // (AI Analytics is now handled by workerManager at the bottom of the file)
 
   // ── Circuit Breaker Broadcast ──────────────────────────────
   Object.values(circuitBreakers).forEach(cb => {

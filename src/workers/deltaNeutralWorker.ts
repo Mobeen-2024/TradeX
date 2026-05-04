@@ -20,7 +20,7 @@
  */
 
 import { parentPort, workerData, isMainThread } from 'worker_threads';
-import Redis from 'ioredis';
+import { createRedisClient } from '../lib/redis.js';
 
 if (isMainThread) {
   throw new Error('deltaNeutralWorker must be run as a worker_thread, not directly.');
@@ -40,10 +40,7 @@ let config: DeltaNeutralConfig = workerData as DeltaNeutralConfig;
 let running = true;
 
 // ── Redis client (separate instance per worker thread) ─────────────
-const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-  maxRetriesPerRequest: 3,
-  lazyConnect: false,
-});
+const redis = createRedisClient();
 
 function log(msg: string) {
   parentPort?.postMessage({ type: 'log', worker: 'delta_neutral', message: msg });

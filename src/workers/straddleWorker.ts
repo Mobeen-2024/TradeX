@@ -22,7 +22,7 @@
  */
 
 import { parentPort, workerData, isMainThread } from 'worker_threads';
-import Redis from 'ioredis';
+import { createRedisClient } from '../lib/redis.js';
 
 if (isMainThread) {
   throw new Error('straddleWorker must be run as a worker_thread, not directly.');
@@ -54,10 +54,7 @@ let running = true;
 let activeLeg: { long?: StraddleLeg; short?: StraddleLeg } = {};
 
 // ── Redis client ───────────────────────────────────────────────────
-const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
-  maxRetriesPerRequest: 3,
-  lazyConnect: false,
-});
+const redis = createRedisClient();
 
 // Price history ring buffer (last 20 prices for vol computation)
 const priceHistory: number[] = [];

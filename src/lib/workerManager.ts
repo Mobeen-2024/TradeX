@@ -45,17 +45,21 @@ function broadcast(payload: object) {
 
 // ── Redis registry sync ────────────────────────────────────────────
 async function syncRegistryToRedis() {
-  const summary: Record<string, any> = {};
-  for (const [id, entry] of registry.entries()) {
-    summary[id] = {
-      id,
-      type:      entry.type,
-      status:    entry.status,
-      config:    entry.config,
-      startedAt: entry.startedAt,
-    };
+  try {
+    const summary: Record<string, any> = {};
+    for (const [id, entry] of registry.entries()) {
+      summary[id] = {
+        id,
+        type:      entry.type,
+        status:    entry.status,
+        config:    entry.config,
+        startedAt: entry.startedAt,
+      };
+    }
+    await redis.set('tradex:workers', JSON.stringify(summary));
+  } catch (err) {
+    console.warn('[WorkerMgr] Failed to sync registry to Redis (is Redis running?):', (err as Error).message);
   }
-  await redis.set('tradex:workers', JSON.stringify(summary));
 }
 
 // ── Worker file resolution ─────────────────────────────────────────

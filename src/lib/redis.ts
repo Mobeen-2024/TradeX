@@ -3,15 +3,21 @@ import Redis from 'ioredis';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
-export const redis = new Redis(REDIS_URL, {
-  maxRetriesPerRequest: 3,
-  enableReadyCheck: true,
-  lazyConnect: false,
-  retryStrategy: (times) => Math.min(times * 100, 3000),
-});
+export function createRedisClient(options: any = {}) {
+  const client = new Redis(REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: true,
+    lazyConnect: false,
+    retryStrategy: (times) => Math.min(times * 100, 3000),
+    ...options
+  });
+  client.on('error', (err) => console.error('[Redis] Error:', (err as Error).message));
+  return client;
+}
+
+export const redis = createRedisClient();
 
 redis.on('connect', () => console.log('[Redis] Connected'));
-redis.on('error', (err) => console.error('[Redis] Error:', (err as Error).message));
 
 // ── Key Schema ─────────────────────────────────────────────────
 export const KEYS = {

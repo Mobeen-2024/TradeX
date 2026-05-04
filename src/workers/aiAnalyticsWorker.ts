@@ -18,6 +18,7 @@ import {
   IntentSnapshot,
   StructuralZone
 } from '../lib/aiAnalytics.js';
+import { createRedisClient } from '../lib/redis.js';
 
 if (isMainThread) {
   throw new Error('aiAnalyticsWorker must run as a worker_thread.');
@@ -42,7 +43,7 @@ let config: AIConfig = {
 let running = true;
 
 // ── Redis ──────────────────────────────────────────────────────────
-const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+const redis = createRedisClient();
 
 function log(msg: string) {
   parentPort?.postMessage({ type: 'log', worker: 'ai_analytics', message: msg });

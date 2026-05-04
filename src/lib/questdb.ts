@@ -6,22 +6,40 @@ const ILP_PORT = parseInt(process.env.QUESTDB_ILP_PORT ?? '9009');
 
 let client: net.Socket | null = null;
 let connected = false;
+let reconnectTimer: NodeJS.Timeout | null = null;
 
 function connect() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  if (client) {
+    client.removeAllListeners();
+    client.destroy();
+  }
+
   client = new net.Socket();
   client.connect(ILP_PORT, HOST, () => {
     connected = true;
     console.log('[QuestDB] ILP connected');
   });
-  client.on('error', (err) => {
-    console.error('[QuestDB] ILP error:', (err as Error).message);
+
+  const handleFailure = (msg: string) => {
+    if (connected) {
+      console.warn(`[QuestDB] Connection lost: ${msg}`);
+    } else {
+      console.error(`[QuestDB] ILP error: ${msg}`);
+    }
     connected = false;
-    setTimeout(connect, 5000); // reconnect
-  });
-  client.on('close', () => {
-    connected = false;
-    setTimeout(connect, 5000);
-  });
+    
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(connect, 5000);
+    }
+  };
+
+  client.on('error', (err) => handleFailure((err as Error).message));
+  client.on('close', () => handleFailure('Socket closed'));
 }
 
 connect();
