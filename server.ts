@@ -391,6 +391,14 @@ async function start() {
     }
     console.log(`\n  🚀 TradeX Pro Backend running at: ${address}`);
     gateway.connect();
+
+    // ── Start Institutional AI Analytics ───────────
+    workerManager.start('ai_analytics', { 
+        symbol: 'btcusdt',
+        intentIntervalMs: 1000,
+        levelsIntervalMs: 30000,
+        qualityGateEnabled: true
+    }).catch(err => console.error('[AI] Worker failed to start:', err));
   });
 
   const shutdown = async () => {

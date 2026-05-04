@@ -19,7 +19,7 @@ import { redis } from './redis.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export type StrategyType = 'delta_neutral' | 'straddle';
+export type StrategyType = 'delta_neutral' | 'straddle' | 'ai_analytics';
 
 interface WorkerEntry {
   id:       string;
@@ -65,6 +65,7 @@ function resolveWorkerFile(type: StrategyType): string {
   const workerMap: Record<StrategyType, string> = {
     delta_neutral: path.join(__dirname, '..', 'workers', `deltaNeutralWorker.${ext}`),
     straddle:      path.join(__dirname, '..', 'workers', `straddleWorker.${ext}`),
+    ai_analytics:  path.join(__dirname, '..', 'workers', `aiAnalyticsWorker.${ext}`),
   };
   return workerMap[type];
 }
@@ -137,6 +138,22 @@ async function handleWorkerMessage(workerId: string, msg: any) {
     case 'close_leg':
       console.log(`[WorkerMgr] Closing leg from ${workerId}: ${msg.leg.side} @ ${msg.leg.closePrice} (${msg.leg.reason})`);
       broadcast({ type: 'worker_leg_closed', workerId, leg: msg.leg });
+      break;
+
+    case 'ai_intent_chunk':
+      broadcast({ type: 'ai_intent_chunk', workerId, chunk: msg.chunk });
+      break;
+
+    case 'ai_intent':
+      broadcast({ type: 'ai_intent', workerId, narration: msg.narration, imbalanceRatio: msg.imbalanceRatio });
+      break;
+
+    case 'ai_levels':
+      broadcast({ type: 'ai_levels', workerId, levels: msg.levels });
+      break;
+
+    case 'ai_pattern':
+      broadcast({ type: 'ai_pattern', workerId, alerts: msg.alerts });
       break;
 
     case 'stopped': {

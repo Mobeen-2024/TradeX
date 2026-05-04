@@ -17,6 +17,8 @@ import ToastProvider from './components/ToastProvider.vue';
 import LeaderBoard from './components/LeaderBoard.vue';
 import Tournaments from './components/Tournaments.vue';
 import TradingSignals from './components/TradingSignals.vue';
+import MarketIntelPanel from './components/MarketIntelPanel.vue';
+import { initAIStore } from './store/aiStore';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode, quickTradePreferences } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool, globalSymbol } from './store/workspaceStore';
@@ -83,6 +85,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 };
 
 onMounted(() => {
+    initAIStore();
     window.addEventListener('keydown', handleKeydown);
 });
 
@@ -156,20 +159,27 @@ const icons: Record<string, any> = {
           <!-- On mobile, we show only the active mobileTab. On desktop, we show the full grid. -->
           <div class="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[1fr_250px] gap-2 flex-1 min-h-[0]">
             
-            <!-- Chart: Visible on Desktop OR if mobileTab is 'Chart' -->
+            <!-- Chart -->
             <div 
               :class="cn(
-                'lg:col-span-7 xl:col-span-8 lg:row-start-1 lg:col-start-1 flex flex-col min-h-[450px] lg:min-h-[0]',
+                'lg:col-span-6 xl:col-span-7 lg:row-start-1 lg:col-start-1 flex flex-col min-h-[450px] lg:min-h-[0]',
                 mobileTab !== 'Chart' ? 'hidden md:flex' : 'flex'
               )"
             >
               <MultiChartWorkspace class="w-full h-full" />
             </div>
 
-            <!-- OrderPanel: Visible on Desktop OR if mobileTab is 'Trade' -->
+            <!-- AI Intelligence -->
+            <div 
+              class="hidden xl:flex xl:col-span-2 lg:row-start-1 lg:col-start-8 flex-col h-full"
+            >
+              <MarketIntelPanel class="w-full h-full rounded-[16px]" />
+            </div>
+
+            <!-- OrderPanel -->
             <div 
               :class="cn(
-                'lg:col-span-5 xl:col-span-4 lg:row-start-1 lg:col-start-8 xl:col-start-9 flex flex-col h-[520px] lg:h-full',
+                'lg:col-span-6 xl:col-span-3 lg:row-start-1 lg:col-start-7 xl:col-start-10 flex flex-col h-[520px] lg:h-full',
                 mobileTab !== 'Trade' ? 'hidden md:flex' : 'flex'
               )"
             >

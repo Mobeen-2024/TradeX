@@ -94,6 +94,12 @@ class WebSocketManager {
                     this.dispatch('btcusdt@depth20@100ms', depthData);
                 }
 
+                // 4. AI Insights
+                if (data.type === 'ai_intent_chunk') this.dispatch('app@ai_intent_chunk', data);
+                if (data.type === 'ai_intent')       this.dispatch('app@ai_intent', data);
+                if (data.type === 'ai_levels')       this.dispatch('app@ai_levels', data);
+                if (data.type === 'ai_pattern')      this.dispatch('app@ai_pattern', data);
+
                 // Handle legacy or direct stream routing
                 const stream = data.stream || (data.e ? `${data.s?.toLowerCase()}@${data.e}` : null);
                 if (stream) {

@@ -8,6 +8,8 @@ import { useChartData } from '../composables/useChartData';
 import { FootprintRenderer } from '../lib/chart/FootprintRenderer';
 import { DrawingManager } from '../lib/chart/DrawingManager';
 import { OrderLinesRenderer } from '../lib/chart/OrderLinesRenderer';
+import { aiLevels, initAIStore } from '../store/aiStore';
+import { LineStyle } from 'lightweight-charts';
 
 // Sub-components
 import ChartToolbar from './trading-chart/ChartToolbar.vue';
@@ -72,7 +74,7 @@ let riskSlLine: IPriceLine | null = null;
 let isDraggingSl = false;
 const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
 
-watch([activePositions, openOrders, alerts, currentPrice], () => {
+watch([activePositions, openOrders, alerts, currentPrice, aiLevels], () => {
     renderHeatmap();
 }, { deep: true });
 
@@ -208,6 +210,7 @@ const renderHeatmap = () => {
     });
 
     renderDrawingsInternal(ctx);
+    renderAILevels(ctx);
 
     // 2. Render Order Lines (Positions, Orders, Alerts)
     OrderLinesRenderer.render(
@@ -234,6 +237,40 @@ const renderDrawingsInternal = (ctx: CanvasRenderingContext2D) => {
                 ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
                 ctx.strokeStyle = '#F0B90B'; ctx.stroke();
             }
+        }
+    });
+};
+
+const renderAILevels = (ctx: CanvasRenderingContext2D) => {
+    if (!candleSeries || !chart || !aiLevels.value.length) return;
+
+    aiLevels.value.forEach(level => {
+        const yUpper = candleSeries!.priceToCoordinate(level.upperBound);
+        const yLower = candleSeries!.priceToCoordinate(level.lowerBound);
+        const canvas = ctx.canvas;
+
+        if (yUpper !== null && yLower !== null) {
+            // Zone shading
+            const color = level.type === 'supply' ? 'rgba(246, 70, 93, 0.15)' : 
+                          level.type === 'demand' ? 'rgba(14, 203, 129, 0.15)' : 
+                          'rgba(240, 185, 11, 0.15)';
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(0, yUpper, canvas.width, yLower - yUpper);
+
+            // Bounds
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = color.replace('0.15', '0.4');
+            ctx.lineWidth = 1;
+            
+            ctx.beginPath(); ctx.moveTo(0, yUpper); ctx.lineTo(canvas.width, yUpper); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, yLower); ctx.lineTo(canvas.width, yLower); ctx.stroke();
+            ctx.setLineDash([]); // Reset
+            
+            // Label
+            ctx.fillStyle = color.replace('0.15', '0.8');
+            ctx.font = 'bold 9px Inter';
+            ctx.fillText(`${level.type.toUpperCase()} ST:${level.strength}`, 10, yUpper - 4);
         }
     });
 };
