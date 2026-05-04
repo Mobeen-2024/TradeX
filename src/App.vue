@@ -17,38 +17,50 @@ import ToastProvider from './components/ToastProvider.vue';
 import LeaderBoard from './components/LeaderBoard.vue';
 import Tournaments from './components/Tournaments.vue';
 import TradingSignals from './components/TradingSignals.vue';
-import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode } from './store/tradeStore';
+import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode, quickTradePreferences } from './store/tradeStore';
 import { cn } from './lib/utils';
-import { activeTool, setGlobalTool } from './store/workspaceStore';
+import { activeTool, setGlobalTool, globalSymbol } from './store/workspaceStore';
 import { LayoutDashboard, History, TrendingUp, Settings as SettingsIcon, Menu, X, Zap, ArrowDownLeft, ArrowUpRight, Bitcoin, Activity, Signal } from 'lucide-vue-next';
 
 const activeItem = ref('Market');
 const mobileTab = ref('Chart');
 const settingsPanel = ref<InstanceType<typeof SettingsPanel> | null>(null);
+const uiFlash = ref<'buy' | 'sell' | null>(null);
+
+const triggerFlash = (type: 'buy' | 'sell') => {
+    uiFlash.value = type;
+    setTimeout(() => { uiFlash.value = null; }, 300);
+};
 
 // Professional Hotkeys
 const handleKeydown = (e: KeyboardEvent) => {
     // Only trigger if not typing in an input
     if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
+    const { defaultRisk, defaultLeverage } = quickTradePreferences.value;
+    const size = defaultRisk / currentPrice.value;
+    const symbol = globalSymbol.value.replace('USDT', '/USDT');
+
     if (e.key.toLowerCase() === 'b') {
         // Instant Market Buy
+        triggerFlash('buy');
         addPosition({
-            pair: 'BTC/USDT',
+            pair: symbol,
             type: 'LONG',
-            leverage: '20',
-            size: 0.1,
-            cost: (currentPrice.value * 0.1) / 20,
+            leverage: `${defaultLeverage}x`,
+            size: Number(size.toFixed(5)),
+            cost: defaultRisk / defaultLeverage,
             entry: currentPrice.value
         });
     } else if (e.key.toLowerCase() === 's') {
         // Instant Market Sell
+        triggerFlash('sell');
         addPosition({
-            pair: 'BTC/USDT',
+            pair: symbol,
             type: 'SHORT',
-            leverage: '20',
-            size: 0.1,
-            cost: (currentPrice.value * 0.1) / 20,
+            leverage: `${defaultLeverage}x`,
+            size: Number(size.toFixed(5)),
+            cost: defaultRisk / defaultLeverage,
             entry: currentPrice.value
         });
     } else if (e.key.toLowerCase() === 'c') {
@@ -63,6 +75,8 @@ const handleKeydown = (e: KeyboardEvent) => {
         setGlobalTool('fib');
     } else if (e.altKey && e.key.toLowerCase() === 'a') {
         setGlobalTool('alert');
+    } else if (e.key.toLowerCase() === 'q') {
+        quickTradeMode.value = !quickTradeMode.value;
     } else if (e.key === 'Escape') {
         setGlobalTool('none');
     }
@@ -98,6 +112,21 @@ const icons: Record<string, any> = {
       
       <!-- Subtle Tech Grid -->
       <div class="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_40%,transparent_100%)]"></div>
+
+      <!-- Hotkey Flash Feedback Overlay -->
+      <Transition 
+        enter-active-class="transition duration-100 ease-out" 
+        enter-from-class="opacity-0" 
+        enter-to-class="opacity-100" 
+        leave-active-class="transition duration-300 ease-in" 
+        leave-from-class="opacity-100" 
+        leave-to-class="opacity-0"
+      >
+        <div v-if="uiFlash" :class="cn(
+          'absolute inset-0 z-[100] pointer-events-none transition-opacity duration-300',
+          uiFlash === 'buy' ? 'bg-[#0ecb81]/10' : 'bg-[#f6465d]/10'
+        )"></div>
+      </Transition>
     </div>
 
     <!-- Main Content Container with z-index to overlay background -->
