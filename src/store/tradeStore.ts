@@ -134,6 +134,7 @@ export const placeOrder = async (order: {
   cost: number;
   takeProfitPrice?: number;
   stopLossPrice?: number;
+  iceberg?: boolean;
 }) => {
   const id = Math.random().toString(36).substr(2, 9);
   const isMarket = order.type === 'MARKET' || order.type === 'STOP_MARKET' || order.type === 'TRAILING_STOP_MARKET';
@@ -203,7 +204,8 @@ export const placeOrder = async (order: {
               time: new Date().toLocaleTimeString(),
               status: 'Open',
               tp: order.takeProfitPrice,
-              sl: order.stopLossPrice
+              sl: order.stopLossPrice,
+              iceberg: order.iceberg
           });
           addNotification({
               type: 'info',

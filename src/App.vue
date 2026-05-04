@@ -14,6 +14,9 @@ import MarketSentiment from './components/MarketSentiment.vue';
 import PerformanceDashboard from './components/PerformanceDashboard.vue';
 import QuickTradeView from './components/QuickTradeView.vue';
 import ToastProvider from './components/ToastProvider.vue';
+import LeaderBoard from './components/LeaderBoard.vue';
+import Tournaments from './components/Tournaments.vue';
+import TradingSignals from './components/TradingSignals.vue';
 import { addPosition, closePosition, currentPrice, activePositions, cancelOrder, openOrders, quickTradeMode } from './store/tradeStore';
 import { cn } from './lib/utils';
 import { activeTool, setGlobalTool } from './store/workspaceStore';
@@ -235,6 +238,18 @@ const icons: Record<string, any> = {
 
       <div v-else-if="activeItem === 'Analytics'" class="flex-1 overflow-y-auto no-scrollbar">
         <PerformanceDashboard />
+      </div>
+
+      <div v-else-if="activeItem === 'Leader Board'" class="flex-1 overflow-y-auto no-scrollbar">
+        <LeaderBoard />
+      </div>
+
+      <div v-else-if="activeItem === 'Tournaments'" class="flex-1 overflow-y-auto no-scrollbar">
+        <Tournaments />
+      </div>
+
+      <div v-else-if="activeItem === 'Trading signals'" class="flex-1 overflow-y-auto no-scrollbar">
+        <TradingSignals />
       </div>
       
       <div v-else class="flex-1 flex items-center justify-center text-dash-text-muted">

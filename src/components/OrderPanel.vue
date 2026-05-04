@@ -310,6 +310,7 @@ const executeTrade = async () => {
     activationPrice: activationPrice.value || undefined,
     takeProfitPrice: finalTp || undefined,
     stopLossPrice: finalSl || undefined,
+    iceberg: iceberg.value,
   });
 
   if (result?.success) {

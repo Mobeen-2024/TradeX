@@ -27,6 +27,7 @@ export function useOrderExecution() {
         activationPrice?: number;
         takeProfitPrice?: number;
         stopLossPrice?: number;
+        iceberg?: boolean;
     }) => {
         if (isPending.value) return;
         isPending.value = true;
@@ -65,6 +66,7 @@ export function useOrderExecution() {
                 cost: marginRequired,
                 takeProfitPrice: params.takeProfitPrice,
                 stopLossPrice: params.stopLossPrice,
+                iceberg: params.iceberg,
             });
 
             return { success: true };

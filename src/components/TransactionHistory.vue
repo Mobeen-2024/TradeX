@@ -205,7 +205,10 @@ const formatDate = (date: any) => {
                         <td class="px-5 py-4 text-[#EAECEF] font-bold">{{ order.pair }}</td>
                         <td class="px-5 py-4">
                             <div class="flex flex-col gap-0.5">
-                                <span class="text-[#EAECEF]">{{ order.type }}</span>
+                                <div class="flex items-center gap-1.5">
+                                  <span class="text-[#EAECEF]">{{ order.type }}</span>
+                                  <span v-if="order.iceberg" class="px-1 py-0.5 bg-[#2b3139] text-[#848e9c] text-[8px] font-black rounded border border-white/5">ICEBERG</span>
+                                </div>
                                 <span :class="order.side === 'Buy' ? 'text-[#0ecb81]' : 'text-[#f6465d]'">{{ order.side }}</span>
                             </div>
                         </td>
