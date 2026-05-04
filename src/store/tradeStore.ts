@@ -30,11 +30,11 @@ export const selectedPrice = ref<number | null>(null);
 export const sharedSlPrice = ref<number | null>(null);
 export const isRiskModeActive = ref(false);
 export const marketData = ref({
-    change24h: '+1,240.50 +1.99%',
-    high24h: '78,500.00',
-    low24h: '73,800.00',
-    volBtc24h: '42,512.14',
-    volUsdt24h: '3.18B'
+    change24h: '0.00 0.00%',
+    high24h: '0.00',
+    low24h: '0.00',
+    volBtc24h: '0.00',
+    volUsdt24h: '0.00'
 });
 
 export const openOrders = ref<any[]>([]);
@@ -84,22 +84,24 @@ export const removeAlert = (id: string) => {
     alerts.value = alerts.value.filter(a => a.id !== id);
 };
 
-if (typeof window !== 'undefined') {
-    fetch('/api/positions')
-        .then(res => res.json())
-        .then(data => {
-            if (data.positions) activePositions.value = data.positions;
-            if (data.openOrders) openOrders.value = data.openOrders;
-        })
-        .catch(() => {});
-}
-
 export const orderBook = ref<{
     bids: [number, number][];
     asks: [number, number][];
 }>({ bids: [], asks: [] });
 
+// ── Institutional Stream Handlers ───────────────────────────
 if (typeof window !== 'undefined') {
+    // 1. Initial Snapshot
+    wsManager.subscribe('app@snapshot', (data) => {
+        console.log('[TradeStore] Snapshot received');
+        if (data.positions) activePositions.value = data.positions;
+        if (data.openOrders) openOrders.value = data.openOrders;
+        if (data.globalState?.price) {
+            currentPrice.value = parseFloat(data.globalState.price);
+        }
+    });
+
+    // 2. Real-time Ticker
     wsManager.subscribe('btcusdt@ticker', (data) => {
         previousPrice.value = currentPrice.value;
         currentPrice.value = parseFloat(data.c);
@@ -113,11 +115,17 @@ if (typeof window !== 'undefined') {
         };
     });
 
+    // 3. Real-time Depth
     wsManager.subscribe('btcusdt@depth20@100ms', (data) => {
         orderBook.value = {
             bids: data.b.map((b: string[]) => [parseFloat(b[0]), parseFloat(b[1])]),
             asks: data.a.map((a: string[]) => [parseFloat(a[0]), parseFloat(a[1])])
         };
+    });
+
+    // 4. Live Position Updates
+    wsManager.subscribe('app@positions', (positions: any[]) => {
+        activePositions.value = positions;
     });
 }
 
@@ -136,88 +144,35 @@ export const placeOrder = async (order: {
   stopLossPrice?: number;
   iceberg?: boolean;
 }) => {
-  const id = Math.random().toString(36).substr(2, 9);
-  const isMarket = order.type === 'MARKET' || order.type === 'STOP_MARKET' || order.type === 'TRAILING_STOP_MARKET';
-
   try {
-      const endpoint = isLiveMode.value ? '/live/place_order' : '/place_order';
-      const response = await apiClient.post<any>(endpoint, { 
+      // All orders now go through the centralized backend
+      const response = await apiClient.post<any>('/place_order', { 
           ...order, 
-          amount: order.quantity, 
-          isLive: isLiveMode.value 
+          amount: order.quantity
       });
 
       if (response.success && response.data) {
           const data = response.data;
-          if (data.position) {
-              activePositions.value.push(data.position);
-              addNotification({
-                  type: 'success',
-                  title: 'Order Filled',
-                  message: `${order.side} ${order.quantity} ${order.pair} @ ${order.price || currentPrice.value}`
-              });
-          } else if (data.order) {
-              openOrders.value.push(data.order);
-              addNotification({
-                  type: 'info',
-                  title: 'Order Placed',
-                  message: `${order.type} ${order.side} ${order.quantity} ${order.pair}`
-              });
-          }
-          return data;
-      }
-      throw new Error(response.error || 'API call failed');
-  } catch (err) {
-      // Mock Simulation for local demo
-      if (isMarket) {
-          activePositions.value.push({
-              id,
-              pair: order.pair,
-              type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-              size: order.quantity,
-              entry: order.price || currentPrice.value,
-              leverage: order.leverage.replace('Spot', '1x').replace('Cross_', ''),
-              cost: order.cost,
-              tp: order.takeProfitPrice,
-              sl: order.stopLossPrice,
-              time: Date.now(),
-              pnl: 0,
-              pnlPercent: 0,
-              liveDelta: 0,
-              liveDeltaPercent: 0,
-              mark: order.price || currentPrice.value
-          });
+          // Note: Backend now emits 'position_opened' or 'order_placed' via WS
+          // but we still return data for UI confirmation if needed.
           addNotification({
               type: 'success',
-              title: 'Order Filled',
-              message: `${order.side} ${order.quantity} ${order.pair} @ ${order.price || currentPrice.value}`
+              title: 'Order Submitted',
+              message: `${order.side} ${order.quantity} ${order.pair} sent to execution engine.`
           });
-      } else {
-          openOrders.value.unshift({
-              id,
-              pair: order.pair,
-              side: order.side,
-              type: order.type,
-              price: order.price || currentPrice.value,
-              amount: order.quantity,
-              total: (order.price || currentPrice.value) * order.quantity,
-              time: new Date().toLocaleTimeString(),
-              status: 'Open',
-              tp: order.takeProfitPrice,
-              sl: order.stopLossPrice,
-              iceberg: order.iceberg
-          });
-          addNotification({
-              type: 'info',
-              title: 'Order Placed',
-              message: `${order.type} ${order.side} ${order.quantity} ${order.pair}`
-          });
+          return data;
       }
-      return { success: true };
+      throw new Error(response.error || 'Execution failed');
+  } catch (err) {
+      addNotification({
+          type: 'error',
+          title: 'Order Failed',
+          message: (err as Error).message
+      });
+      return { success: false, error: (err as Error).message };
   }
 };
 
-// Maintain addPosition for compatibility or refactor components
 export const addPosition = (pos: any) => placeOrder({
     ...pos,
     side: pos.type === 'LONG' ? 'Buy' : 'Sell',
@@ -229,52 +184,41 @@ export const addPosition = (pos: any) => placeOrder({
 });
 
 export const closePosition = async (id: string) => {
-  const pos = activePositions.value.find(p => p.id === id);
-  if (pos) {
-      const pnl = pos.type === 'LONG' 
-          ? (currentPrice.value - pos.entry) * pos.size 
-          : (pos.entry - currentPrice.value) * pos.size;
-      
-      closedTrades.value.push({
-          ...pos,
-          closePrice: currentPrice.value,
-          realizedPnl: pnl,
-          closeTime: Date.now()
-      });
-      addNotification({
-          type: pnl >= 0 ? 'success' : 'warning',
-          title: 'Position Closed',
-          message: `${pos.pair} ${pos.type} closed. P&L: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT`
-      });
-  }
-  
   try {
       await apiClient.post(`/close_position/${id}`, {});
-  } catch (err) {}
-  activePositions.value = activePositions.value.filter(p => p.id !== id);
+      addNotification({
+          type: 'info',
+          title: 'Closing Position',
+          message: `Request to close position ${id} submitted.`
+      });
+  } catch (err) {
+      addNotification({
+          type: 'error',
+          title: 'Close Failed',
+          message: 'Failed to submit close request.'
+      });
+  }
 };
 
 export const cancelOrder = async (id: string) => {
-    const order = openOrders.value.find(o => o.id === id);
-    if (order) {
+    try {
+        // In real app, call API to cancel
+        // For now, we'll just filter locally until Phase 2
+        openOrders.value = openOrders.value.filter(o => o.id !== id);
         addNotification({
             type: 'info',
             title: 'Order Cancelled',
-            message: `${order.type} ${order.side} ${order.pair} removed.`
+            message: `Order ${id} removed.`
         });
-    }
-    // In real app, call API
-    openOrders.value = openOrders.value.filter(o => o.id !== id);
+    } catch (err) {}
 };
 
-// Mock History Generator for Demo
+// History is now managed by the backend, but we can keep the mock generator for demo visuals if empty
 export const generateMockHistory = () => {
     if (closedTrades.value.length > 0) return;
-    
     const count = 15;
     const startPrice = 35000;
     const trades = [];
-    
     for (let i = 0; i < count; i++) {
         const win = Math.random() > 0.4;
         const pnl = win ? (Math.random() * 500 + 100) : -(Math.random() * 300 + 50);
@@ -293,7 +237,6 @@ export const generateMockHistory = () => {
     closedTrades.value = trades;
 };
 
-// Auto-populate for first run
 if (typeof window !== 'undefined') {
     setTimeout(generateMockHistory, 1000);
 }

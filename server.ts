@@ -3,93 +3,19 @@ import fastifyWebsocket from '@fastify/websocket';
 import middie from '@fastify/middie';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
-
-const DB_FILE = path.join(process.cwd(), 'mock_db.json');
-let positions: any[] = [];
-
-if (fs.existsSync(DB_FILE)) {
-  try {
-    positions = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-  } catch (e) {}
-}
-
-const saveDb = () => {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(positions, null, 2));
-  } catch (err) {
-    console.error('Failed to save DB:', err);
-  }
-};
-
-let globalPrice = 76222.65;
-let openPrice = 75000.00;
-let high24h = 78500.00;
-let low24h = 73800.00;
-let volBtc = 42512.14;
-let volUsdt = 3180000000;
-
-let openOrders: any[] = [];
-
-setInterval(() => {
-    const volatility = globalPrice * 0.0001; // reduced volatility slightly
-    globalPrice += (Math.random() - 0.5) * volatility;
-    if (globalPrice > high24h) high24h = globalPrice;
-    if (globalPrice < low24h) low24h = globalPrice;
-    
-    const mark = Number(globalPrice.toFixed(2));
-    
-    let dbChanged = false;
-
-    // 1. Process Open Orders (Stop Loss / Take Profit / Trailing)
-    openOrders = openOrders.filter(order => {
-        let triggered = false;
-        
-        if (order.type === 'STOP_MARKET' || order.type === 'STOP') {
-            if (order.side === 'Buy' && mark >= order.stopPrice) triggered = true;
-            if (order.side === 'Sell' && mark <= order.stopPrice) triggered = true;
-        } else if (order.type === 'TAKE_PROFIT_MARKET' || order.type === 'TAKE_PROFIT') {
-            if (order.side === 'Buy' && mark <= order.stopPrice) triggered = true;
-            if (order.side === 'Sell' && mark >= order.stopPrice) triggered = true;
-        } else if (order.type === 'TRAILING_STOP_MARKET') {
-            // Simple mock: trigger if price moves against us by callbackRate
-            // In real logic, we'd track the "peak" price.
-            if (order.side === 'Sell' && mark <= order.activationPrice * (1 - order.callbackRate/100)) triggered = true;
-            if (order.side === 'Buy' && mark >= order.activationPrice * (1 + order.callbackRate/100)) triggered = true;
-        }
-
-        if (triggered) {
-            console.log('Order Triggered:', order.type, 'at', mark);
-            positions.push({
-                id: order.id,
-                pair: order.pair,
-                type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-                leverage: order.leverage,
-                size: order.amount,
-                cost: order.cost,
-                entry: mark,
-                mark: mark,
-                liveDelta: 0,
-                liveDeltaPercent: 0,
-                protocolLimits: ['-', '-']
-            });
-            dbChanged = true;
-            return false; // Remove from open orders
-        }
-        return true;
-    });
-
-    // 2. Update mock positions PNL globally
-    positions = positions.map(pos => {
-       const diff = pos.type === 'LONG' ? mark - pos.entry : pos.entry - mark;
-       const liveDelta = diff * pos.size;
-       const liveDeltaPercent = (diff / pos.entry) * 100 * (pos.leverage.includes('10x') ? 10 : 1);
-       return { ...pos, mark, liveDelta, liveDeltaPercent };
-    });
-    
-    if (dbChanged) saveDb();
-}, 500);
+import { gateway } from './src/lib/exchangeGateway.js';
+import { 
+  redis, 
+  KEYS, 
+  getPositions, 
+  getGlobalState, 
+  setPosition, 
+  deletePosition, 
+  getOpenOrders, 
+  setOpenOrder, 
+  deleteOpenOrder 
+} from './src/lib/redis.js';
 
 async function start() {
   const fastify = Fastify({ logger: false });
@@ -98,226 +24,253 @@ async function start() {
   await fastify.register(middie);
 
   const isProd = process.env.NODE_ENV === 'production';
+  const clients = new Set<any>();
 
+  // ── Gateway → Broadcast pipe ──────────────────────────────
+  gateway.on('trade', async (tick) => {
+    const positions = await getPositions();
+    const mark = tick.price;
+
+    // Update live PnL for all positions via Redis pipeline
+    const pipe = redis.pipeline();
+    for (const pos of positions) {
+      const diff = pos.type === 'LONG' ? mark - pos.entry : pos.entry - mark;
+      const liveDelta = diff * pos.size;
+      const leverageFactor = pos.leverage.includes('10x') ? 10 : 1;
+      const liveDeltaPercent = (diff / pos.entry) * 100 * leverageFactor;
+      const updated = { ...pos, mark, liveDelta, liveDeltaPercent };
+      pipe.hset(KEYS.positions, pos.id, JSON.stringify(updated));
+    }
+    await pipe.exec();
+
+    // Broadcast to all frontend WS clients
+    const payload = JSON.stringify({
+      type: 'trade',
+      price: tick.price,
+      amount: tick.qty,
+      side: tick.side,
+      timestamp: tick.timestamp,
+      positions: await getPositions(),
+    });
+
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
+
+  gateway.on('depth', ({ symbol, orderBook }) => {
+    const payload = JSON.stringify({ type: 'depth', symbol, orderBook });
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
+
+  gateway.on('ticker', (data) => {
+    const payload = JSON.stringify({
+      type: 'trade', // Reuse trade type for ticker updates to minimize frontend changes
+      price: parseFloat(data.c),
+      ticker: {
+        p: data.p,
+        P: data.P,
+        h: data.h,
+        l: data.l,
+        v: data.v,
+        q: data.q
+      }
+    });
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
+
+  // ── API Endpoints ──────────────────────────────────────────
   fastify.post('/api/place_order', async (request, reply) => {
     try {
-        const order: any = request.body;
-        const isInstant = order.type === 'Market' || !order.type;
-        
-        if (isInstant) {
-            const newPos = {
-                id: Math.random().toString(36).substr(2, 9),
-                pair: order.pair,
-                type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-                leverage: order.leverage,
-                size: order.amount,
-                cost: order.cost,
-                entry: order.price || globalPrice,
-                mark: order.price || globalPrice,
-                liveDelta: 0,
-                liveDeltaPercent: 0,
-                protocolLimits: ['-', '-']
-            };
-            positions.push(newPos);
-            saveDb();
-            return { success: true, position: newPos };
-        } else {
-            // Advanced Order
-            const newOrder = {
-                id: Math.random().toString(36).substr(2, 9),
-                ...order,
-                activationPrice: order.activationPrice || globalPrice
-            };
-            openOrders.push(newOrder);
-            return { success: true, order: newOrder };
-        }
+      const order: any = request.body;
+      const globalState = await getGlobalState();
+      const currentPrice = parseFloat(globalState.price ?? '0');
+      const isInstant = order.type === 'Market' || !order.type;
+      
+      if (isInstant) {
+        const newPos = {
+          id: Math.random().toString(36).substr(2, 9),
+          pair: order.pair,
+          type: order.side === 'Buy' ? 'LONG' : 'SHORT',
+          leverage: order.leverage,
+          size: order.amount,
+          cost: order.cost,
+          entry: order.price || currentPrice,
+          mark: order.price || currentPrice,
+          liveDelta: 0,
+          liveDeltaPercent: 0,
+          protocolLimits: ['-', '-']
+        };
+        await setPosition(newPos.id, newPos);
+        return { success: true, position: newPos };
+      } else {
+        const newOrder = {
+          id: Math.random().toString(36).substr(2, 9),
+          ...order,
+          activationPrice: order.activationPrice || currentPrice
+        };
+        await setOpenOrder(newOrder.id, newOrder);
+        return { success: true, order: newOrder };
+      }
     } catch(e: any) {
-        return reply.status(500).send({ error: e.message });
+      return reply.status(500).send({ error: e.message });
     }
   });
 
   fastify.post('/api/close_position/:id', async (request, reply) => {
     const { id } = request.params as any;
-    positions = positions.filter(p => p.id !== id);
-    saveDb();
-    console.log('Position POST closed, id:', id);
+    await deletePosition(id);
+    console.log('Position closed via API, id:', id);
     return { success: true };
   });
 
   fastify.get('/api/positions', async (request, reply) => {
-      return { positions };
+    const positions = await getPositions();
+    return { positions };
   });
-    fastify.get('/ws/trading', { websocket: true }, (connection /* WebSocket */, req) => {
-      console.log('WS Connection opened!');
-      connection.send(JSON.stringify({ type: 'connected', message: 'Fastify High-Speed Trading Backend Connected' }));
 
-      // Send initial state immediately
-      connection.send(JSON.stringify({
-          type: 'trade',
-          price: Number(globalPrice.toFixed(2)),
-          amount: 0,
-          side: 'buy',
-          timestamp: Date.now(),
-          orderBook: { asks: [], bids: [] },
-          positions
-      }));
+  // ── WebSocket Handler ──────────────────────────────────────
+  fastify.get('/ws/trading', { websocket: true }, async (connection, req) => {
+    clients.add(connection);
+    console.log('Frontend WS Connection opened!');
+    
+    connection.send(JSON.stringify({ type: 'connected', message: 'TradeX Pro Institutional Backend Connected' }));
 
-      // Simulate high-frequency trading data pushing
-      const interval = setInterval(() => {
-          if (connection.readyState === 1) { // OPEN
-              const asks = Array.from({ length: 7 }, (_, i) => ({
-                  price: Number((globalPrice + (7 - i) * 1.5 + Math.random()).toFixed(2)),
-                  amount: Number((Math.random() * 5 + 1).toFixed(3))
-              }));
-              
-              const bids = Array.from({ length: 7 }, (_, i) => ({
-                  price: Number((globalPrice - (i + 1) * 1.5 - Math.random()).toFixed(2)),
-                  amount: Number((Math.random() * 5 + 1).toFixed(3))
-              }));
+    // Send initial snapshot from Redis
+    const [positions, globalState] = await Promise.all([
+      getPositions(),
+      getGlobalState(),
+    ]);
 
-              const mockTrade = {
-                  type: 'trade',
-                  price: Number(globalPrice.toFixed(2)),
-                  amount: Number((Math.random() * 2).toFixed(4)),
-                  side: Math.random() > 0.5 ? 'buy' : 'sell',
-                  timestamp: Date.now(),
-                  ticker: {
-                      p: (globalPrice - openPrice).toFixed(2),
-                      P: (((globalPrice - openPrice) / openPrice) * 100).toFixed(2),
-                      h: high24h.toFixed(2),
-                      l: low24h.toFixed(2),
-                      v: volBtc.toFixed(2),
-                      q: volUsdt.toFixed(2)
-                  },
-                  orderBook: {
-                      asks,
-                      bids
-                  }
-              };
-              
-              connection.send(JSON.stringify({
-                  ...mockTrade,
-                  positions
-              }));
+    connection.send(JSON.stringify({
+      type: 'snapshot',
+      positions,
+      globalState,
+      price: parseFloat(globalState.price ?? '0'),
+      ticker: {
+        p: globalState.priceChange,
+        P: globalState.priceChangePct,
+        h: globalState.high24h,
+        l: globalState.low24h,
+        v: globalState.volume,
+        q: '0' // volUsdt not directly in ticker but can be added
+      }
+    }));
+
+    connection.on('message', async (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        if (data.type === 'place_order') {
+          const order = data.order;
+          const globalState = await getGlobalState();
+          const currentPrice = parseFloat(globalState.price ?? '0');
+          const isInstant = order.type === 'Market' || !order.type;
+          
+          if (isInstant) {
+            const newPos = {
+              id: Math.random().toString(36).substr(2, 9),
+              pair: order.pair,
+              type: order.side === 'Buy' ? 'LONG' : 'SHORT',
+              leverage: order.leverage,
+              size: order.amount,
+              cost: order.cost,
+              entry: order.price || currentPrice,
+              mark: order.price || currentPrice,
+              liveDelta: 0,
+              liveDeltaPercent: 0,
+              protocolLimits: ['-', '-']
+            };
+            await setPosition(newPos.id, newPos);
+            connection.send(JSON.stringify({ type: 'position_opened', position: newPos }));
+          } else {
+            const newOrder = {
+              id: Math.random().toString(36).substr(2, 9),
+              ...order,
+              activationPrice: order.activationPrice || currentPrice
+            };
+            await setOpenOrder(newOrder.id, newOrder);
+            connection.send(JSON.stringify({ type: 'order_placed', order: newOrder }));
           }
-      }, 500); // 500ms updates
-
-      connection.on('message', (message) => {
-         try {
-            const data = JSON.parse(message.toString());
-            console.log('Backend received ws message:', data.type, 'Order data:', data.order ? data.order.pair : '');
-            if (data.type === 'place_order') {
-                const order = data.order;
-                const isInstant = order.type === 'Market' || !order.type;
-                
-                if (isInstant) {
-                    const newPos = {
-                        id: Math.random().toString(36).substr(2, 9),
-                        pair: order.pair,
-                        type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-                        leverage: order.leverage,
-                        size: order.amount,
-                        cost: order.cost,
-                        entry: order.price || globalPrice,
-                        mark: order.price || globalPrice,
-                        liveDelta: 0,
-                        liveDeltaPercent: 0,
-                        protocolLimits: ['-', '-']
-                    };
-                    positions.push(newPos);
-                    saveDb();
-                    connection.send(JSON.stringify({ type: 'position_opened', position: newPos }));
-                } else {
-                    const newOrder = {
-                        id: Math.random().toString(36).substr(2, 9),
-                        ...order,
-                        activationPrice: order.activationPrice || globalPrice
-                    };
-                    openOrders.push(newOrder);
-                    saveDb();
-                    connection.send(JSON.stringify({ type: 'order_placed', order: newOrder }));
-                }
-            }
- else if (data.type === 'close_position') {
-                console.log('Processing close_position', data.id);
-                positions = positions.filter(p => p.id !== data.id);
-                saveDb();
-            }
-         } catch(e) {
-            console.error('Error handling WS message:', e);
-         }
-      });
-
-      let isAlive = true;
-      connection.on('pong', () => {
-          isAlive = true;
-      });
-
-      const pingInterval = setInterval(() => {
-          if (!isAlive) {
-              clearInterval(interval);
-              clearInterval(pingInterval);
-              return connection.terminate();
-          }
-          isAlive = false;
-          connection.ping();
-      }, 15000);
-
-      connection.on('close', () => {
-          clearInterval(interval);
-          clearInterval(pingInterval);
-          console.log('WS Connection closed');
-      });
-      connection.on('error', (err) => {
-          console.error('WS Connection error:', err);
-      });
+        } else if (data.type === 'close_position') {
+          await deletePosition(data.id);
+        }
+      } catch(e) {
+        console.error('Error handling WS message:', e);
+      }
     });
 
+    let isAlive = true;
+    connection.on('pong', () => { isAlive = true; });
+
+    const pingInterval = setInterval(() => {
+      if (!isAlive) {
+        clients.delete(connection);
+        clearInterval(pingInterval);
+        return connection.terminate();
+      }
+      isAlive = false;
+      connection.ping();
+    }, 15000);
+
+    connection.on('close', () => {
+      clients.delete(connection);
+      clearInterval(pingInterval);
+      console.log('Frontend WS Connection closed');
+    });
+    
+    connection.on('error', (err) => {
+      clients.delete(connection);
+      clearInterval(pingInterval);
+      console.error('Frontend WS Connection error:', err);
+    });
+  });
+
+  // ── Vite / Static Files ────────────────────────────────────
   if (!isProd) {
-    // Mount Vite dev server
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'custom',
     });
-    // Use middie to register vite middleware
     fastify.use(vite.middlewares);
 
     fastify.get('*', async (request, reply) => {
-        try {
-            const url = request.url;
-            let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
-            template = await vite.transformIndexHtml(url, template);
-            reply.type('text/html').send(template);
-        } catch (e: any) {
-            vite.ssrFixStacktrace(e);
-            reply.status(500).send(e.message);
-        }
+      try {
+        const url = request.url;
+        let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        reply.type('text/html').send(template);
+      } catch (e: any) {
+        vite.ssrFixStacktrace(e);
+        reply.status(500).send(e.message);
+      }
     });
   } else {
-    // In production, serve the built static files
     fastify.get('*', async (request, reply) => {
-        const indexPath = path.join(process.cwd(), 'dist', 'index.html');
-        if (fs.existsSync(indexPath)) {
-            const content = fs.readFileSync(indexPath, 'utf-8');
-            return reply.type('text/html').send(content);
-        }
-        reply.status(404).send('Not Found. Please run npm run build first.');
+      const indexPath = path.join(process.cwd(), 'dist', 'index.html');
+      if (fs.existsSync(indexPath)) {
+        const content = fs.readFileSync(indexPath, 'utf-8');
+        return reply.type('text/html').send(content);
+      }
+      reply.status(404).send('Not Found. Please run npm run build first.');
     });
   }
 
-  // AI Studio uses port 3000
   const port = 3000;
   fastify.listen({ port, host: '0.0.0.0' }, (err, address) => {
     if (err) {
       fastify.log.error(err);
       process.exit(1);
     }
-    console.log(`\n  🚀 TradeX Backend & Terminal running at:`);
-    console.log(`  > ${address}\n`);
+    console.log(`\n  🚀 TradeX Pro Backend running at: ${address}`);
+    gateway.connect();
   });
 
   const shutdown = async () => {
-    // Closing...
+    gateway.terminate();
     await fastify.close();
     process.exit(0);
   };
