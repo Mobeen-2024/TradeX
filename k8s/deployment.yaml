@@ -29,6 +29,9 @@ spec:
         env:
         - name: NODE_ENV
           value: "production"
+        envFrom:
+        - secretRef:
+            name: tradex-secrets
         # WebSocket affinity / stability
         readinessProbe:
           httpGet:

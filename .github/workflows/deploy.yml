@@ -1,12 +1,20 @@
-name: Deploy to EKS
+name: Deploy to GKE
 
 on:
   push:
     branches: [ main ]
 
 permissions:
-  id-token: write
+  id-token: write # Required for Google Workload Identity Federation
   contents: read
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GAR_LOCATION: ${{ vars.GCP_REGION }}
+  GKE_CLUSTER: ${{ vars.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ vars.GKE_CLUSTER_ZONE }}
+  REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  IMAGE: tradex-terminal
 
 jobs:
   build-and-deploy:
@@ -15,31 +23,51 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
       with:
-        role-to-assume: arn:aws:iam::ACCOUNT_ID:role/github-actions-role
-        aws-region: us-east-1
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
 
-    - name: Build, Tag, and Push Image to ECR
+    - name: Configure Docker Auth
+      run: |-
+        gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+
+    - name: Build, Tag, and Push Image to Artifact Registry
       env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: tradex-terminal
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:$IMAGE_TAG .
+        docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:$IMAGE_TAG
 
-    - name: Update Kubeconfig
-      run: aws eks update-kubeconfig --name tradex-terminal-cluster --region us-east-1
+    - name: Get GKE Credentials
+      uses: google-github-actions/get-gke-credentials@v2
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+
+    - name: Create Kubernetes Secrets
+      run: |
+        kubectl create secret generic tradex-secrets \
+          --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+          --from-literal=VAULT_MASTER_KEY="${{ secrets.VAULT_MASTER_KEY }}" \
+          --from-literal=REDIS_PASSWORD="${{ secrets.REDIS_PASSWORD }}" \
+          --from-literal=BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" \
+          --from-literal=BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+          --from-literal=APP_URL="${{ vars.APP_URL }}" \
+          --from-literal=REDIS_URL="${{ vars.REDIS_URL }}" \
+          --from-literal=QUESTDB_HOST="${{ vars.QUESTDB_HOST }}" \
+          --from-literal=STREAM_SYMBOLS="${{ vars.STREAM_SYMBOLS }}" \
+          --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Deploy to Kubernetes
+      env:
+        IMAGE_TAG: ${{ github.sha }}
       run: |
         # Replace the image tag in the deployment manifest
-        sed -i "s|image: tradex-terminal:latest|image: ${{ steps.login-ecr.outputs.registry }}/tradex-terminal:${{ github.sha }}|g" k8s/deployment.yaml
+        sed -i "s|image: tradex-terminal:latest|image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.IMAGE }}:$IMAGE_TAG|g" k8s/deployment.yaml
         kubectl apply -f k8s/
