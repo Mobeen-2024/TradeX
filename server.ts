@@ -439,8 +439,9 @@ async function start() {
   });
 
   // ── Vite / Static Files ────────────────────────────────────
+  let vite: any;
   if (!isProd) {
-    const vite = await createViteServer({
+    vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'custom',
     });
@@ -492,6 +493,15 @@ async function start() {
   const shutdown = async (signal: string) => {
     console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
     
+    // Terminate all WS clients to prevent Fastify close from hanging
+    for (const client of clients) {
+      client.terminate();
+    }
+    
+    if (vite) {
+      await vite.close();
+    }
+
     // 1. Drain Fastify to finish in-flight requests (relies on Redis)
     await fastify.close();
     

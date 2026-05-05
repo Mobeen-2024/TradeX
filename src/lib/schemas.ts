@@ -53,9 +53,21 @@ export const WsClosePositionSchema = z.object({
   id:   z.string(),
 }).strict();
 
+export const WsSubscribeSchema = z.object({
+  type: z.literal('subscribe'),
+  stream: z.string(),
+}).strict();
+
+export const WsUnsubscribeSchema = z.object({
+  type: z.literal('unsubscribe'),
+  stream: z.string(),
+}).strict();
+
 export const WsMessageSchema = z.discriminatedUnion('type', [
   WsPlaceOrderSchema,
   WsClosePositionSchema,
+  WsSubscribeSchema,
+  WsUnsubscribeSchema,
 ]);
 
 // ── REST: Vault Account ───────────────────────────────────────────

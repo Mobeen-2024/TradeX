@@ -6,6 +6,7 @@ const ILP_PORT = parseInt(process.env.QUESTDB_ILP_PORT ?? '9009');
 
 let client: net.Socket | null = null;
 let connected = false;
+let useMock = false;
 let reconnectTimer: NodeJS.Timeout | null = null;
 
 function connect() {
@@ -32,12 +33,15 @@ function connect() {
     if (connected) {
       console.warn(`[QuestDB] Connection lost: ${msg}`);
     } else {
-      console.error(`[QuestDB] ILP error: ${msg}`);
+      if (!useMock) {
+        console.warn(`[QuestDB] Infrastructure not found. Falling back to Mock mode for execution logs.`);
+        useMock = true;
+      }
     }
     connected = false;
     
     if (!reconnectTimer) {
-      reconnectTimer = setTimeout(connect, 5000);
+      reconnectTimer = setTimeout(connect, 30000); // Check every 30s instead of 5s to reduce log spam
     }
   };
 
@@ -67,6 +71,10 @@ function flushQueue() {
 }
 
 function safeWrite(line: string) {
+  if (useMock) {
+    // console.log(`[QuestDB-Mock] Logged: ${line.trim()}`);
+    return;
+  }
   if (!connected || !client) return;
   if (writeQueue.length > 0 || !client.write(line)) {
     if (writeQueue.length >= MAX_QUEUE) {

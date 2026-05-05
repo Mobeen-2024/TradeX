@@ -207,5 +207,5 @@ parentPort?.on('message', (msg) => {
 
 run().catch(err => {
   parentPort?.postMessage({ type: 'error', worker: 'ai_analytics', error: err.message });
-  process.exit(1);
+  setTimeout(() => process.exit(1), 100);
 });
