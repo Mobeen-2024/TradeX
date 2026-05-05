@@ -66,6 +66,13 @@ watch(footprintSettings, () => {
 }, { deep: true });
 
 const drawings = ref<any[]>([]);
+
+// Task 5.1 — Persist drawings to workspace store
+watch(drawings, (newDrawings) => {
+    if (!props.panelId) return;
+    const panel = workspacePanels.value.find(p => p.id === props.panelId);
+    if (panel) panel.drawings = newDrawings;
+}, { deep: true });
 const fibStart = ref<{ price: number, time: any } | null>(null);
 const trendStart = ref<{ price: number, time: any } | null>(null);
 const heatmapData = ref<{ price: number, volume: number }[]>([]);
@@ -90,7 +97,7 @@ watch([activePositions, openOrders, alerts, currentPrice, aiLevels], () => {
 }, { deep: true });
 
 const updateIndicators = (candlestick: CandlestickData[]) => {
-    if (!ohlcvWorker || !candlestick.length) return;
+    if (!ohlcvWorker || !candlestick.length || activeIndicators.value.length === 0) return;
 
     ohlcvWorker.postMessage({
         type: 'compute_indicators',
@@ -124,6 +131,29 @@ const initChart = async () => {
     lineSeries = chart.addSeries(LineSeries, { color: '#F0B90B', lineWidth: 2, visible: chartType.value === 'line' });
     volumeSeries = chart.addSeries(HistogramSeries, { color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: '', visible: showVolume.value });
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+
+    // Initialize Indicator Series
+    emaSeries = chart.addSeries(LineSeries, {
+        color: '#F0B90B',
+        lineWidth: 1,
+        lineStyle: 2,
+        visible: activeIndicators.value.includes('EMA')
+    });
+    
+    rsiSeries = chart.addSeries(LineSeries, {
+        color: '#627EEA',
+        lineWidth: 1,
+        priceScaleId: 'rsi',
+        visible: activeIndicators.value.includes('RSI')
+    });
+    rsiSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+        autoScale: true
+    });
+
+    bbUpperSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.4)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
+    bbMiddleSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.7)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
+    bbLowerSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.4)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
 
     drawingManager = new DrawingManager(chart, candleSeries);
 
@@ -165,11 +195,21 @@ const renderHeatmap = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    const dpr = window.devicePixelRatio || 1;
     const container = canvas.parentElement!;
-    if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
-        canvas.width = container.clientWidth; canvas.height = container.clientHeight;
+    const cssW = container.clientWidth;
+    const cssH = container.clientHeight;
+
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
+        canvas.style.width = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
     }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, cssW, cssH);
     
     const logicalRange = chart.timeScale().getVisibleLogicalRange();
     if (logicalRange) {
@@ -204,7 +244,7 @@ const renderHeatmap = () => {
         const y = candleSeries!.priceToCoordinate(d.price);
         if (y !== null) {
             ctx.fillStyle = `rgba(240, 185, 11, ${Math.min(d.volume/100, 1) * 0.1})`;
-            ctx.fillRect(0, y - 1, canvas.width, 2);
+            ctx.fillRect(0, y - 1, cssW, 2);
         }
     });
 
@@ -220,8 +260,9 @@ const renderHeatmap = () => {
         openOrders.value, 
         alerts.value, 
         currentPrice.value,
-        canvas.width
+        cssW
     );
+    ctx.restore();
 };
 
 const renderDrawingsInternal = (ctx: CanvasRenderingContext2D) => {
@@ -291,8 +332,14 @@ const updateChartData = async () => {
     if (chart) chart.timeScale().fitContent();
 };
 
+let disconnectKline: (() => void) | null = null;
+let disconnectTrades: (() => void) | null = null;
+
 const internalSubscribe = () => {
-    subscribeKline(props.symbol, props.interval, (update, k) => {
+    disconnectKline?.();
+    disconnectTrades?.();
+
+    disconnectKline = subscribeKline(props.symbol, props.interval, (update, k) => {
         candleSeries?.update(update);
         lineSeries?.update({ time: update.time, value: update.close });
         volumeSeries?.update({ time: update.time, value: parseFloat(k.v), color: update.close >= update.open ? 'rgba(14, 203, 129, 0.2)' : 'rgba(246, 70, 93, 0.2)' });
@@ -322,7 +369,7 @@ const internalSubscribe = () => {
         renderHeatmap();
     });
 
-    subscribeTrades(props.symbol, (trade) => {
+    disconnectTrades = subscribeTrades(props.symbol, (trade) => {
         // Update Recent Trades (Tape)
         recentTrades.value.unshift(trade);
         if (recentTrades.value.length > 50) recentTrades.value.pop();
@@ -358,6 +405,16 @@ const toggleIndicator = (type: string) => {
     const idx = activeIndicators.value.indexOf(type);
     if (idx === -1) activeIndicators.value.push(type);
     else activeIndicators.value.splice(idx, 1);
+
+    const isVisible = activeIndicators.value.includes(type);
+    if (type === 'EMA') emaSeries?.applyOptions({ visible: isVisible });
+    if (type === 'RSI') rsiSeries?.applyOptions({ visible: isVisible });
+    if (type === 'BOLL') {
+        bbUpperSeries?.applyOptions({ visible: isVisible });
+        bbMiddleSeries?.applyOptions({ visible: isVisible });
+        bbLowerSeries?.applyOptions({ visible: isVisible });
+    }
+
     updateIndicators(allCandles.value);
 };
 
@@ -403,6 +460,19 @@ onMounted(async () => {
     };
 
     await initChart();
+    
+    // Task 5.2 — Rehydrate drawings
+    const panel = workspacePanels.value.find(p => p.id === props.panelId);
+    if (panel?.drawings) {
+        drawings.value = JSON.parse(JSON.stringify(panel.drawings));
+        drawings.value.forEach(draw => {
+            if (draw.type === 'hline' && draw.price !== undefined) {
+                drawingManager?.addPriceLine(draw.price, draw.color || 'rgba(240, 185, 11, 0.5)', draw.label || 'Level');
+            }
+        });
+        scheduleHeatmap();
+    }
+
     internalSubscribe();
     if (chartContainer.value) {
         resizeObserver = new ResizeObserver(() => {
@@ -421,8 +491,8 @@ onUnmounted(() => {
     if (chart) chart.remove();
 });
 
-watch(() => props.symbol, () => { updateChartData(); internalSubscribe(); });
-watch(() => props.interval, () => { updateChartData(); internalSubscribe(); });
+watch(() => props.symbol, () => { updateChartData(); internalSubscribe(); }, { flush: 'sync' });
+watch(() => props.interval, () => { updateChartData(); internalSubscribe(); }, { flush: 'sync' });
 watch(chartType, (val) => {
     candleSeries?.applyOptions({ visible: val === 'candle' });
     lineSeries?.applyOptions({ visible: val === 'line' });

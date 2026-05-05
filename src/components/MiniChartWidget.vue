@@ -8,6 +8,10 @@ const props = defineProps<{
 }>();
 
 const chartContainer = ref<HTMLElement | null>(null);
+const isLoading = ref(true);
+const hasError = ref(false);
+const allLocalCandles = ref<CandlestickData[]>([]);
+
 let chart: IChartApi | null = null;
 let candleSeries: ISeriesApi<"Candlestick"> | null = null;
 
@@ -51,8 +55,12 @@ const initChart = () => {
 };
 
 const fetchData = async () => {
+    isLoading.value = true;
+    hasError.value = false;
     try {
-        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${props.symbol.replace('/','')}&interval=1m&limit=60`);
+        const symbolClean = props.symbol.replace('/','').replace('USDT', 'USDT');
+        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbolClean}&interval=1m&limit=60`);
+        if (!response.ok) throw new Error('Fetch failed');
         const data = await response.json();
         const candles = data.map((d: any) => ({
             time: (d[0] / 1000) as Time,
@@ -61,9 +69,15 @@ const fetchData = async () => {
             low: parseFloat(d[3]),
             close: parseFloat(d[4]),
         }));
+        allLocalCandles.value = candles;
         candleSeries?.setData(candles);
         chart?.timeScale().fitContent();
-    } catch (e) {}
+        isLoading.value = false;
+    } catch (e) {
+        hasError.value = true;
+        isLoading.value = false;
+        console.warn(`[MiniChart] Failed to load data for ${props.symbol}:`, e);
+    }
 };
 
 let resizeObserver: ResizeObserver | null = null;
@@ -89,13 +103,34 @@ onUnmounted(() => {
 });
 
 watch(currentPrice, (newPrice) => {
-    // Just a visual update of the last candle if needed, but for mini chart we can just poll or rely on parent
+    if (!candleSeries || !allLocalCandles.value.length) return;
+    const last = allLocalCandles.value[allLocalCandles.value.length - 1];
+    const updated = { 
+        ...last, 
+        close: newPrice, 
+        high: Math.max(last.high, newPrice), 
+        low: Math.min(last.low, newPrice) 
+    };
+    candleSeries.update(updated);
 });
+
+watch(() => props.symbol, async () => {
+    await fetchData();
+}, { flush: 'sync' });
 </script>
 
 <template>
   <div class="w-full h-full relative">
-    <div ref="chartContainer" class="w-full h-full"></div>
+    <div ref="chartContainer" class="w-full h-full" :class="{ 'opacity-0': isLoading }"></div>
+    
+    <div v-if="isLoading" class="absolute inset-0 flex items-center justify-center">
+      <div class="w-4 h-4 border-2 border-[#F0B90B]/30 border-t-[#F0B90B] rounded-full animate-spin" />
+    </div>
+    
+    <div v-if="hasError" class="absolute inset-0 flex items-center justify-center text-[#f6465d] text-[10px] font-bold">
+      FAILED TO LOAD
+    </div>
+    
     <div class="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#0b0e11] via-transparent to-transparent opacity-40"></div>
   </div>
 </template>

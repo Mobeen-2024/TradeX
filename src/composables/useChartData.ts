@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue';
 import { Time, CandlestickData } from 'lightweight-charts';
 import { currentPrice } from '../store/tradeStore';
+import { useReconnectingWebSocket } from './useReconnectingWebSocket';
 
 export function useChartData() {
     const allCandles = ref<CandlestickData[]>([]);
@@ -13,10 +14,12 @@ export function useChartData() {
         isUp: true
     });
     
-    let currentWs: WebSocket | null = null;
-    let tradeWs: WebSocket | null = null;
+    let klineWs: ReturnType<typeof useReconnectingWebSocket> | null = null;
+    let tradesWs: ReturnType<typeof useReconnectingWebSocket> | null = null;
+    let generation = 0;
 
     const fetchKlines = async (symbol: string, interval: string) => {
+        const currentGen = ++generation;
         const binanceInterval = interval === '1s' ? '1s' : interval.toLowerCase();
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=500`;
         
@@ -25,6 +28,9 @@ export function useChartData() {
             if (!response.ok) throw new Error('Network response was not ok');
             const data = await response.json();
             
+            // Prevent stale data from overwriting if a newer request has started
+            if (currentGen !== generation) return { candlestick: [], volume: [] };
+
             const candlestick: CandlestickData[] = [];
             const volume: any[] = [];
             
@@ -56,18 +62,22 @@ export function useChartData() {
     };
 
     const subscribeKline = (symbol: string, interval: string, onUpdate: (update: any, k: any) => void) => {
-        if (currentWs) currentWs.close();
+        klineWs?.disconnect();
         
+        const currentGen = generation;
         const binanceInterval = interval.toLowerCase();
         const lowSymbol = symbol.toLowerCase();
-        currentWs = new WebSocket(`wss://stream.binance.com:9443/ws/${lowSymbol}@kline_${binanceInterval}`);
+        const url = `wss://stream.binance.com:9443/ws/${lowSymbol}@kline_${binanceInterval}`;
         
+        let rafId: number | null = null;
         let pendingUpdate: any = null;
         let pendingK: any = null;
-        let rafId: number | null = null;
 
         const flushUpdate = () => {
-            if (!pendingUpdate) return;
+            if (!pendingUpdate || currentGen !== generation) {
+                rafId = null;
+                return;
+            }
             
             // Update local state
             const lastIdx = allCandles.value.findIndex(c => c.time === pendingUpdate.time);
@@ -91,46 +101,59 @@ export function useChartData() {
             rafId = null;
         };
 
-        currentWs.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            const k = data.k;
-            if (!k) return;
+        klineWs = useReconnectingWebSocket(() => url, {
+            onMessage: (data) => {
+                const k = data.k;
+                if (!k || currentGen !== generation) return;
 
-            pendingUpdate = {
-                time: (k.t / 1000) as Time,
-                open: parseFloat(k.o),
-                high: parseFloat(k.h),
-                low: parseFloat(k.l),
-                close: parseFloat(k.c)
-            };
-            pendingK = k;
+                pendingUpdate = {
+                    time: (k.t / 1000) as Time,
+                    open: parseFloat(k.o),
+                    high: parseFloat(k.h),
+                    low: parseFloat(k.l),
+                    close: parseFloat(k.c)
+                };
+                pendingK = k;
 
-            if (!rafId) {
-                rafId = requestAnimationFrame(flushUpdate);
+                if (!rafId) {
+                    rafId = requestAnimationFrame(flushUpdate);
+                }
             }
+        });
+
+        klineWs.connect();
+        return () => {
+            if (rafId) cancelAnimationFrame(rafId);
+            klineWs?.disconnect();
         };
     };
 
     const subscribeTrades = (symbol: string, onTrade: (trade: any) => void) => {
-        if (tradeWs) tradeWs.close();
+        tradesWs?.disconnect();
         
+        const currentGen = generation;
         const lowSymbol = symbol.toLowerCase();
-        tradeWs = new WebSocket(`wss://stream.binance.com:9443/ws/${lowSymbol}@aggTrade`);
+        const url = `wss://stream.binance.com:9443/ws/${lowSymbol}@aggTrade`;
         
-        tradeWs.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            onTrade({
-                p: parseFloat(data.p),
-                q: parseFloat(data.q),
-                m: data.m, // Buyer is maker? true means SELL (hit bid), false means BUY (hit ask)
-                t: data.T
-            });
-        };
+        tradesWs = useReconnectingWebSocket(() => url, {
+            onMessage: (data) => {
+                if (currentGen !== generation) return;
+                onTrade({
+                    p: parseFloat(data.p),
+                    q: parseFloat(data.q),
+                    m: data.m,
+                    t: data.T
+                });
+            }
+        });
+
+        tradesWs.connect();
+        return () => tradesWs?.disconnect();
     };
 
     onUnmounted(() => {
-        if (currentWs) currentWs.close();
-        if (tradeWs) tradeWs.close();
+        klineWs?.disconnect();
+        tradesWs?.disconnect();
     });
 
     return {

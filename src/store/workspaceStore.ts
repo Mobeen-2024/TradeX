@@ -5,6 +5,8 @@ export interface Drawing {
   type: 'hline' | 'fib' | 'trend';
   price?: number;
   points?: { price: number; time: any }[];
+  color?: string;
+  label?: string;
 }
 
 export interface ChartPanelConfig {

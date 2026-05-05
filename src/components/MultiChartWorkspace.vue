@@ -4,11 +4,19 @@ import TradingChartWidget from './TradingChartWidget.vue';
 import { LayoutGrid, Plus, Save } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 
-const gridCols = {
-    1: 'grid-cols-1',
-    2: 'grid-cols-2',
-    3: 'grid-cols-3',
-    4: 'grid-cols-2' // 4 will be 2x2
+const layoutPresets = [
+    { count: 1, label: '1x1' },
+    { count: 2, label: '1x2' },
+    { count: 4, label: '2x2' },
+];
+
+const applyLayoutPreset = (count: number) => {
+    const current = workspacePanels.value.length;
+    if (count > current) {
+        for (let i = 0; i < count - current; i++) addPanel();
+    } else if (count < current) {
+        workspacePanels.value = workspacePanels.value.slice(0, count);
+    }
 };
 
 const getGridClass = (count: number) => {
@@ -34,6 +42,23 @@ const getGridClass = (count: number) => {
         </div>
 
         <div class="flex items-center gap-2">
+            <!-- Layout Presets -->
+            <div class="flex items-center gap-1 bg-[#2b3139]/30 p-1 rounded-lg border border-[#2b3139] mr-2">
+                <button 
+                    v-for="preset in layoutPresets" 
+                    :key="preset.count"
+                    @click="applyLayoutPreset(preset.count)"
+                    :class="cn(
+                        'px-2 py-1 rounded text-[10px] font-bold transition-all',
+                        workspacePanels.length === preset.count 
+                            ? 'bg-[#F0B90B] text-[#0b0e11]' 
+                            : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-[#2b3139]'
+                    )"
+                >
+                    {{ preset.label }}
+                </button>
+            </div>
+
             <button 
                 @click="addPanel"
                 class="flex items-center gap-2 px-3 py-1.5 bg-[#F0B90B] hover:bg-[#F0B90B]/90 text-[#0b0e11] rounded-lg text-xs font-black transition-all shadow-lg shadow-[#F0B90B]/10 active:scale-95"
