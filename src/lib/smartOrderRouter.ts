@@ -14,7 +14,7 @@
  */
 
 import { randomBytes } from 'crypto';
-import { getGlobalState, setPosition, setOpenOrder, redis } from './redis.js';
+import { getGlobalState, setPosition, setOpenOrder, redis, executeAtomicPositionUpdate } from './redis.js';
 import { writeExecutionLog } from './questdb.js';
 import type { RawOrder } from './riskEngine.js';
 import { circuitBreakers } from './circuitBreaker.js';
@@ -73,47 +73,27 @@ async function finalizeParentOrder(parentId: string, status: 'complete' | 'parti
 async function executeChildOrder(child: ChildOrder, price: number): Promise<string> {
   return circuitBreakers.exchangeRest.execute(async () => {
     // 1. Generate a deterministic ID for position consolidation (Account + Symbol + Side)
-    // This ensures child slices from Iceberg/TWAP orders are merged into a single position
     const posId = `pos_${child.accountId}_${child.symbol.toLowerCase()}_${child.side.toLowerCase()}`;
     
-    // 2. Fetch existing position to update average entry and size
-    const raw = await redis.hget('tradex:positions', posId);
-    let position: any;
-    
-    if (raw) {
-      const existing = JSON.parse(raw);
-      const newSize = existing.size + child.quantity;
-      // Weighted average entry price calculation
-      const newEntry = (existing.entry * existing.size + price * child.quantity) / newSize;
-      
-      position = {
-        ...existing,
-        size: newSize,
-        entry: newEntry,
-        cost: newSize * newEntry,
-        mark: price,
-        lastUpdated: Date.now()
-      };
-    } else {
-      position = {
-        id:           posId,
-        pair:         child.symbol,
-        type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
-        leverage:     child.leverage ?? 1,
-        size:         child.quantity,
-        cost:         child.quantity * price,
-        entry:        price,
-        mark:         price,
-        liveDelta:    0,
-        liveDeltaPercent: 0,
-        accountId:    child.accountId,
-        protocolLimits: ['-', '-'],
-        lastUpdated: Date.now()
-      };
-    }
+    // 2. Define baseline position data for the Lua script (used only if position doesn't exist)
+    const newPosition = {
+      id:           posId,
+      pair:         child.symbol,
+      type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
+      leverage:     child.leverage ?? 1,
+      size:         child.quantity,
+      cost:         child.quantity * price,
+      entry:        price,
+      mark:         price,
+      liveDelta:    0,
+      liveDeltaPercent: 0,
+      accountId:    child.accountId,
+      protocolLimits: ['-', '-'],
+      lastUpdated: Date.now()
+    };
 
-    // 3. Persist consolidated position
-    await setPosition(posId, position);
+    // 3. Persist consolidated position atomically via Lua script
+    await executeAtomicPositionUpdate(posId, child.symbol, child.quantity, price, newPosition);
 
     // 4. Log the individual execution to QuestDB for audit trail
     const execId = `exec_${randomBytes(5).toString('hex')}`;
@@ -317,61 +297,72 @@ export const smartOrderRouter = {
   _runTwapLoop(state: any) {
     const { parentId, intervalMs, numSlices } = state;
 
-    const timer = setInterval(async () => {
-      try {
-        // Refresh state from Redis (in case of manual cancellation or updates)
-        const raw = await redis.hget(TWAP_STATE_KEY, parentId);
-        if (!raw) {
-          clearInterval(timer);
-          activeTwapTimers.delete(parentId);
-          return;
-        }
-        const currentState = JSON.parse(raw);
-        if (currentState.status !== 'active') {
-          clearInterval(timer);
-          activeTwapTimers.delete(parentId);
-          return;
+    let isRunning = true;
+    
+    const twapLoop = async () => {
+      while (isRunning) {
+        try {
+          // Refresh state from Redis (in case of manual cancellation or updates)
+          const raw = await redis.hget(TWAP_STATE_KEY, parentId);
+          if (!raw) {
+            activeTwapTimers.delete(parentId);
+            break;
+          }
+          const currentState = JSON.parse(raw);
+          if (currentState.status !== 'active') {
+            activeTwapTimers.delete(parentId);
+            break;
+          }
+
+          const slicePrice = currentState.basePrice + (Math.random() - 0.5) * currentState.basePrice * 0.0002;
+
+          await Promise.allSettled(
+            currentState.accountIds.map((accountId: string) =>
+              executeChildOrder({
+                id:          `child_${randomBytes(4).toString('hex')}`,
+                parentId,
+                accountId,
+                symbol:      currentState.order.symbol,
+                side:        currentState.order.side,
+                type:        'Market',
+                quantity:    parseFloat(currentState.sliceQty.toFixed(6)),
+                price:       slicePrice,
+                leverage:    currentState.order.leverage,
+                sliceIdx:    currentState.completedSlices,
+                totalSlices: numSlices,
+                status:      'pending',
+              }, slicePrice)
+            )
+          );
+
+          currentState.completedSlices++;
+          
+          if (currentState.completedSlices >= numSlices) {
+            activeTwapTimers.delete(parentId);
+            await redis.hdel(TWAP_STATE_KEY, parentId);
+            await finalizeParentOrder(parentId, 'complete');
+            console.log(`[SOR] TWAP ${parentId} finished successfully.`);
+            break;
+          } else {
+            // Update progress in Redis
+            await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(currentState));
+          }
+        } catch (err) {
+          console.error(`[SOR] Error in TWAP loop for ${parentId}:`, err);
         }
 
-        const slicePrice = currentState.basePrice + (Math.random() - 0.5) * currentState.basePrice * 0.0002;
+        if (!isRunning) break;
 
-        await Promise.allSettled(
-          currentState.accountIds.map((accountId: string) =>
-            executeChildOrder({
-              id:          `child_${randomBytes(4).toString('hex')}`,
-              parentId,
-              accountId,
-              symbol:      currentState.order.symbol,
-              side:        currentState.order.side,
-              type:        'Market',
-              quantity:    parseFloat(currentState.sliceQty.toFixed(6)),
-              price:       slicePrice,
-              leverage:    currentState.order.leverage,
-              sliceIdx:    currentState.completedSlices,
-              totalSlices: numSlices,
-              status:      'pending',
-            }, slicePrice)
-          )
-        );
-
-        currentState.completedSlices++;
-        
-        if (currentState.completedSlices >= numSlices) {
-          clearInterval(timer);
-          activeTwapTimers.delete(parentId);
-          await redis.hdel(TWAP_STATE_KEY, parentId);
-          await finalizeParentOrder(parentId, 'complete');
-          console.log(`[SOR] TWAP ${parentId} finished successfully.`);
-        } else {
-          // Update progress in Redis
-          await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(currentState));
-        }
-      } catch (err) {
-        console.error(`[SOR] Error in TWAP loop for ${parentId}:`, err);
+        // Wait for intervalMs before executing the next slice (prevents overlapping execution)
+        await new Promise(res => {
+          const timerId = setTimeout(res, intervalMs);
+          activeTwapTimers.set(parentId, timerId);
+        });
       }
-    }, intervalMs);
+    };
 
-    activeTwapTimers.set(parentId, timer);
+    // Start the async loop
+    twapLoop();
   },
 
   /**
@@ -384,16 +375,37 @@ export const smartOrderRouter = {
 
     console.log(`[SOR] Resuming ${count} active TWAP orders from Redis...`);
     for (const [id, raw] of Object.entries(all)) {
-      const state = JSON.parse(raw);
-      this._runTwapLoop(state);
+      // Use setnx as a simple distributed lock to avoid multiple pods resuming the same TWAP
+      const lockKey = `tradex:twap_lock:${id}`;
+      const acquired = await redis.setnx(lockKey, Date.now().toString());
+      if (acquired) {
+        await redis.expire(lockKey, 3600); // 1 hour TTL
+        const state = JSON.parse(raw);
+        if (state.status === 'paused_by_system') {
+           state.status = 'active';
+           await redis.hset(TWAP_STATE_KEY, id, JSON.stringify(state));
+        }
+        this._runTwapLoop(state);
+      }
     }
   },
 
-  cancelAllTwap() {
+  async cancelAllTwap() {
     for (const [id, timer] of activeTwapTimers) {
-      clearInterval(timer);
+      clearTimeout(timer);
       activeTwapTimers.delete(id);
-      console.warn(`[SOR] TWAP ${id} cancelled during shutdown`);
+      
+      const raw = await redis.hget(TWAP_STATE_KEY, id);
+      if (raw) {
+        const state = JSON.parse(raw);
+        state.status = 'paused_by_system';
+        await redis.hset(TWAP_STATE_KEY, id, JSON.stringify(state));
+      }
+      
+      const lockKey = `tradex:twap_lock:${id}`;
+      await redis.del(lockKey);
+      
+      console.warn(`[SOR] TWAP ${id} paused during shutdown`);
     }
   }
 };

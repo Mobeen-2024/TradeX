@@ -91,3 +91,61 @@ export async function setGlobalPrice(price: number, high: number, low: number) {
     updatedAt: Date.now().toString(),
   });
 }
+
+// ── Lua Scripts ────────────────────────────────────────────────
+
+const LUA_UPDATE_POSITION = `
+local posKey = KEYS[1]
+local symKey = KEYS[2]
+local posId = ARGV[1]
+local childQty = tonumber(ARGV[2])
+local price = tonumber(ARGV[3])
+local childDataStr = ARGV[4]
+local timestamp = tonumber(ARGV[5])
+
+local raw = redis.call('HGET', posKey, posId)
+local position
+
+if raw then
+  position = cjson.decode(raw)
+  local newSize = position.size + childQty
+  local newEntry = price
+  if newSize > 0 then
+    newEntry = ((position.entry * position.size) + (price * childQty)) / newSize
+  end
+  
+  position.size = newSize
+  position.entry = newEntry
+  position.cost = newSize * newEntry
+  position.mark = price
+  position.lastUpdated = timestamp
+else
+  position = cjson.decode(childDataStr)
+  redis.call('SADD', symKey, posId)
+end
+
+local updatedRaw = cjson.encode(position)
+redis.call('HSET', posKey, posId, updatedRaw)
+
+return posId
+`;
+
+export async function executeAtomicPositionUpdate(
+  posId: string,
+  symbol: string,
+  childQty: number,
+  price: number,
+  newPositionData: any
+) {
+  await redis.eval(
+    LUA_UPDATE_POSITION,
+    2,
+    KEYS.positions,
+    KEYS.symbolPositions(symbol),
+    posId,
+    childQty.toString(),
+    price.toString(),
+    JSON.stringify(newPositionData),
+    Date.now().toString()
+  );
+}

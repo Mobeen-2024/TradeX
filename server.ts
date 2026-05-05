@@ -89,8 +89,7 @@ async function start() {
       return;
     }
 
-    // 2. Update live PnL for matching positions via Redis pipeline
-    const pipe = redis.pipeline();
+    // 2. Compute live PnL strictly in memory for broadcast (avoids O(N) Redis write bottlenecks)
     const updatedPositions = [];
 
     for (const pos of positions) {
@@ -109,13 +108,7 @@ async function start() {
       const updated = { ...pos, mark, liveDelta, liveDeltaPercent };
       
       updatedPositions.push(updated);
-      pipe.hset(KEYS.positions, pos.id, JSON.stringify(updated));
     }
-    
-    // We don't necessarily need to await pipe.exec() before broadcasting to the UI
-    // as the UI will receive the updated state in the payload anyway.
-    // This reduces the 'trade-to-UI' latency.
-    pipe.exec().catch(err => console.error('[Server] Redis PnL sync error:', err));
 
     // 3. Broadcast to all frontend WS clients
     const payload = JSON.stringify({
@@ -499,16 +492,20 @@ async function start() {
   const shutdown = async (signal: string) => {
     console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
     
-    // Stop trade ingestion first
-    gateway.terminate();
+    // 1. Drain Fastify to finish in-flight requests (relies on Redis)
+    await fastify.close();
     
-    // Cleanup SOR and worker threads
-    smartOrderRouter.cancelAllTwap();
+    // 2. Stop async worker threads
     await workerManager.stopAll();
     
-    // Finalize DB connections
+    // 3. Pause TWAP orders safely (needs Redis)
+    await smartOrderRouter.cancelAllTwap();
+    
+    // 4. Stop market data ingestion
+    gateway.terminate();
+    
+    // 5. Terminate persistent connections
     await redis.quit();
-    await fastify.close();
     
     console.log('[Server] Shutdown complete.');
     process.exit(0);
