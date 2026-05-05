@@ -9,6 +9,7 @@ import {
   redis,
   KEYS,
   getPositions,
+  getPositionsBySymbol,
   getGlobalState,
   setPosition,
   deletePosition,
@@ -67,31 +68,63 @@ async function start() {
 
   // ── Gateway → Broadcast pipe ──────────────────────────────
   gateway.on('trade', async (tick) => {
-    const positions = await getPositions();
+    const symbol = tick.symbol.toLowerCase();
     const mark = tick.price;
+    
+    // 1. Efficiently fetch ONLY positions affected by this symbol
+    const positions = await getPositionsBySymbol(symbol);
+    if (positions.length === 0) {
+      // Still broadcast the trade to clients even if no positions
+      const payload = JSON.stringify({
+        type: 'trade',
+        price: tick.price,
+        amount: tick.qty,
+        side: tick.side,
+        timestamp: tick.timestamp,
+        positions: [], // No positions for this symbol
+      });
+      for (const client of clients) {
+        if (client.readyState === 1) client.send(payload);
+      }
+      return;
+    }
 
-    // Update live PnL for all positions via Redis pipeline
+    // 2. Update live PnL for matching positions via Redis pipeline
     const pipe = redis.pipeline();
+    const updatedPositions = [];
+
     for (const pos of positions) {
       const diff = pos.type === 'LONG' ? mark - pos.entry : pos.entry - mark;
       const liveDelta = diff * pos.size;
-      const leverageFactor = typeof pos.leverage === 'number'
-        ? pos.leverage
-        : parseInt(String(pos.leverage).replace('x', '').replace('Cross_', '')) || 1;
+      
+      // Parse leverage safely
+      let leverageFactor = 1;
+      if (typeof pos.leverage === 'number') {
+        leverageFactor = pos.leverage;
+      } else if (pos.leverage) {
+        leverageFactor = parseInt(String(pos.leverage).replace(/[^0-9]/g, '')) || 1;
+      }
+
       const liveDeltaPercent = (diff / pos.entry) * 100 * leverageFactor;
       const updated = { ...pos, mark, liveDelta, liveDeltaPercent };
+      
+      updatedPositions.push(updated);
       pipe.hset(KEYS.positions, pos.id, JSON.stringify(updated));
     }
-    await pipe.exec();
+    
+    // We don't necessarily need to await pipe.exec() before broadcasting to the UI
+    // as the UI will receive the updated state in the payload anyway.
+    // This reduces the 'trade-to-UI' latency.
+    pipe.exec().catch(err => console.error('[Server] Redis PnL sync error:', err));
 
-    // Broadcast to all frontend WS clients
+    // 3. Broadcast to all frontend WS clients
     const payload = JSON.stringify({
       type: 'trade',
       price: tick.price,
       amount: tick.qty,
       side: tick.side,
       timestamp: tick.timestamp,
-      positions: await getPositions(),
+      positions: updatedPositions,
     });
 
     for (const client of clients) {
@@ -451,6 +484,9 @@ async function start() {
     console.log(`\n  🚀 TradeX Pro Backend running at: ${address}`);
     gateway.connect();
 
+    // ── Resume Background Tasks ────────────────────
+    smartOrderRouter.resumeActiveTwaps().catch(err => console.error('[SOR] Resumption failed:', err));
+
     // ── Start Institutional AI Analytics ───────────
     workerManager.start('ai_analytics', { 
         symbol: 'btcusdt',
@@ -460,15 +496,26 @@ async function start() {
     }).catch(err => console.error('[AI] Worker failed to start:', err));
   });
 
-  const shutdown = async () => {
+  const shutdown = async (signal: string) => {
+    console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
+    
+    // Stop trade ingestion first
+    gateway.terminate();
+    
+    // Cleanup SOR and worker threads
     smartOrderRouter.cancelAllTwap();
     await workerManager.stopAll();
-    gateway.terminate();
+    
+    // Finalize DB connections
+    await redis.quit();
     await fastify.close();
+    
+    console.log('[Server] Shutdown complete.');
     process.exit(0);
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 start();

@@ -20,6 +20,7 @@ import type { RawOrder } from './riskEngine.js';
 import { circuitBreakers } from './circuitBreaker.js';
 
 const activeTwapTimers = new Map<string, NodeJS.Timeout>();
+const TWAP_STATE_KEY = 'tradex:active_twaps'; // Hash -> parentId -> JSON state
 
 // ── Types ─────────────────────────────────────────────────────────
 export type RoutingStrategy = 'market' | 'iceberg' | 'twap';
@@ -69,33 +70,56 @@ async function finalizeParentOrder(parentId: string, status: 'complete' | 'parti
 }
 
 // ── Execution Simulator (replaces real exchange API calls) ────────
-// In production: replace with `credentialVault.decryptCredentials(accountId)` + exchange SDK calls
 async function executeChildOrder(child: ChildOrder, price: number): Promise<string> {
   return circuitBreakers.exchangeRest.execute(async () => {
+    // 1. Generate a deterministic ID for position consolidation (Account + Symbol + Side)
+    // This ensures child slices from Iceberg/TWAP orders are merged into a single position
+    const posId = `pos_${child.accountId}_${child.symbol.toLowerCase()}_${child.side.toLowerCase()}`;
+    
+    // 2. Fetch existing position to update average entry and size
+    const raw = await redis.hget('tradex:positions', posId);
+    let position: any;
+    
+    if (raw) {
+      const existing = JSON.parse(raw);
+      const newSize = existing.size + child.quantity;
+      // Weighted average entry price calculation
+      const newEntry = (existing.entry * existing.size + price * child.quantity) / newSize;
+      
+      position = {
+        ...existing,
+        size: newSize,
+        entry: newEntry,
+        cost: newSize * newEntry,
+        mark: price,
+        lastUpdated: Date.now()
+      };
+    } else {
+      position = {
+        id:           posId,
+        pair:         child.symbol,
+        type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
+        leverage:     child.leverage ?? 1,
+        size:         child.quantity,
+        cost:         child.quantity * price,
+        entry:        price,
+        mark:         price,
+        liveDelta:    0,
+        liveDeltaPercent: 0,
+        accountId:    child.accountId,
+        protocolLimits: ['-', '-'],
+        lastUpdated: Date.now()
+      };
+    }
+
+    // 3. Persist consolidated position
+    await setPosition(posId, position);
+
+    // 4. Log the individual execution to QuestDB for audit trail
     const execId = `exec_${randomBytes(5).toString('hex')}`;
-
-    // Simulated fill — in production, this calls the exchange REST API
-    await setPosition(execId, {
-      id:           execId,
-      pair:         child.symbol,
-      type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
-      leverage:     child.leverage ?? 1,
-      size:         child.quantity,
-      cost:         child.quantity * price,
-      entry:        price,
-      mark:         price,
-      liveDelta:    0,
-      liveDeltaPercent: 0,
-      accountId:    child.accountId,
-      parentOrderId: child.parentId,
-      sliceIdx:     child.sliceIdx,
-      protocolLimits: ['-', '-'],
-    });
-
-    // Log to QuestDB
     writeExecutionLog(execId, child.symbol, child.side, price, child.quantity, 'filled');
 
-    return execId;
+    return posId;
   });
 }
 
@@ -158,6 +182,7 @@ export const smartOrderRouter = {
       }
 
       case 'twap': {
+        // Start TWAP and return immediately — do NOT await the entire window
         sorResult = await this._routeTwap(parentId, order, accountIds, config, execPrice);
         break;
       }
@@ -261,53 +286,107 @@ export const smartOrderRouter = {
     const numSlices   = Math.floor(windowMs / intervalMs);
     const sliceQty    = order.quantity / numSlices;
 
-    console.log(`[SOR] TWAP: ${numSlices} slices over ${windowMs / 1000}s @ ${intervalMs / 1000}s interval`);
+    const state = {
+      parentId,
+      order,
+      accountIds,
+      config,
+      basePrice,
+      numSlices,
+      sliceQty,
+      intervalMs,
+      completedSlices: 0,
+      status: 'active'
+    };
 
-    const results: SORResult['results'] = [];
-    let sliceIdx = 0;
+    // 1. Persist state to Redis before starting
+    await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(state));
 
-    return new Promise<SORResult>(resolve => {
-      const timer = setInterval(async () => {
-        const slicePrice = basePrice + (Math.random() - 0.5) * basePrice * 0.0002; // ±0.02% variation
+    // 2. Start the execution loop (non-blocking)
+    this._runTwapLoop(state);
 
-        const batch = await Promise.allSettled(
-          accountIds.map(accountId =>
+    // 3. Return immediate acknowledgement
+    return { 
+      parentId, 
+      strategy: 'twap', 
+      totalSlices: numSlices, 
+      results: accountIds.map(id => ({ accountId: id, status: 'fulfilled' })) 
+    };
+  },
+
+  _runTwapLoop(state: any) {
+    const { parentId, intervalMs, numSlices } = state;
+
+    const timer = setInterval(async () => {
+      try {
+        // Refresh state from Redis (in case of manual cancellation or updates)
+        const raw = await redis.hget(TWAP_STATE_KEY, parentId);
+        if (!raw) {
+          clearInterval(timer);
+          activeTwapTimers.delete(parentId);
+          return;
+        }
+        const currentState = JSON.parse(raw);
+        if (currentState.status !== 'active') {
+          clearInterval(timer);
+          activeTwapTimers.delete(parentId);
+          return;
+        }
+
+        const slicePrice = currentState.basePrice + (Math.random() - 0.5) * currentState.basePrice * 0.0002;
+
+        await Promise.allSettled(
+          currentState.accountIds.map((accountId: string) =>
             executeChildOrder({
               id:          `child_${randomBytes(4).toString('hex')}`,
               parentId,
               accountId,
-              symbol:      order.symbol,
-              side:        order.side,
+              symbol:      currentState.order.symbol,
+              side:        currentState.order.side,
               type:        'Market',
-              quantity:    parseFloat(sliceQty.toFixed(6)),
+              quantity:    parseFloat(currentState.sliceQty.toFixed(6)),
               price:       slicePrice,
-              leverage:    order.leverage,
-              sliceIdx,
+              leverage:    currentState.order.leverage,
+              sliceIdx:    currentState.completedSlices,
               totalSlices: numSlices,
               status:      'pending',
             }, slicePrice)
           )
         );
 
-        if (sliceIdx === 0) {
-          batch.forEach((r, i) => results.push({
-            accountId: accountIds[i],
-            status:    r.status,
-            orderId:   r.status === 'fulfilled' ? r.value : undefined,
-            error:     r.status === 'rejected'  ? String(r.reason) : undefined,
-          }));
-        }
-
-        sliceIdx++;
-        if (sliceIdx >= numSlices) {
+        currentState.completedSlices++;
+        
+        if (currentState.completedSlices >= numSlices) {
           clearInterval(timer);
           activeTwapTimers.delete(parentId);
-          resolve({ parentId, strategy: 'twap', totalSlices: numSlices, results });
+          await redis.hdel(TWAP_STATE_KEY, parentId);
+          await finalizeParentOrder(parentId, 'complete');
+          console.log(`[SOR] TWAP ${parentId} finished successfully.`);
+        } else {
+          // Update progress in Redis
+          await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(currentState));
         }
-      }, intervalMs);
-      
-      activeTwapTimers.set(parentId, timer);
-    });
+      } catch (err) {
+        console.error(`[SOR] Error in TWAP loop for ${parentId}:`, err);
+      }
+    }, intervalMs);
+
+    activeTwapTimers.set(parentId, timer);
+  },
+
+  /**
+   * Resumes active TWAP orders from Redis. To be called on server startup.
+   */
+  async resumeActiveTwaps() {
+    const all = await redis.hgetall(TWAP_STATE_KEY);
+    const count = Object.keys(all).length;
+    if (count === 0) return;
+
+    console.log(`[SOR] Resuming ${count} active TWAP orders from Redis...`);
+    for (const [id, raw] of Object.entries(all)) {
+      const state = JSON.parse(raw);
+      this._runTwapLoop(state);
+    }
   },
 
   cancelAllTwap() {

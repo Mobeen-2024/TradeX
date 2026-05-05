@@ -22,8 +22,9 @@ redis.on('connect', () => console.log('[Redis] Connected'));
 // ── Key Schema ─────────────────────────────────────────────────
 export const KEYS = {
   positions:   'tradex:positions',          // Hash  → id → JSON
+  symbolPositions: (sym: string) => `tradex:pos:sym:${sym.toLowerCase()}`, // Set → IDs
   openOrders:  'tradex:open_orders',        // Hash  → id → JSON
-  orderBook:   (sym: string) => `tradex:ob:${sym}`,  // JSON string
+  orderBook:   (sym: string) => `tradex:ob:${sym.toLowerCase()}`,  // JSON string
   globalState: 'tradex:global_state',       // Hash  → price, high, low, vol
   rateLimit:   (key: string) => `tradex:rl:${key}`,  // String (TTL)
 } as const;
@@ -34,12 +35,35 @@ export async function getPositions(): Promise<any[]> {
   return Object.values(raw).map((v) => JSON.parse(v));
 }
 
-export async function setPosition(id: string, pos: object) {
-  await redis.hset(KEYS.positions, id, JSON.stringify(pos));
+export async function getPositionsBySymbol(symbol: string): Promise<any[]> {
+  const ids = await redis.smembers(KEYS.symbolPositions(symbol));
+  if (ids.length === 0) return [];
+  const raw = await redis.hmget(KEYS.positions, ...ids);
+  return raw.filter(Boolean).map((v) => JSON.parse(v!));
+}
+
+export async function setPosition(id: string, pos: any) {
+  const symbol = (pos.pair || pos.symbol || '').toLowerCase();
+  const pipe = redis.pipeline();
+  pipe.hset(KEYS.positions, id, JSON.stringify(pos));
+  if (symbol) {
+    pipe.sadd(KEYS.symbolPositions(symbol), id);
+  }
+  await pipe.exec();
 }
 
 export async function deletePosition(id: string) {
-  await redis.hdel(KEYS.positions, id);
+  const raw = await redis.hget(KEYS.positions, id);
+  if (!raw) return;
+  const pos = JSON.parse(raw);
+  const symbol = (pos.pair || pos.symbol || '').toLowerCase();
+  
+  const pipe = redis.pipeline();
+  pipe.hdel(KEYS.positions, id);
+  if (symbol) {
+    pipe.srem(KEYS.symbolPositions(symbol), id);
+  }
+  await pipe.exec();
 }
 
 export async function getOpenOrders(): Promise<any[]> {
