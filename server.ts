@@ -26,6 +26,13 @@ import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSc
 import { z } from 'zod';
 
 async function start() {
+  process.on('uncaughtException', (err) => {
+    console.error('[Server] Uncaught exception:', err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('[Server] Unhandled rejection:', reason);
+  });
+
   const fastify = Fastify({ logger: false });
 
   await fastify.register(fastifyWebsocket);
@@ -68,7 +75,9 @@ async function start() {
     for (const pos of positions) {
       const diff = pos.type === 'LONG' ? mark - pos.entry : pos.entry - mark;
       const liveDelta = diff * pos.size;
-      const leverageFactor = pos.leverage.includes('10x') ? 10 : 1;
+      const leverageFactor = typeof pos.leverage === 'number'
+        ? pos.leverage
+        : parseInt(String(pos.leverage).replace('x', '').replace('Cross_', '')) || 1;
       const liveDeltaPercent = (diff / pos.entry) * 100 * leverageFactor;
       const updated = { ...pos, mark, liveDelta, liveDeltaPercent };
       pipe.hset(KEYS.positions, pos.id, JSON.stringify(updated));
@@ -346,6 +355,7 @@ async function start() {
           if (isInstant) {
             const newPos = {
               id: Math.random().toString(36).substr(2, 9),
+              accountId: order.accountIds?.[0] ?? 'default',
               pair: order.pair,
               type: order.side === 'Buy' ? 'LONG' : 'SHORT',
               leverage: order.leverage,
@@ -451,6 +461,7 @@ async function start() {
   });
 
   const shutdown = async () => {
+    smartOrderRouter.cancelAllTwap();
     await workerManager.stopAll();
     gateway.terminate();
     await fastify.close();

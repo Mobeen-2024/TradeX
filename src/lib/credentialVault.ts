@@ -18,11 +18,18 @@ const ALGORITHM     = 'aes-256-gcm';
 
 // Derive a 32-byte key from the env variable (hex or raw)
 function getMasterKey(): Buffer {
+  const isProd = process.env.NODE_ENV === 'production';
+  
   if (!VAULT_KEY_HEX) {
-    // Warn loudly in dev — generate a random session key
-    console.warn('[Vault] VAULT_MASTER_KEY not set. Using ephemeral session key — credentials will NOT survive restart!');
-    return randomBytes(32);
+    if (isProd) {
+      throw new Error('[Vault] CRITICAL: VAULT_MASTER_KEY must be set in production to prevent data loss!');
+    }
+    // Stable dev key derived from environment/path to survive restarts but not be plaintext
+    const devSeed = `${process.cwd()}-${process.env.COMPUTERNAME || 'dev-host'}`;
+    console.warn('[Vault] VAULT_MASTER_KEY not set. Using stable dev seed — credentials will survive local restarts.');
+    return createHmac('sha256', 'tradex-dev-secret').update(devSeed).digest();
   }
+  
   const buf = Buffer.from(VAULT_KEY_HEX, 'hex');
   if (buf.length !== 32) throw new Error('[Vault] VAULT_MASTER_KEY must be 64 hex chars (32 bytes).');
   return buf;

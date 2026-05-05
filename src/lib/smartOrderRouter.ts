@@ -19,6 +19,8 @@ import { writeExecutionLog } from './questdb.js';
 import type { RawOrder } from './riskEngine.js';
 import { circuitBreakers } from './circuitBreaker.js';
 
+const activeTwapTimers = new Map<string, NodeJS.Timeout>();
+
 // ── Types ─────────────────────────────────────────────────────────
 export type RoutingStrategy = 'market' | 'iceberg' | 'twap';
 
@@ -39,6 +41,7 @@ export interface ChildOrder {
   type:      'Market' | 'Limit';
   quantity:  number;
   price?:    number;
+  leverage?: number;
   sliceIdx:  number;
   totalSlices: number;
   status:    'pending' | 'submitted' | 'filled' | 'failed';
@@ -76,7 +79,7 @@ async function executeChildOrder(child: ChildOrder, price: number): Promise<stri
       id:           execId,
       pair:         child.symbol,
       type:         child.side === 'Buy' ? 'LONG' : 'SHORT',
-      leverage:     `${child.quantity}x`, // placeholder
+      leverage:     child.leverage ?? 1,
       size:         child.quantity,
       cost:         child.quantity * price,
       entry:        price,
@@ -116,6 +119,7 @@ function buildIcebergSlices(
       type:        'Market',
       quantity:    parseFloat(sliceQty.toFixed(6)),
       price:       order.price,
+      leverage:    order.leverage,
       sliceIdx:    i,
       totalSlices: numSlices,
       status:      'pending',
@@ -219,7 +223,7 @@ export const smartOrderRouter = {
 
     // Execute slice-by-slice with a small delay to avoid market impact
     for (let sliceIdx = 0; sliceIdx < sliceGroups[0].length; sliceIdx++) {
-      const sliceBatch = sliceGroups.map(group => ({ ...group[sliceIdx], parentId }));
+      const sliceBatch = sliceGroups.map(group => ({ ...group[sliceIdx], parentId, leverage: order.leverage }));
 
       const batchResults = await Promise.allSettled(
         sliceBatch.map(child => executeChildOrder(child, price + (Math.random() - 0.5) * 0.5)) // ±0.5 price variation per slice
@@ -277,6 +281,7 @@ export const smartOrderRouter = {
               type:        'Market',
               quantity:    parseFloat(sliceQty.toFixed(6)),
               price:       slicePrice,
+              leverage:    order.leverage,
               sliceIdx,
               totalSlices: numSlices,
               status:      'pending',
@@ -296,9 +301,20 @@ export const smartOrderRouter = {
         sliceIdx++;
         if (sliceIdx >= numSlices) {
           clearInterval(timer);
+          activeTwapTimers.delete(parentId);
           resolve({ parentId, strategy: 'twap', totalSlices: numSlices, results });
         }
       }, intervalMs);
+      
+      activeTwapTimers.set(parentId, timer);
     });
   },
+
+  cancelAllTwap() {
+    for (const [id, timer] of activeTwapTimers) {
+      clearInterval(timer);
+      activeTwapTimers.delete(id);
+      console.warn(`[SOR] TWAP ${id} cancelled during shutdown`);
+    }
+  }
 };

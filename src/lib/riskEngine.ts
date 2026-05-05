@@ -83,6 +83,11 @@ export async function recordLoss(accountId: string, lossUsd: number): Promise<vo
 
 // ── Core Risk Check (synchronous logic, async data fetches) ────────
 export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
+  // ── 0. Infrastructure Health Check ──────────────────────────────
+  if (redis.status !== 'ready') {
+    return { approved: false, reason: 'System integrity error: Redis connection not ready.' };
+  }
+
   const warnings: string[] = [];
   const profile = await getRiskProfile(order.accountId);
   const globalState = await getGlobalState();
@@ -126,7 +131,13 @@ export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
 
   // ── 6. Drawdown circuit-breaker ──────────────────────────────────
   const totalUnrealizedPnl = accountPositions.reduce((sum, p) => sum + (p.liveDelta ?? 0), 0);
-  const equity = accountPositions.reduce((sum, p) => sum + p.cost, 0) || 1;
+  
+  // Use stored equity or fall back to a safe minimum to avoid division by 1 or 0
+  const storedEquity = await redis.hget('tradex:account_equity', order.accountId);
+  const equity = storedEquity 
+    ? parseFloat(storedEquity) 
+    : (accountPositions.reduce((sum, p) => sum + p.cost, 0) || profile.maxPositionSizeUsd);
+  
   const drawdownPct = Math.abs(totalUnrealizedPnl / equity) * 100;
   if (totalUnrealizedPnl < 0 && drawdownPct > profile.maxDrawdownPct) {
     return {

@@ -24,8 +24,8 @@ export const PlaceOrderSchema = z.object({
   pair:            z.string().min(3).max(20),
   side:            OrderSide,
   type:            z.string(), 
-  quantity:        z.number().positive(),
-  amount:          z.number().positive().optional(), // Alias for quantity
+  quantity:        z.number().positive().optional(),
+  amount:          z.number().positive().optional(),
   price:           z.number().positive().optional(),
   stopPrice:       z.number().positive().optional(),
   callbackRate:    z.number().min(0.1).max(10).optional(),
@@ -37,7 +37,10 @@ export const PlaceOrderSchema = z.object({
   accountIds:      z.array(z.string()).max(20).optional(),
   sorConfig:       RoutingConfigSchema.optional(),
   iceberg:         z.boolean().optional(),
-}).strict();
+}).strict().refine(
+  (data) => data.quantity != null || data.amount != null,
+  { message: 'Either quantity or amount must be provided', path: ['quantity'] }
+);
 
 // ── WebSocket: place_order ────────────────────────────────────────
 export const WsPlaceOrderSchema = z.object({
@@ -68,10 +71,13 @@ export const AddVaultAccountSchema = z.object({
 
 // ── REST: Risk Profile ────────────────────────────────────────────
 export const RiskProfileSchema = z.object({
+  accountId:          z.string().min(1),
   maxPositionSizeUsd: z.number().positive(),
   maxDailyLossUsd:    z.number().positive(),
   maxDrawdownPct:     z.number().min(1).max(100),
-  allowedSymbols:     z.array(z.string()).min(1),
+  allowedSymbols:     z.array(z.string()),
+  maxOpenPositions:   z.number().int().positive().max(500).optional().default(50),
+  maxLeverage:        z.number().int().min(1).max(125).optional().default(20),
 }).strict();
 
 export type PlaceOrderPayload      = z.infer<typeof PlaceOrderSchema>;

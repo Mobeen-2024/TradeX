@@ -81,16 +81,23 @@ export class ExchangeGateway extends EventEmitter {
 
     this.ws.on('error', (err) => {
       console.error('[Gateway] WSS error:', err.message);
+      this.stopHeartbeat();
       this.ws?.terminate();
+      this.ws = null;
     });
   }
 
   private startHeartbeat() {
     this.stopHeartbeat();
     this.pingTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        this.stopHeartbeat();
+        return;
+      }
       if (!this.isAlive) {
         console.warn('[Gateway] Heartbeat timeout — reconnecting');
         this.ws?.terminate();
+        this.ws = null;
         return;
       }
       this.isAlive = false;
@@ -193,6 +200,7 @@ export class ExchangeGateway extends EventEmitter {
     this.stopHeartbeat();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.ws?.close();
+    this.ws = null;
   }
 }
 

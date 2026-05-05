@@ -191,6 +191,7 @@ export const workerManager = {
     const worker = new Worker(workerFile, {
       workerData: config,
       env: { REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379' },
+      execArgv: process.env.NODE_ENV !== 'production' ? ['--import', 'tsx/esm'] : [],
     });
 
     worker.on('message', (msg) => handleWorkerMessage(workerId, msg));
