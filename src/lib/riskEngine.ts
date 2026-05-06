@@ -14,7 +14,7 @@
  *  7. Daily loss limit circuit-breaker
  */
 
-import { getPositions, getGlobalState, redis } from './redis.js';
+import { getPositions, getGlobalState, redis } from './redis.ts';
 
 // ── Risk Profile (per-account limits) ────────────────────────────
 export interface RiskProfile {

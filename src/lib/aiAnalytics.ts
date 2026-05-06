@@ -5,7 +5,7 @@
  * In production, this would use @google/genai with live order book buffers.
  */
 
-import { gateway } from './exchangeGateway.js';
+import { gateway } from './exchangeGateway.ts';
 
 let lastAnalysisTime = 0;
 const ANALYSIS_INTERVAL = 10000; // 10 seconds

@@ -13,9 +13,9 @@
 import { Worker } from 'worker_threads';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runRiskChecks } from './riskEngine.js';
-import { smartOrderRouter } from './smartOrderRouter.js';
-import { redis } from './redis.js';
+import { runRiskChecks } from './riskEngine.ts';
+import { smartOrderRouter } from './smartOrderRouter.ts';
+import { redis } from './redis.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

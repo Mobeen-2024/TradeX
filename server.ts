@@ -4,7 +4,7 @@ import middie from '@fastify/middie';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
-import { gateway } from './src/lib/exchangeGateway.js';
+import { gateway } from './src/lib/exchangeGateway.ts';
 import {
   redis,
   KEYS,
@@ -16,14 +16,14 @@ import {
   getOpenOrders,
   setOpenOrder,
   deleteOpenOrder
-} from './src/lib/redis.js';
-import { credentialVault } from './src/lib/credentialVault.js';
-import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.js';
-import { smartOrderRouter } from './src/lib/smartOrderRouter.js';
-import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.js';
-import { startAIAnalytics } from './src/lib/aiAnalytics.js';
-import { circuitBreakers } from './src/lib/circuitBreaker.js';
-import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSchema } from './src/lib/schemas.js';
+} from './src/lib/redis.ts';
+import { credentialVault } from './src/lib/credentialVault.ts';
+import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.ts';
+import { smartOrderRouter } from './src/lib/smartOrderRouter.ts';
+import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.ts';
+import { startAIAnalytics } from './src/lib/aiAnalytics.ts';
+import { circuitBreakers } from './src/lib/circuitBreaker.ts';
+import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSchema } from './src/lib/schemas.ts';
 import { z } from 'zod';
 
 async function start() {

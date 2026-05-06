@@ -9,7 +9,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, createHmac } from 'crypto';
-import { redis } from './redis.js';
+import { redis } from './redis.ts';
 
 // ── Constants ─────────────────────────────────────────────────────
 const VAULT_KEY_HEX = process.env.VAULT_MASTER_KEY ?? '';

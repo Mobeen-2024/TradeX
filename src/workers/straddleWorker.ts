@@ -22,7 +22,7 @@
  */
 
 import { parentPort, workerData, isMainThread } from 'worker_threads';
-import { createRedisClient } from '../lib/redis.js';
+import { createRedisClient } from '../lib/redis.ts';
 
 if (isMainThread) {
   throw new Error('straddleWorker must be run as a worker_thread, not directly.');

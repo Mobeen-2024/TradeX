@@ -14,10 +14,10 @@
  */
 
 import { randomBytes } from 'crypto';
-import { getGlobalState, setPosition, setOpenOrder, redis, executeAtomicPositionUpdate } from './redis.js';
-import { writeExecutionLog } from './questdb.js';
-import type { RawOrder } from './riskEngine.js';
-import { circuitBreakers } from './circuitBreaker.js';
+import { getGlobalState, setPosition, setOpenOrder, redis, executeAtomicPositionUpdate } from './redis.ts';
+import { writeExecutionLog } from './questdb.ts';
+import type { RawOrder } from './riskEngine.ts';
+import { circuitBreakers } from './circuitBreaker.ts';
 
 const activeTwapTimers = new Map<string, NodeJS.Timeout>();
 const TWAP_STATE_KEY = 'tradex:active_twaps'; // Hash -> parentId -> JSON state

@@ -1,8 +1,8 @@
 // src/lib/exchangeGateway.ts
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { redis, KEYS, setGlobalPrice } from './redis.js';
-import { writeTick } from './questdb.js';
+import { redis, KEYS, setGlobalPrice } from './redis.ts';
+import { writeTick } from './questdb.ts';
 
 interface GatewayConfig {
   symbols: string[];           // e.g. ['btcusdt', 'ethusdt']

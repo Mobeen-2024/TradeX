@@ -17,8 +17,8 @@ import {
   scanForPatternsAI,
   IntentSnapshot,
   StructuralZone
-} from '../lib/aiAnalytics.js';
-import { createRedisClient } from '../lib/redis.js';
+} from '../lib/aiAnalytics.ts';
+import { createRedisClient } from '../lib/redis.ts';
 
 if (isMainThread) {
   throw new Error('aiAnalyticsWorker must run as a worker_thread.');
