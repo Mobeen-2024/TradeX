@@ -236,4 +236,21 @@ export const workerManager = {
     entry.worker.postMessage({ type: 'update_config', config });
     entry.config = { ...entry.config, ...config };
   },
+
+  /**
+   * Broadcasts a message to ALL currently running workers.
+   * Used to sync mock state (market data, positions) across threads
+   * when Redis is unavailable in development.
+   */
+  postMessageToAll(msg: object): void {
+    for (const entry of registry.values()) {
+      if (entry.status === 'running') {
+        try {
+          entry.worker.postMessage(msg);
+        } catch {
+          // Worker may have exited — ignore
+        }
+      }
+    }
+  },
 };

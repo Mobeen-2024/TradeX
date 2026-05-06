@@ -10,15 +10,19 @@
  */
 
 import { parentPort, workerData, isMainThread } from 'worker_threads';
-import Redis from 'ioredis';
 import {
   streamIntentAnalysis,
   validateLevelsWithAI,
-  scanForPatternsAI,
+  scanForPatternsAI
+} from '../lib/aiAnalytics.ts';
+import type {
   IntentSnapshot,
   StructuralZone
 } from '../lib/aiAnalytics.ts';
-import { createRedisClient } from '../lib/redis.ts';
+import { 
+  redis,
+  updateMockStore
+} from '../lib/redis.ts';
 
 if (isMainThread) {
   throw new Error('aiAnalyticsWorker must run as a worker_thread.');
@@ -203,6 +207,9 @@ async function run() {
 parentPort?.on('message', (msg) => {
   if (msg.type === 'stop') running = false;
   if (msg.type === 'update_config') config = { ...config, ...msg.config };
+  if (msg.type === 'mock_sync') {
+    updateMockStore(msg.key, msg.value);
+  }
 });
 
 run().catch(err => {

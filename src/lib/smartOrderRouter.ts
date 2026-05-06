@@ -57,16 +57,20 @@ export interface SORResult {
 
 // ── Parent Order Registry (Redis) ─────────────────────────────────
 async function recordParentOrder(parentId: string, order: RawOrder, config: SORConfig) {
-  await redis.hset('tradex:parent_orders', parentId, JSON.stringify({
-    ...order, config, parentId, createdAt: Date.now(), status: 'routing'
-  }));
+  try {
+    await redis.hset('tradex:parent_orders', parentId, JSON.stringify({
+      ...order, config, parentId, createdAt: Date.now(), status: 'routing'
+    }));
+  } catch { /* Redis unavailable — skip persistence in dev */ }
 }
 
 async function finalizeParentOrder(parentId: string, status: 'complete' | 'partial' | 'failed') {
-  const raw = await redis.hget('tradex:parent_orders', parentId);
-  if (!raw) return;
-  const order = JSON.parse(raw);
-  await redis.hset('tradex:parent_orders', parentId, JSON.stringify({ ...order, status, completedAt: Date.now() }));
+  try {
+    const raw = await redis.hget('tradex:parent_orders', parentId);
+    if (!raw) return;
+    const order = JSON.parse(raw);
+    await redis.hset('tradex:parent_orders', parentId, JSON.stringify({ ...order, status, completedAt: Date.now() }));
+  } catch { /* Redis unavailable — skip persistence in dev */ }
 }
 
 // ── Execution Simulator (replaces real exchange API calls) ────────
@@ -267,30 +271,19 @@ export const smartOrderRouter = {
     const sliceQty    = order.quantity / numSlices;
 
     const state = {
-      parentId,
-      order,
-      accountIds,
-      config,
-      basePrice,
-      numSlices,
-      sliceQty,
-      intervalMs,
-      completedSlices: 0,
-      status: 'active'
+      parentId, order, accountIds, config, basePrice,
+      numSlices, sliceQty, intervalMs, completedSlices: 0, status: 'active'
     };
 
-    // 1. Persist state to Redis before starting
-    await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(state));
+    // Persist state to Redis before starting (best-effort)
+    try { await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(state)); } catch { /* mock mode */ }
 
-    // 2. Start the execution loop (non-blocking)
+    // Start the execution loop (non-blocking)
     this._runTwapLoop(state);
 
-    // 3. Return immediate acknowledgement
-    return { 
-      parentId, 
-      strategy: 'twap', 
-      totalSlices: numSlices, 
-      results: accountIds.map(id => ({ accountId: id, status: 'fulfilled' })) 
+    return {
+      parentId, strategy: 'twap', totalSlices: numSlices,
+      results: accountIds.map(id => ({ accountId: id, status: 'fulfilled' as const }))
     };
   },
 
@@ -303,12 +296,13 @@ export const smartOrderRouter = {
       while (isRunning) {
         try {
           // Refresh state from Redis (in case of manual cancellation or updates)
-          const raw = await redis.hget(TWAP_STATE_KEY, parentId);
-          if (!raw) {
-            activeTwapTimers.delete(parentId);
-            break;
-          }
-          const currentState = JSON.parse(raw);
+          let currentState = state; // fall back to in-memory state if Redis unavailable
+          try {
+            const raw = await redis.hget(TWAP_STATE_KEY, parentId);
+            if (!raw) { activeTwapTimers.delete(parentId); break; }
+            currentState = JSON.parse(raw);
+          } catch { /* Redis unavailable — use in-memory state */ }
+
           if (currentState.status !== 'active') {
             activeTwapTimers.delete(parentId);
             break;
@@ -336,16 +330,16 @@ export const smartOrderRouter = {
           );
 
           currentState.completedSlices++;
-          
+          state.completedSlices = currentState.completedSlices; // keep in-memory state in sync
+
           if (currentState.completedSlices >= numSlices) {
             activeTwapTimers.delete(parentId);
-            await redis.hdel(TWAP_STATE_KEY, parentId);
+            try { await redis.hdel(TWAP_STATE_KEY, parentId); } catch { /* mock */ }
             await finalizeParentOrder(parentId, 'complete');
             console.log(`[SOR] TWAP ${parentId} finished successfully.`);
             break;
           } else {
-            // Update progress in Redis
-            await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(currentState));
+            try { await redis.hset(TWAP_STATE_KEY, parentId, JSON.stringify(currentState)); } catch { /* mock */ }
           }
         } catch (err) {
           console.error(`[SOR] Error in TWAP loop for ${parentId}:`, err);
@@ -369,24 +363,31 @@ export const smartOrderRouter = {
    * Resumes active TWAP orders from Redis. To be called on server startup.
    */
   async resumeActiveTwaps() {
-    const all = await redis.hgetall(TWAP_STATE_KEY);
+    let all: Record<string, string> = {};
+    try {
+      all = await redis.hgetall(TWAP_STATE_KEY);
+    } catch {
+      // Redis unavailable — no TWAPs to resume
+      return;
+    }
     const count = Object.keys(all).length;
     if (count === 0) return;
 
     console.log(`[SOR] Resuming ${count} active TWAP orders from Redis...`);
     for (const [id, raw] of Object.entries(all)) {
-      // Use setnx as a simple distributed lock to avoid multiple pods resuming the same TWAP
-      const lockKey = `tradex:twap_lock:${id}`;
-      const acquired = await redis.setnx(lockKey, Date.now().toString());
-      if (acquired) {
-        await redis.expire(lockKey, 3600); // 1 hour TTL
-        const state = JSON.parse(raw);
-        if (state.status === 'paused_by_system') {
-           state.status = 'active';
-           await redis.hset(TWAP_STATE_KEY, id, JSON.stringify(state));
+      try {
+        const lockKey = `tradex:twap_lock:${id}`;
+        const acquired = await redis.setnx(lockKey, Date.now().toString());
+        if (acquired) {
+          await redis.expire(lockKey, 3600);
+          const state = JSON.parse(raw);
+          if (state.status === 'paused_by_system') {
+            state.status = 'active';
+            await redis.hset(TWAP_STATE_KEY, id, JSON.stringify(state));
+          }
+          this._runTwapLoop(state);
         }
-        this._runTwapLoop(state);
-      }
+      } catch { /* skip this TWAP if Redis fails mid-resume */ }
     }
   },
 
@@ -394,17 +395,15 @@ export const smartOrderRouter = {
     for (const [id, timer] of activeTwapTimers) {
       clearTimeout(timer);
       activeTwapTimers.delete(id);
-      
-      const raw = await redis.hget(TWAP_STATE_KEY, id);
-      if (raw) {
-        const state = JSON.parse(raw);
-        state.status = 'paused_by_system';
-        await redis.hset(TWAP_STATE_KEY, id, JSON.stringify(state));
-      }
-      
-      const lockKey = `tradex:twap_lock:${id}`;
-      await redis.del(lockKey);
-      
+      try {
+        const raw = await redis.hget(TWAP_STATE_KEY, id);
+        if (raw) {
+          const state = JSON.parse(raw);
+          state.status = 'paused_by_system';
+          await redis.hset(TWAP_STATE_KEY, id, JSON.stringify(state));
+        }
+        await redis.del(`tradex:twap_lock:${id}`);
+      } catch { /* Redis unavailable during shutdown — skip */ }
       console.warn(`[SOR] TWAP ${id} paused during shutdown`);
     }
   }

@@ -20,7 +20,10 @@
  */
 
 import { parentPort, workerData, isMainThread } from 'worker_threads';
-import { createRedisClient } from '../lib/redis.ts';
+import { 
+  redis,
+  updateMockStore 
+} from '../lib/redis.ts';
 
 if (isMainThread) {
   throw new Error('deltaNeutralWorker must be run as a worker_thread, not directly.');
@@ -29,18 +32,15 @@ if (isMainThread) {
 // ── Worker Config ──────────────────────────────────────────────────
 interface DeltaNeutralConfig {
   accountId:       string;
-  symbol:          string;          // e.g. 'btcusdt'
-  targetDelta:     number;          // Target net delta (0 = fully neutral)
-  deltaThreshold:  number;          // Rebalance when |delta - target| > threshold
-  maxHedgeUsd:     number;          // Max hedge notional per rebalance
-  intervalMs:      number;          // Poll interval in ms
+  symbol:          string;
+  targetDelta:     number;
+  deltaThreshold:  number;
+  maxHedgeUsd:     number;
+  intervalMs:      number;
 }
 
 let config: DeltaNeutralConfig = workerData as DeltaNeutralConfig;
 let running = true;
-
-// ── Redis client (separate instance per worker thread) ─────────────
-const redis = createRedisClient();
 
 function log(msg: string) {
   parentPort?.postMessage({ type: 'log', worker: 'delta_neutral', message: msg });
@@ -121,6 +121,8 @@ parentPort?.on('message', (msg) => {
   } else if (msg.type === 'update_config') {
     config = { ...config, ...msg.config };
     log(`Config updated: ${JSON.stringify(msg.config)}`);
+  } else if (msg.type === 'mock_sync') {
+    updateMockStore(msg.key, msg.value);
   }
 });
 

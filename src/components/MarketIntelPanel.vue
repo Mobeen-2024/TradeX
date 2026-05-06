@@ -13,7 +13,7 @@ const activeTab = ref<'intent' | 'alerts'>('intent');
     <div class="flex items-center justify-between p-4 border-b border-white/5">
       <div class="flex items-center gap-2">
         <div class="p-1.5 bg-indigo-500/20 rounded-lg">
-          <Brain class="w-4 h-4 text-indigo-400" />
+          <Brain class="w-4 h-4 text-indigo-400 animate-brain-pulse" />
         </div>
         <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Market Intelligence</h3>
       </div>
@@ -76,16 +76,24 @@ const activeTab = ref<'intent' | 'alerts'>('intent');
         <div class="space-y-3">
           <div class="flex items-center justify-between">
              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Institutional Narrative</span>
-             <div v-if="isAiThinking" class="flex gap-1">
-               <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce" />
-               <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-               <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+             <div v-if="isAiThinking" class="flex items-center gap-2">
+               <div class="flex gap-1">
+                 <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce" />
+                 <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                 <div class="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+               </div>
+               <span class="text-[9px] font-bold text-indigo-400 animate-pulse">SCANNING...</span>
              </div>
           </div>
-          <div class="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 relative group overflow-hidden gpu-glass">
+          <div class="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 relative group overflow-hidden gpu-glass min-h-[100px]">
+            <!-- Scan line animation -->
+            <div v-if="isAiThinking" class="absolute inset-0 bg-gradient-to-b from-transparent via-indigo-500/10 to-transparent h-1/2 w-full animate-scan z-0" />
             <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <p class="text-sm leading-relaxed text-indigo-100/90 font-medium italic relative z-10">
-              "{{ aiNarration || 'Analyzing market microstructure for institutional footprints...' }}"
+            
+            <p class="text-sm leading-relaxed text-indigo-100/90 font-medium italic relative z-10 transition-all duration-500">
+              <span class="text-indigo-400 font-mono mr-1">AI > </span>
+              {{ aiNarration || 'Analyzing market microstructure for institutional footprints...' }}
+              <span v-if="isAiThinking" class="inline-block w-1.5 h-3 bg-indigo-400 animate-pulse ml-1" />
             </p>
           </div>
         </div>

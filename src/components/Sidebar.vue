@@ -60,9 +60,19 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
           <!-- Header -->
           <div class="h-[60px] flex items-center px-4 shrink-0 justify-between">
             <div class="flex items-center gap-4 text-[#F0B90B]">
-              <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 group/logo">
-                 <svg class="w-6 h-6 text-[#F0B90B] group-hover/logo:animate-[spin_4s_linear_infinite]" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16 0L19.227 3.227L16 6.454L12.773 3.227L16 0ZM6.454 9.546L9.681 12.773L6.454 16L3.227 12.773L6.454 9.546ZM25.546 9.546L28.773 12.773L25.546 16L22.319 12.773L25.546 9.546ZM16 11.233L20.767 16L16 20.767L11.233 16L16 11.233ZM3.227 19.227L6.454 22.454L9.681 19.227L6.454 16L3.227 19.227ZM28.773 19.227L25.546 22.454L22.319 19.227L25.546 16L28.773 19.227ZM16 32L12.773 28.773L16 25.546L19.227 28.773L16 32Z" />
+              <div class="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0 group/logo shadow-lg shadow-[#F0B90B]/5 hover:border-[#F0B90B]/30 transition-all duration-500">
+                <svg class="w-7 h-7 text-[#F0B90B] group-hover/logo:animate-brain-pulse transition-all duration-700" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M16 2L19 5H13L16 2Z" fill="currentColor" />
+                  <path d="M16 30L13 27H19L16 30Z" fill="currentColor" />
+                  <path d="M2 16L5 13V19L2 16Z" fill="currentColor" />
+                  <path d="M30 16L27 19V13L30 16Z" fill="currentColor" />
+                  
+                  <!-- Central Core -->
+                  <rect x="11" y="11" width="10" height="10" rx="2" stroke="currentColor" stroke-width="2" />
+                  <path d="M13 16L19 16M16 13L16 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  
+                  <!-- Circuit Paths -->
+                  <path d="M16 5V11M16 21V27M5 16H11M21 16H27" stroke="currentColor" stroke-width="1" stroke-dasharray="2 2" opacity="0.5" />
                 </svg>
               </div>
               <div class="flex flex-col transition-opacity duration-300" :class="isExpanded ? 'opacity-100' : 'opacity-0'">

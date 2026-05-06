@@ -21,6 +21,8 @@
   --animate-float: float 6s ease-in-out infinite;
   --animate-glow: glow 2s ease-in-out infinite alternate;
   --animate-spin-slow: spin-slow 8s linear infinite;
+  --animate-scan: scan 2s linear infinite;
+  --animate-brain-pulse: brain-pulse 3s ease-in-out infinite;
 }
 
 @keyframes shimmer {
@@ -52,6 +54,17 @@
   0% { transform: scale(0); }
   80% { transform: scale(1.2); }
   100% { transform: scale(1); }
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(200%); }
+}
+
+@keyframes brain-pulse {
+  0% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(99, 102, 241, 0)); }
+  50% { transform: scale(1.1); filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0px rgba(99, 102, 241, 0)); }
 }
 
 @layer base {

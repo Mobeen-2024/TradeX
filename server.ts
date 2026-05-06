@@ -123,6 +123,13 @@ async function start() {
     for (const client of clients) {
       if (client.readyState === 1) client.send(payload);
     }
+
+    // 4. Sync to workers for in-memory mock mode
+    workerManager.postMessageToAll({ 
+      type: 'mock_sync', 
+      key: KEYS.globalState, 
+      value: { price: mark.toString() } 
+    });
   });
 
   gateway.on('depth', ({ symbol, orderBook }) => {
@@ -130,9 +137,32 @@ async function start() {
     for (const client of clients) {
       if (client.readyState === 1) client.send(payload);
     }
+
+    // Sync to workers
+    workerManager.postMessageToAll({ 
+      type: 'mock_sync', 
+      key: KEYS.orderBook(symbol), 
+      value: orderBook 
+    });
   });
 
   gateway.on('ticker', (data) => {
+    const tickerUpdate = {
+      price: parseFloat(data.c).toFixed(2),
+      high24h: parseFloat(data.h).toFixed(2),
+      low24h: parseFloat(data.l).toFixed(2),
+      volume: parseFloat(data.v).toFixed(2),
+      priceChange: data.p,
+      priceChangePct: data.P,
+      updatedAt: Date.now().toString(),
+    };
+
+    workerManager.postMessageToAll({ 
+      type: 'mock_sync', 
+      key: KEYS.globalState, 
+      value: tickerUpdate
+    });
+
     const payload = JSON.stringify({
       type: 'trade', // Reuse trade type for ticker updates to minimize frontend changes
       price: parseFloat(data.c),
@@ -394,6 +424,7 @@ async function start() {
               protocolLimits: ['-', '-']
             };
             await setPosition(newPos.id, newPos);
+            workerManager.postMessageToAll({ type: 'mock_sync', key: KEYS.positions, value: await getPositions() });
             connection.send(JSON.stringify({ type: 'position_opened', position: newPos }));
           } else {
             const newOrder = {
@@ -406,6 +437,7 @@ async function start() {
           }
         } else if (data.type === 'close_position') {
           await deletePosition(data.id);
+          workerManager.postMessageToAll({ type: 'mock_sync', key: KEYS.positions, value: await getPositions() });
         }
       } catch(e) {
         console.error('Error handling WS message:', e);
