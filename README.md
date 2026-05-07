@@ -1,59 +1,96 @@
-# TradeX Terminal
+# TradeX Pro Terminal
 
-**TradeX** is a high-performance, real-time cryptocurrency trading terminal simulating professional-grade exchange workflows. Built with a modern dual-stack architecture, it features a highly reactive frontend and a high-speed streaming backend, all wrapped in a sleek, glassmorphic UI.
+**TradeX Pro** is a high-performance, institutional-grade cryptocurrency trading terminal and execution engine. It combines a sleek glassmorphic UI with a powerful, micro-worker-driven backend to simulate professional exchange workflows, automated execution strategies, and real-time AI market intelligence.
 
-## 🚀 Features
+## 🚀 Key Institutional Features
 
-- **Real-Time Market Data:** Live price streaming and order book updates via Fastify WebSockets.
-- **Advanced Order Management:** Support for Market, Limit, Stop Loss, Take Profit, and Trailing Stop orders with margin and leverage calculations.
-- **Professional Charting:** Integrated `lightweight-charts` for smooth, interactive OHLCV candlestick rendering.
-- **Mock Trading Engine:** Built-in simulation engine executing triggered orders and dynamically tracking PnL.
-- **Modern UI/UX:** Premium glassmorphic design language built with Tailwind CSS, supporting complex multi-chart workspaces and mobile-responsive layouts.
-- **Live Portfolio Tracking:** Real-time balance updates, asset allocation visualization, and active position management.
+- **Real-Time AI Market Intelligence:** Integrated with **Google Gemini (AI Studio)** for live sentiment analysis, trade intent detection, and automated market level identification.
+- **Smart Order Routing (SOR):** Institutional execution engine supporting **TWAP (Time-Weighted Average Price)** strategies to minimize slippage and market impact.
+- **Micro-Worker Architecture:** Multi-threaded background workers (via Node.js Worker Threads) for non-blocking strategy execution and heavy data processing.
+- **Risk Management Engine:** Automated pre-trade risk checks including leverage limits, position sizing, and notional USD exposure validation.
+- **Encrypted Credential Vault:** AES-256-GCM encrypted storage for exchange API keys, utilizing a master key derived from environment secrets.
+- **Advanced State Management:** High-speed data synchronization using **Redis** for global state, order books, and active positions.
+- **Professional Charting:** Deep integration with `lightweight-charts` for high-frequency OHLCV and technical indicator rendering.
+- **Observability:** Built-in **Prometheus** metrics and **Grafana** dashboards for monitoring execution latency and worker health.
 
-## 🛠 Tech Stack
+## 🛠 Advanced Tech Stack
 
 **Frontend:**
-- [Vue 3](https://vuejs.org/) (Composition API)
-- [Vite](https://vitejs.dev/)
-- [Tailwind CSS v4](https://tailwindcss.com/)
-- [Lightweight Charts](https://tradingview.github.io/lightweight-charts/)
-- [Lucide Icons](https://lucide.dev/)
+- **Vue 3** (Composition API) + **Vite**
+- **Tailwind CSS v4** (Glassmorphic Design System)
+- **Lightweight Charts** for financial visualization
+- **Lucide Icons** & **VueUse** utilities
 
 **Backend:**
-- [Fastify](https://fastify.dev/)
-- `@fastify/websocket`
-- Node.js (TypeScript / tsx)
+- **Fastify** (High-performance web framework)
+- **Worker Threads** for concurrent algorithm execution
+- **Redis** & **BullMQ** for state persistence and task queuing
+- **Google Gemini API** for LLM-driven market analysis
+- **Node-Forge** for cryptographic operations
+
+**Infrastructure & DevOps:**
+- **Docker & Docker Compose** for containerized local development
+- **Kubernetes (K8s)** with HPA and Ingress support for scalable production
+- **Terraform** for Infrastructure as Code (AWS EKS, VPC)
+- **Prometheus & Grafana** for full-stack observability
 
 ## 📦 Getting Started
 
 ### Prerequisites
-- Node.js (v18+)
-- npm or pnpm
+- Node.js (v20+)
+- Redis instance (local or managed)
+- Google Gemini API Key
 
 ### Installation
 
-1. Clone the repository (if applicable) and install dependencies:
+1. Clone the repository and install dependencies:
    ```bash
    npm install
    ```
 
-2. Start the development server (runs both the Fastify backend and the Vite frontend):
+2. Configure environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your GEMINI_API_KEY and REDIS_URL
+   ```
+
+3. Start the full-stack development environment:
    ```bash
    npm run dev
    ```
 
-3. Open your browser and navigate to the local address provided in your terminal (typically `http://localhost:3000`).
+## 🏗 Infrastructure & Deployment
 
-## 🏗 Architecture Overview
+### Docker
+Run the full stack (App + Redis) using Docker Compose:
+```bash
+docker-compose up --build
+```
 
-- **Backend (`server.ts`):** Serves as an all-in-one execution engine and WebSocket gateway. It mounts the Vite dev server as middleware to provide a seamless single-port developer experience.
-- **State Management (`src/store/`):** Utilizes custom, reactive Vue composables for tracking active trades, global prices, and user configurations.
-- **Data Persistence:** Automatically tracks simulated positions locally inside `mock_db.json`.
+### Kubernetes
+Deploy to a cluster using the provided manifests:
+```bash
+kubectl apply -f k8s/
+```
 
-## 📜 Scripts
+### Infrastructure (Terraform)
+Provision AWS infrastructure (VPC, EKS):
+```bash
+cd terraform
+terraform init
+terraform apply
+```
 
-- `npm run dev` - Start the full-stack development server.
+## 📜 Available Scripts
+
+- `npm run dev` - Start the development server (Fastify + Vite middleware).
 - `npm run build` - Compile the frontend for production.
 - `npm run start` - Run the application in production mode.
-- `npm run lint` - Run TypeScript type checking.
+- `npm run lint` - Perform static type checking.
+- `npm run clean` - Remove build artifacts.
+
+## 🛡 Security & Reliability
+- **Circuit Breakers:** Application-level guards to prevent cascading failures during API outages.
+- **Zod Validation:** Strict schema enforcement for all API and WebSocket payloads.
+- **Graceful Shutdown:** Ensures all workers are stopped and TWAP orders are safely paused before process exit.
+
