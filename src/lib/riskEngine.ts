@@ -14,7 +14,7 @@
  *  7. Daily loss limit circuit-breaker
  */
 
-import { getPositions, getGlobalState, redis } from './redis.ts';
+import { getPositionsByAccount, getGlobalState, redis } from './redis.ts';
 
 // ── Risk Profile (per-account limits) ────────────────────────────
 export interface RiskProfile {
@@ -92,8 +92,7 @@ export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
   const profile = await getRiskProfile(order.accountId);
   const globalState = await getGlobalState();
   const currentPrice = parseFloat(globalState.price ?? '0');
-  const positions = await getPositions();
-  const accountPositions = positions.filter(p => p.accountId === order.accountId);
+  const accountPositions = await getPositionsByAccount(order.accountId);
 
   // ── 1. Symbol Whitelist ──────────────────────────────────────────
   if (profile.allowedSymbols.length > 0 && !profile.allowedSymbols.includes(order.symbol)) {

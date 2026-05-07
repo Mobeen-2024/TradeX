@@ -67,5 +67,18 @@ export const removePanel = (id: string) => {
 
 export const updateGlobalSymbol = (symbol: string) => {
   globalSymbol.value = symbol;
-  // All synced panels will follow this via props in the UI
+  workspacePanels.value.forEach(panel => {
+    if (panel.isSynced) {
+      panel.symbol = symbol;
+    }
+  });
+};
+
+export const updateGlobalInterval = (interval: string) => {
+  import('../store/tradeStore').then(m => m.chartInterval.value = interval);
+  workspacePanels.value.forEach(panel => {
+    if (panel.isSynced) {
+      panel.timeframe = interval;
+    }
+  });
 };

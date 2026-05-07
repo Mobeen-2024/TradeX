@@ -2,7 +2,10 @@ import { ref, watch } from 'vue';
 import { addNotification } from './alertStore';
 import { apiClient } from '../lib/apiClient';
 import { wsManager } from '../lib/wsManager';
+import { globalSymbol } from './workspaceStore';
 
+export const selectedSymbol = ref('BTCUSDT');
+export const chartInterval = ref('15m');
 export const activePositions = ref<{
   id: string;
   pair: string;
@@ -102,30 +105,110 @@ if (typeof window !== 'undefined') {
     });
 
     // 2. Real-time Ticker
-    wsManager.subscribe('btcusdt@ticker', (data) => {
-        previousPrice.value = currentPrice.value;
-        currentPrice.value = parseFloat(data.c);
+    let currentTickerStream = 'btcusdt@ticker';
+    let currentDepthStream = 'btcusdt@depth20@100ms';
+
+    const setupStreams = (symbol: string) => {
+        const lowerSymbol = symbol.toLowerCase();
         
-        marketData.value = {
-            change24h: `${parseFloat(data.p).toFixed(2)} ${data.P}%`,
-            high24h: parseFloat(data.h).toFixed(2),
-            low24h: parseFloat(data.l).toFixed(2),
-            volBtc24h: parseFloat(data.v).toFixed(2),
-            volUsdt24h: (parseFloat(data.q) / 1000000).toFixed(2) + 'M'
-        };
+        // Unsubscribe old
+        if (currentTickerStream) wsManager.unsubscribe(currentTickerStream, tickerHandler);
+        if (currentDepthStream) wsManager.unsubscribe(currentDepthStream, depthHandler);
+
+        currentTickerStream = `${lowerSymbol}@ticker`;
+        currentDepthStream = `${lowerSymbol}@depth20@100ms`;
+
+        // Subscribe new
+        wsManager.subscribe(currentTickerStream, tickerHandler);
+        wsManager.subscribe(currentDepthStream, depthHandler);
+    };
+
+    const tickerHandler = (data: any) => {
+        previousPrice.value = currentPrice.value;
+        currentPrice.value = parseFloat(data.c || data.price);
+        
+        if (data.p) {
+            marketData.value = {
+                change24h: `${parseFloat(data.p).toFixed(2)} ${data.P}%`,
+                high24h: parseFloat(data.h).toFixed(2),
+                low24h: parseFloat(data.l).toFixed(2),
+                volBtc24h: parseFloat(data.v).toFixed(2),
+                volUsdt24h: (parseFloat(data.q) / 1000000).toFixed(2) + 'M'
+            };
+        }
+    };
+
+    const depthHandler = (data: any) => {
+        if (data.b && data.a) {
+            orderBook.value = {
+                bids: data.b.map((b: string[]) => [parseFloat(b[0]), parseFloat(b[1])]),
+                asks: data.a.map((a: string[]) => [parseFloat(a[0]), parseFloat(a[1])])
+            };
+        }
+    };
+    
+    // Initial setup
+    setupStreams(globalSymbol.value);
+
+    // Watch for global symbol changes
+    watch(globalSymbol, (newSym) => {
+        setupStreams(newSym);
     });
 
-    // 3. Real-time Depth
-    wsManager.subscribe('btcusdt@depth20@100ms', (data) => {
-        orderBook.value = {
-            bids: data.b.map((b: string[]) => [parseFloat(b[0]), parseFloat(b[1])]),
-            asks: data.a.map((a: string[]) => [parseFloat(a[0]), parseFloat(a[1])])
-        };
-    });
 
     // 4. Live Position Updates
     wsManager.subscribe('app@positions', (positions: any[]) => {
         activePositions.value = positions;
+    });
+
+    // 5. Real-time Order & Position Execution
+    wsManager.subscribe('app@position_opened', (data: any) => {
+        if (data.position) {
+            // Add to active positions if not exists
+            if (!activePositions.value.find(p => p.id === data.position.id)) {
+                activePositions.value.push(data.position);
+            }
+            // Deduct cost from available balance
+            if (data.position.type === 'SHORT') {
+                 const lev = typeof data.position.leverage === 'number' ? data.position.leverage : 1;
+                 const btcCost = data.position.size / lev;
+                 availableBtc.value -= btcCost;
+            } else {
+                 if (data.position.cost) {
+                     availableUsdt.value -= parseFloat(data.position.cost);
+                 } else if (data.position.size && data.position.entry && data.position.leverage) {
+                     const lev = typeof data.position.leverage === 'number' ? data.position.leverage : 1;
+                     const cost = (data.position.size * data.position.entry) / lev;
+                     availableUsdt.value -= cost;
+                 }
+            }
+        }
+    });
+
+    wsManager.subscribe('app@order_placed', (data: any) => {
+        if (data.order) {
+            // Add to open orders if not exists
+            if (!openOrders.value.find(o => o.id === data.order.id)) {
+                openOrders.value.push(data.order);
+            }
+            // Deduct cost from available balance
+            if (data.order.side === 'Sell') {
+                 const lev = typeof data.order.leverage === 'number' ? data.order.leverage : 1;
+                 const quantity = data.order.quantity || data.order.amount;
+                 if (quantity) {
+                     availableBtc.value -= quantity / lev;
+                 }
+            } else {
+                 if (data.order.cost) {
+                     availableUsdt.value -= parseFloat(data.order.cost);
+                 } else if (data.order.quantity && data.order.price && data.order.leverage) {
+                     const lev = typeof data.order.leverage === 'number' ? data.order.leverage : 1;
+                     const reqPrice = data.order.type === 'Stop Market' || data.order.type === 'Trailing Stop' ? data.order.activationPrice || data.order.price || currentPrice.value : data.order.price;
+                     const cost = (data.order.quantity * reqPrice) / lev;
+                     availableUsdt.value -= cost;
+                 }
+            }
+        }
     });
 }
 

@@ -20,7 +20,7 @@ import type {
   StructuralZone
 } from '../lib/aiAnalytics.ts';
 import { 
-  redis,
+  createRedisClient,
   updateMockStore
 } from '../lib/redis.ts';
 

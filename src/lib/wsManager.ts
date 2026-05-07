@@ -49,8 +49,9 @@ class WebSocketManager {
                     
                     // Also normalize to ticker for immediate UI update
                     if (data.globalState) {
+                        const symbol = data.globalState.symbol || 'BTCUSDT';
                         const tickerData = {
-                            s: 'BTCUSDT',
+                            s: symbol,
                             c: data.globalState.price || '0',
                             p: data.globalState.priceChange || '0.00',
                             P: data.globalState.priceChangePct || '0.00',
@@ -59,7 +60,7 @@ class WebSocketManager {
                             v: data.globalState.volume || '0',
                             q: '0'
                         };
-                        this.dispatch('btcusdt@ticker', tickerData);
+                        this.dispatch(`${symbol.toLowerCase()}@ticker`, tickerData);
                     }
                     return;
                 }
@@ -72,8 +73,9 @@ class WebSocketManager {
                     }
 
                     // Normalize to ticker-like update
+                    const symbol = data.symbol || data.ticker?.s || 'BTCUSDT';
                     const tickerData = {
-                        s: 'BTCUSDT',
+                        s: symbol,
                         c: data.price.toString(),
                         p: data.ticker?.p || '0.00',
                         P: data.ticker?.P || '0.00',
@@ -82,16 +84,17 @@ class WebSocketManager {
                         v: data.ticker?.v || '0',
                         q: data.ticker?.q || '0'
                     };
-                    this.dispatch('btcusdt@ticker', tickerData);
+                    this.dispatch(`${symbol.toLowerCase()}@ticker`, tickerData);
                 }
 
                 // 3. Order Book Depth
                 if (data.type === 'depth') {
+                    const symbol = data.symbol || 'btcusdt';
                     const depthData = {
                         b: data.orderBook.bids.map((b: any) => [b.price.toString(), b.amount.toString()]),
                         a: data.orderBook.asks.map((a: any) => [a.price.toString(), a.amount.toString()])
                     };
-                    this.dispatch('btcusdt@depth20@100ms', depthData);
+                    this.dispatch(`${symbol.toLowerCase()}@depth20@100ms`, depthData);
                 }
 
                 // 4. AI Insights
@@ -99,6 +102,10 @@ class WebSocketManager {
                 if (data.type === 'ai_intent')       this.dispatch('app@ai_intent', data);
                 if (data.type === 'ai_levels')       this.dispatch('app@ai_levels', data);
                 if (data.type === 'ai_pattern')      this.dispatch('app@ai_pattern', data);
+
+                // 5. Orders and Positions (Real-time Execution)
+                if (data.type === 'position_opened') this.dispatch('app@position_opened', data);
+                if (data.type === 'order_placed')    this.dispatch('app@order_placed', data);
 
                 // Handle legacy or direct stream routing
                 const stream = data.stream || (data.e ? `${data.s?.toLowerCase()}@${data.e}` : null);

@@ -63,7 +63,7 @@ async function run() {
     try {
       // Fetch positions from Redis
       const raw = await redis.hgetall('tradex:positions');
-      const allPositions = Object.values(raw).map(v => JSON.parse(v));
+      const allPositions = Object.values(raw).map(v => JSON.parse(v as string));
       const accountPositions = allPositions.filter(
         p => p.accountId === config.accountId && p.pair?.toLowerCase().includes(config.symbol.toLowerCase())
       );

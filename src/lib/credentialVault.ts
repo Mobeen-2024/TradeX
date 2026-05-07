@@ -135,7 +135,7 @@ export const credentialVault = {
   async listAccounts(): Promise<Omit<ManagedAccount, 'encryptedCredentials' | 'authTag' | 'iv'>[]> {
     const raw = await redis.hgetall(REDIS_KEY);
     return Object.values(raw).map(v => {
-      const acct: ManagedAccount = JSON.parse(v);
+      const acct: ManagedAccount = JSON.parse(v as string);
       // Strip encrypted blobs from the public listing
       const { encryptedCredentials, authTag, iv, ...safe } = acct;
       return safe;

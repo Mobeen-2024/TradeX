@@ -218,6 +218,7 @@ export const redis = createRedisClient();
 export const KEYS = {
   positions:       'tradex:positions',
   symbolPositions: (sym: string) => `tradex:pos:sym:${sym.toLowerCase()}`,
+  accountPositions: (acc: string) => `tradex:pos:acc:${acc}`,
   openOrders:      'tradex:open_orders',
   orderBook:       (sym: string) => `tradex:ob:${sym.toLowerCase()}`,
   globalState:     'tradex:global_state',
@@ -240,11 +241,20 @@ export async function getPositionsBySymbol(symbol: string): Promise<any[]> {
   return (raw as (string | null)[]).filter(Boolean).map((v) => JSON.parse(v!));
 }
 
+export async function getPositionsByAccount(accountId: string): Promise<any[]> {
+  const ids = await redis.smembers(KEYS.accountPositions(accountId));
+  if (ids.length === 0) return [];
+  const raw = await redis.hmget(KEYS.positions, ...ids);
+  return (raw as (string | null)[]).filter(Boolean).map((v) => JSON.parse(v!));
+}
+
 export async function setPosition(id: string, pos: any) {
   const symbol = (pos.pair || pos.symbol || '').toLowerCase();
+  const accountId = pos.accountId || 'default';
   const pipe = redis.pipeline();
   pipe.hset(KEYS.positions, id, JSON.stringify(pos));
   if (symbol) pipe.sadd(KEYS.symbolPositions(symbol), id);
+  if (accountId) pipe.sadd(KEYS.accountPositions(accountId), id);
   await pipe.exec();
 }
 
@@ -253,9 +263,11 @@ export async function deletePosition(id: string) {
   if (!raw) return;
   const pos = JSON.parse(raw);
   const symbol = (pos.pair || pos.symbol || '').toLowerCase();
+  const accountId = pos.accountId || 'default';
   const pipe = redis.pipeline();
   pipe.hdel(KEYS.positions, id);
   if (symbol) pipe.srem(KEYS.symbolPositions(symbol), id);
+  if (accountId) pipe.srem(KEYS.accountPositions(accountId), id);
   await pipe.exec();
 }
 
@@ -310,6 +322,7 @@ export async function executeAtomicPositionUpdate(
   } else {
     position = newPositionData;
     await redis.sadd(KEYS.symbolPositions(symbol), posId);
+    if (position.accountId) await redis.sadd(KEYS.accountPositions(position.accountId), posId);
   }
   await redis.hset(KEYS.positions, posId, JSON.stringify(position));
 }
