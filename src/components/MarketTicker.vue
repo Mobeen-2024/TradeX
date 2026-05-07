@@ -22,21 +22,15 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useWebSocket } from '../composables/useWebSocket';
+import { currentPrice } from '../store/tradeStore';
+import { wsManager } from '../lib/wsManager';
 
-const url = typeof window !== 'undefined' 
-  ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/trading`
-  : 'ws://localhost:3000/ws/trading';
-
-const { isConnected, data } = useWebSocket(url);
+const isConnected = wsManager.isConnected;
 
 const formattedPrice = computed(() => {
-  if (data.value && data.value.type === 'trade' && data.value.price) {
-    return Number(data.value.price).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
-  return '---.--';
+  return Number(currentPrice.value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 });
 </script>

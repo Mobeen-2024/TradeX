@@ -82,7 +82,7 @@ const getGridClass = (count: number) => {
         <div 
             v-for="panel in workspacePanels" 
             :key="panel.id"
-            class="relative group"
+            class="relative group h-full w-full"
         >
             <TradingChartWidget 
                 :panel-id="panel.id"

@@ -16,9 +16,7 @@ import { computed } from 'vue';
 import { cn } from '../lib/utils';
 import { useSidebar } from '../composables/useSidebar';
 import { currentPrice, previousPrice, marketData } from '../store/tradeStore';
-import SidebarWatchlist from './SidebarWatchlist.vue';
 import SidebarProfile from './SidebarProfile.vue';
-import SidebarPromo from './SidebarPromo.vue';
 import MobileBottomBar from './MobileBottomBar.vue';
 
 const props = defineProps<{ activeItem: string }>();
@@ -165,12 +163,6 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
               </div>
             </button>
           </nav>
-
-          <!-- Watchlist -->
-          <SidebarWatchlist 
-            class="transition-opacity duration-300"
-            :class="isExpanded ? 'opacity-100 h-auto visible' : 'opacity-0 h-0 invisible'"
-          />
         </div>
 
         <div class="flex flex-col gap-4 px-2 w-[240px]">
@@ -195,9 +187,6 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
               </span>
             </button>
           </div>
-
-          <!-- Promo Card -->
-          <SidebarPromo :is-expanded="isExpanded" />
 
           <!-- Profile -->
           <SidebarProfile :is-expanded="isExpanded" />

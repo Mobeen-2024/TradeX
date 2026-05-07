@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, Link2, Link2Off, X, GripHorizontal, ChevronDown, Footprints, Activity } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { Maximize2, BarChart3, TrendingUp as LineChartIcon, CandlestickChart, Settings2, Link2, Link2Off, X, GripHorizontal, ChevronDown, Footprints, Activity, LayoutGrid, Clock } from 'lucide-vue-next';
 import { cn } from '../../lib/utils';
+import { onClickOutside } from '@vueuse/core';
 
-defineProps<{
+const props = defineProps<{
     symbol: string;
     interval: string;
     intervals: string[];
@@ -16,7 +18,7 @@ defineProps<{
     panelId?: string;
 }>();
 
-defineEmits([
+const emit = defineEmits([
     'update:symbol', 
     'update:interval', 
     'update:isSynced', 
@@ -28,32 +30,154 @@ defineEmits([
     'toggleTape',
     'remove'
 ]);
+
+const isTimeSelectorOpen = ref(false);
+const timeSelectorRef = ref(null);
+
+onClickOutside(timeSelectorRef, () => {
+  isTimeSelectorOpen.value = false;
+});
+
+const selectInterval = (int: string) => {
+  emit('update:interval', int);
+  emit('update:chartType', 'candle');
+  isTimeSelectorOpen.value = false;
+};
+
+const intradayIntervals = ['1s', '1m', '3m', '5m', '15m', '30m', '45m'];
+const macroIntervals = ['1H', '2H', '4H', '6H', '8H', '12H', '1D', '3D', '1W', '1M'];
+
 </script>
 
 <template>
-  <div class="flex items-center justify-between px-3 py-1.5 border-b border-[#2b3139]/50 bg-[#161a1e]/80 backdrop-blur-md">
+  <div class="flex items-center justify-between px-3 py-1.5 border-b border-[#2b3139]/50 bg-[#161a1e]/80 backdrop-blur-md relative">
     <div class="flex items-center gap-2 overflow-hidden">
-      <!-- Symbol Selector -->
-      <div class="flex items-center gap-2 pr-3 border-r border-white/10 shrink-0 group cursor-pointer hover:bg-white/5 rounded px-1 -ml-1 transition-colors">
-        <GripHorizontal class="w-3 h-3 text-[#848e9c] cursor-move handle opacity-0 group-hover:opacity-100 transition-opacity" />
-        <span class="text-xs font-black tracking-tighter text-[#F0B90B]">{{ symbol }}</span>
-        <ChevronDown class="w-3 h-3 text-[#848e9c]" />
-      </div>
-      
-      <!-- Intervals -->
-      <div class="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+      <!-- Chart Resolution & Style Command Strip -->
+      <div class="flex items-center gap-1 bg-black/40 backdrop-blur-2xl rounded-full p-1 shadow-2xl border border-white/5 shrink-0 min-w-0 relative">
+        <div class="flex items-center gap-0.5 overflow-x-auto no-scrollbar flex-1">
+          <button 
+            v-for="int in intervals" 
+            :key="int"
+            @click="$emit('update:interval', int); $emit('update:chartType', 'candle')"
+            :class="cn(
+              'px-2 py-1 text-[9px] font-black uppercase tracking-[0.25em] rounded-full transition-all whitespace-nowrap',
+              interval === int ? 'text-cyan-400 bg-cyan-400/10 shadow-[0_0_15px_rgba(6,182,212,0.1)]' : 'text-white/30 hover:text-white hover:bg-white/5'
+            )"
+          >
+            {{ int }}
+          </button>
+        </div>
+        
         <button 
-          v-for="int in intervals" 
-          :key="int"
-          @click="$emit('update:interval', int)"
-          :class="cn(
-            'px-2 py-0.5 text-[10px] font-bold rounded transition-colors whitespace-nowrap',
-            interval === int ? 'text-[#F0B90B] bg-[#2b3139]' : 'text-[#848e9c] hover:text-[#EAECEF]'
-          )"
+          @click="isTimeSelectorOpen = true"
+          class="px-1 text-white/30 hover:text-white transition-colors shrink-0"
         >
-          {{ int }}
+          <LayoutGrid class="w-3 h-3" />
         </button>
+
+        <div class="w-px h-4 bg-white/5 mx-0.5 shrink-0"></div>
+
+        <div class="flex items-center gap-0.5 shrink-0">
+          <button 
+            @click="$emit('update:chartType', 'candle')"
+            :class="cn(
+              'p-1.5 rounded-full transition-all',
+              chartType === 'candle' ? 'text-cyan-400 bg-cyan-400/10 shadow-[0_0_15px_rgba(6,182,212,0.1)]' : 'text-white/30 hover:text-white hover:bg-white/5'
+            )"
+          >
+            <CandlestickChart class="w-3 h-3" />
+          </button>
+          <button 
+            @click="$emit('update:chartType', 'line')"
+            :class="cn(
+              'p-1.5 rounded-full transition-all',
+              chartType === 'line' ? 'text-[#F0B90B] bg-[#F0B90B]/10 shadow-[0_0_15px_rgba(240,185,11,0.1)]' : 'text-white/30 hover:text-white hover:bg-white/5'
+            )"
+          >
+            <LineChartIcon class="w-3 h-3" />
+          </button>
+        </div>
       </div>
+
+      <!-- Time Selector Overlay (Neo-Brutalist / Cyberpunk) -->
+      <Teleport to="body">
+        <div v-if="isTimeSelectorOpen" class="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div 
+            ref="timeSelectorRef"
+            class="w-[480px] bg-[#0a0f1a]/95 backdrop-blur-2xl border border-cyan-500/30 rounded-2xl shadow-[0_30px_100px_rgba(0,0,0,1)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300"
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between p-5 border-b border-white/5 bg-gradient-to-r from-cyan-500/10 to-transparent">
+              <div class="flex items-center gap-3">
+                <Clock class="w-5 h-5 text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+                <h3 class="text-xs font-black text-white tracking-[0.2em] drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]">
+                  INTERVALS <span class="text-white/30 font-medium ml-2 tracking-normal">/ Select Chart Resolution</span>
+                </h3>
+              </div>
+              <button 
+                @click="isTimeSelectorOpen = false"
+                class="p-2 -mr-2 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+              >
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+
+            <!-- Body Grid -->
+            <div class="p-6 space-y-8">
+              <!-- Intraday -->
+              <div class="space-y-4">
+                <div class="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em] flex items-center gap-4">
+                  <span class="w-6 h-px bg-white/10"></span>
+                  Intraday / Scalp
+                  <span class="flex-1 h-px bg-white/10"></span>
+                </div>
+                <div class="grid grid-cols-4 gap-2">
+                  <button
+                    v-for="int in intradayIntervals"
+                    :key="int"
+                    @click="selectInterval(int)"
+                    :class="cn(
+                      'py-3 text-xs font-black tracking-widest rounded-xl transition-all duration-300',
+                      interval === int
+                        ? 'text-cyan-400 bg-cyan-950/40 border border-cyan-400/50 shadow-[inset_0_0_20px_rgba(0,229,255,0.2)]'
+                        : 'text-white/40 bg-white/5 border border-white/5 hover:text-white hover:border-white/20 hover:bg-white/10'
+                    )"
+                  >
+                    {{ int }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Macro -->
+              <div class="space-y-4">
+                <div class="text-[10px] font-bold text-white/30 uppercase tracking-[0.3em] flex items-center gap-4">
+                  <span class="w-6 h-px bg-white/10"></span>
+                  Macro / Performance
+                  <span class="flex-1 h-px bg-white/10"></span>
+                </div>
+                <div class="grid grid-cols-5 gap-2">
+                  <button
+                    v-for="int in macroIntervals"
+                    :key="int"
+                    @click="selectInterval(int)"
+                    :class="cn(
+                      'py-3 text-xs font-black tracking-widest rounded-xl transition-all duration-300',
+                      interval === int
+                        ? 'text-[#F0B90B] bg-[#F0B90B]/10 border border-[#F0B90B]/50 shadow-[inset_0_0_20px_rgba(240,185,11,0.2)]'
+                        : 'text-white/40 bg-white/5 border border-white/5 hover:text-white hover:border-white/20 hover:bg-white/10'
+                    )"
+                  >
+                    {{ int }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bottom Accent -->
+            <div class="h-1.5 w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-30 mt-auto"></div>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- Footprint & Indicators -->
       <div class="flex items-center gap-1 border-l border-white/10 pl-2 ml-1 shrink-0">
@@ -109,21 +233,6 @@ defineEmits([
         <component :is="isSynced ? Link2 : Link2Off" class="w-3.5 h-3.5" />
       </button>
 
-      <div class="flex items-center bg-[#2b3139] rounded-lg p-0.5 hidden sm:flex">
-        <button 
-          @click="$emit('update:chartType', 'candle')"
-          :class="cn('p-1.5 rounded-md transition-all', chartType === 'candle' ? 'bg-[#1e2329] text-[#F0B90B]' : 'text-[#848e9c]')"
-        >
-          <CandlestickChart class="w-3.5 h-3.5" />
-        </button>
-        <button 
-          @click="$emit('update:chartType', 'line')"
-          :class="cn('p-1.5 rounded-md transition-all', chartType === 'line' ? 'bg-[#1e2329] text-[#F0B90B]' : 'text-[#848e9c]')"
-        >
-          <LineChartIcon class="w-3.5 h-3.5" />
-        </button>
-      </div>
-      
       <button @click="$emit('toggleVolume')" :class="cn('p-1.5 rounded-md transition-colors', showVolume ? 'text-[#F0B90B]' : 'text-[#848e9c]')">
         <BarChart3 class="w-3.5 h-3.5" />
       </button>

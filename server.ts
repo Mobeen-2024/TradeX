@@ -55,10 +55,10 @@ async function start() {
   // ── Circuit Breaker Broadcast ──────────────────────────────
   Object.values(circuitBreakers).forEach(cb => {
     cb.onStateChange((state) => {
-      const payload = JSON.stringify({ 
-        type: 'app@circuit_breaker', 
-        name: cb.getState().name, 
-        state 
+      const payload = JSON.stringify({
+        type: 'app@circuit_breaker',
+        name: cb.getState().name,
+        state
       });
       for (const client of clients) {
         if (client.readyState === 1) client.send(payload);
@@ -70,7 +70,7 @@ async function start() {
   gateway.on('trade', async (tick) => {
     const symbol = tick.symbol.toLowerCase();
     const mark = tick.price;
-    
+
     // 1. Efficiently fetch ONLY positions affected by this symbol
     const positions = await getPositionsBySymbol(symbol);
     if (positions.length === 0) {
@@ -95,18 +95,12 @@ async function start() {
     for (const pos of positions) {
       const diff = pos.type === 'LONG' ? mark - pos.entry : pos.entry - mark;
       const liveDelta = diff * pos.size;
-      
-      // Parse leverage safely
-      let leverageFactor = 1;
-      if (typeof pos.leverage === 'number') {
-        leverageFactor = pos.leverage;
-      } else if (pos.leverage) {
-        leverageFactor = parseInt(String(pos.leverage).replace(/[^0-9]/g, '')) || 1;
-      }
+
+      const leverageFactor = typeof pos.leverage === 'number' ? pos.leverage : 1;
 
       const liveDeltaPercent = (diff / pos.entry) * 100 * leverageFactor;
       const updated = { ...pos, mark, liveDelta, liveDeltaPercent };
-      
+
       updatedPositions.push(updated);
     }
 
@@ -125,10 +119,10 @@ async function start() {
     }
 
     // 4. Sync to workers for in-memory mock mode
-    workerManager.postMessageToAll({ 
-      type: 'mock_sync', 
-      key: KEYS.globalState, 
-      value: { price: mark.toString() } 
+    workerManager.postMessageToAll({
+      type: 'mock_sync',
+      key: KEYS.globalState,
+      value: { price: mark.toString() }
     });
   });
 
@@ -139,10 +133,10 @@ async function start() {
     }
 
     // Sync to workers
-    workerManager.postMessageToAll({ 
-      type: 'mock_sync', 
-      key: KEYS.orderBook(symbol), 
-      value: orderBook 
+    workerManager.postMessageToAll({
+      type: 'mock_sync',
+      key: KEYS.orderBook(symbol),
+      value: orderBook
     });
   });
 
@@ -157,9 +151,9 @@ async function start() {
       updatedAt: Date.now().toString(),
     };
 
-    workerManager.postMessageToAll({ 
-      type: 'mock_sync', 
-      key: KEYS.globalState, 
+    workerManager.postMessageToAll({
+      type: 'mock_sync',
+      key: KEYS.globalState,
       value: tickerUpdate
     });
 
@@ -185,10 +179,10 @@ async function start() {
     return async (request: any, reply: any) => {
       const result = schema.safeParse(request.body);
       if (!result.success) {
-        return reply.status(400).send({ 
-          success: false, 
-          error: 'INVALID_PAYLOAD', 
-          issues: result.error.issues 
+        return reply.status(400).send({
+          success: false,
+          error: 'INVALID_PAYLOAD',
+          issues: result.error.issues
         });
       }
       request.body = result.data;
@@ -198,41 +192,38 @@ async function start() {
   // ── Phase 2 API Endpoints ──────────────────────────────────
 
   // ── Institutional order execution (risk → SOR) ────────────
-  fastify.post('/api/place_order', { preHandler: zodGuard(PlaceOrderSchema) }, async (request, reply) => {
+  const handleOrder = async (request: any, reply: any) => {
     try {
-      const req: any = request.body;
+      const req = request.body as any; // Now validated
       const globalState = await getGlobalState();
       const currentPrice = parseFloat(globalState.price ?? '0');
-      const accountIds: string[] = req.accountIds ?? [req.accountId ?? 'default'];
 
       const rawOrder = {
-        accountId:  accountIds[0],
-        symbol:     req.pair ?? req.symbol ?? 'btcusdt',
-        side:       req.side,
-        type:       req.type ?? 'Market',
-        quantity:   req.amount ?? req.quantity,
-        price:      req.price || currentPrice,
-        leverage:   parseInt((req.leverage ?? '1x').replace('x', '').replace('Cross_', '')) || 1,
-        notionalUsd: (req.amount ?? req.quantity) * (req.price || currentPrice),
+        accountId: req.accountIds?.[0] ?? req.accountId ?? 'default',
+        symbol: req.pair ?? req.symbol ?? 'btcusdt',
+        side: req.side,
+        type: req.type ?? 'Market',
+        quantity: req.quantity ?? req.amount,
+        price: req.price || currentPrice,
+        leverage: parseInt(String(req.leverage ?? '1x').replace('x', '').replace('Cross_', '')) || 1,
+        notionalUsd: (req.quantity ?? req.amount) * (req.price || currentPrice),
       };
 
-      // 1. Pre-flight risk checks
+      // Risk check on primary account
       const riskResult = await runRiskChecks(rawOrder);
       if (!riskResult.approved) {
         return reply.status(422).send({ success: false, error: riskResult.reason, code: 'RISK_BLOCKED' });
       }
 
-      // 2. Determine routing strategy
-      const sorConfig = req.sorConfig ?? { strategy: 'market' };
-
-      // 3. Route through SOR (multi-account fanout if multiple accountIds)
-      const sorResult = await smartOrderRouter.route(rawOrder, accountIds, sorConfig);
-
+      const sorResult = await smartOrderRouter.route(rawOrder, req.accountIds ?? [rawOrder.accountId], req.sorConfig ?? { strategy: 'market' });
       return { success: true, sorResult, warnings: riskResult.warnings };
-    } catch(e: any) {
+    } catch (e: any) {
       return reply.status(500).send({ error: e.message });
     }
-  });
+  };
+
+  fastify.post('/api/place_order', { preHandler: zodGuard(PlaceOrderSchema) }, handleOrder);
+  fastify.post('/api/sor/execute', { preHandler: zodGuard(PlaceOrderSchema) }, handleOrder);
 
   fastify.post('/api/close_position/:id', async (request, reply) => {
     const { id } = request.params as any;
@@ -330,43 +321,11 @@ async function start() {
     }
   });
 
-  // ── SOR: Institutional multi-account order ────────────────
-  fastify.post('/api/sor/execute', { preHandler: zodGuard(PlaceOrderSchema) }, async (request, reply) => {
-    try {
-      const req = request.body as any; // Now validated
-      const globalState = await getGlobalState();
-      const currentPrice = parseFloat(globalState.price ?? '0');
-
-      const rawOrder = {
-        accountId:  req.accountIds?.[0] ?? 'default',
-        symbol:     req.pair ?? 'btcusdt',
-        side:       req.side,
-        type:       req.type ?? 'Market',
-        quantity:   req.quantity,
-        price:      req.price || currentPrice,
-        leverage:   req.leverage ?? 1,
-        notionalUsd: req.quantity * (req.price || currentPrice),
-      };
-
-      // Risk check on primary account
-      const riskResult = await runRiskChecks(rawOrder);
-      if (!riskResult.approved) {
-        return reply.status(422).send({ success: false, error: riskResult.reason, code: 'RISK_BLOCKED' });
-      }
-
-      const sorResult = await smartOrderRouter.route(rawOrder, req.accountIds ?? [rawOrder.accountId], req.sorConfig ?? { strategy: 'market' });
-      return { success: true, sorResult };
-    } catch (e: any) {
-      return reply.status(500).send({ error: e.message });
-    }
-  });
-
-
   // ── WebSocket Handler ──────────────────────────────────────
   fastify.get('/ws/trading', { websocket: true }, async (connection, req) => {
     clients.add(connection);
     console.log('Frontend WS Connection opened!');
-    
+
     connection.send(JSON.stringify({ type: 'connected', message: 'TradeX Pro Institutional Backend Connected' }));
 
     // Send initial snapshot from Redis
@@ -393,7 +352,7 @@ async function start() {
     connection.on('message', async (message) => {
       try {
         const raw = JSON.parse(message.toString());
-        
+
         // WebSocket Validation — Discriminated Union for all WS message types
         const wsResult = WsMessageSchema.safeParse(raw);
         if (!wsResult.success) {
@@ -407,14 +366,14 @@ async function start() {
           const globalState = await getGlobalState();
           const currentPrice = parseFloat(globalState.price ?? '0');
           const isInstant = order.type === 'Market' || !order.type;
-          
+
           if (isInstant) {
             const newPos = {
               id: Math.random().toString(36).substr(2, 9),
               accountId: order.accountIds?.[0] ?? 'default',
               pair: order.pair,
               type: order.side === 'Buy' ? 'LONG' : 'SHORT',
-              leverage: order.leverage,
+              leverage: typeof order.leverage === 'number' ? order.leverage : parseInt(String(order.leverage ?? '1').replace(/[^0-9]/g, '')) || 1,
               size: order.quantity || order.amount,
               cost: order.cost,
               entry: order.price || currentPrice,
@@ -439,7 +398,7 @@ async function start() {
           await deletePosition(data.id);
           workerManager.postMessageToAll({ type: 'mock_sync', key: KEYS.positions, value: await getPositions() });
         }
-      } catch(e) {
+      } catch (e) {
         console.error('Error handling WS message:', e);
       }
     });
@@ -462,7 +421,7 @@ async function start() {
       clearInterval(pingInterval);
       console.log('Frontend WS Connection closed');
     });
-    
+
     connection.on('error', (err) => {
       clients.delete(connection);
       clearInterval(pingInterval);
@@ -514,41 +473,41 @@ async function start() {
     smartOrderRouter.resumeActiveTwaps().catch(err => console.error('[SOR] Resumption failed:', err));
 
     // ── Start Institutional AI Analytics ───────────
-    workerManager.start('ai_analytics', { 
-        symbol: 'btcusdt',
-        intentIntervalMs: 1000,
-        levelsIntervalMs: 30000,
-        qualityGateEnabled: true
+    workerManager.start('ai_analytics', {
+      symbol: 'btcusdt',
+      intentIntervalMs: 1000,
+      levelsIntervalMs: 30000,
+      qualityGateEnabled: true
     }).catch(err => console.error('[AI] Worker failed to start:', err));
   });
 
   const shutdown = async (signal: string) => {
     console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
-    
+
     // Terminate all WS clients to prevent Fastify close from hanging
     for (const client of clients) {
       client.terminate();
     }
-    
+
     if (vite) {
       await vite.close();
     }
 
     // 1. Drain Fastify to finish in-flight requests (relies on Redis)
     await fastify.close();
-    
+
     // 2. Stop async worker threads
     await workerManager.stopAll();
-    
+
     // 3. Pause TWAP orders safely (needs Redis)
     await smartOrderRouter.cancelAllTwap();
-    
+
     // 4. Stop market data ingestion
     gateway.terminate();
-    
+
     // 5. Terminate persistent connections
     await redis.quit();
-    
+
     console.log('[Server] Shutdown complete.');
     process.exit(0);
   };

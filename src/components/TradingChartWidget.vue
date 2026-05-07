@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { activePositions, selectedPrice, openOrders, alerts, createAlert, currentPrice, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
-import { globalSymbol, workspacePanels, activeTool, setGlobalTool } from '../store/workspaceStore';
+import { activePositions, selectedPrice, openOrders, alerts, createAlert, currentPrice, sharedSlPrice, isRiskModeActive, chartInterval } from '../store/tradeStore';
+import { globalSymbol, workspacePanels, activeTool, setGlobalTool, updateGlobalInterval } from '../store/workspaceStore';
 import { IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine, createChart } from 'lightweight-charts';
 import { calculateEMA, calculateRSI, calculateBollingerBands } from '../utils/indicators';
 import { useChartData } from '../composables/useChartData';
@@ -90,7 +90,7 @@ const scheduleHeatmap = () => {
 
 let riskSlLine: IPriceLine | null = null;
 let isDraggingSl = false;
-const intervals = ['1s', '15m', '1H', '4H', '1D', '1W'];
+const intervals = ['1s', '1m', '5m', '15m', '1H', '4H', '1D', '1W'];
 
 watch([activePositions, openOrders, alerts, currentPrice, aiLevels], () => {
     scheduleHeatmap();
@@ -492,7 +492,11 @@ onUnmounted(() => {
 });
 
 watch(() => props.symbol, () => { updateChartData(); internalSubscribe(); }, { flush: 'sync' });
-watch(() => props.interval, () => { updateChartData(); internalSubscribe(); }, { flush: 'sync' });
+watch(() => props.interval, (newInt) => { 
+    if (props.isSynced) updateGlobalInterval(newInt);
+    updateChartData(); 
+    internalSubscribe(); 
+}, { flush: 'sync' });
 watch(chartType, (val) => {
     candleSeries?.applyOptions({ visible: val === 'candle' });
     lineSeries?.applyOptions({ visible: val === 'line' });

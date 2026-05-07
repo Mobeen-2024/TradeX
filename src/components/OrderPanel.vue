@@ -1,23 +1,22 @@
 <script setup lang="ts">
-import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit, Shield } from 'lucide-vue-next';
+import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit, Shield, Settings } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
-import { useOrderExecution } from '../composables/useOrderExecution';
+import OrderBookPanel from './OrderBookPanel.vue';
 import { vaultAccounts, fetchVaultAccounts } from '../store/accountStore';
+import { useOrderExecution } from '../composables/useOrderExecution';
 
 const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
+
 const orderPrice = ref(75000.00);
 const lastOrderPrice = ref(75000.00);
 const orderAmount = ref<number | null>(null);
 const orderSide = ref<'Buy' | 'Sell'>('Buy');
-const priceChangeClass = ref('');
 const isRiskMode = isRiskModeActive;
 const riskPercentOfBalance = ref(1); // 1% default
 const riskAmountAbsolute = ref(100); // $100 default
 
-const currentTime = ref('');
-let timer: any;
 const riskInputMode = ref<'percent' | 'absolute'>('percent');
 
 // Extra specific fields for complex types
@@ -34,29 +33,24 @@ const twapDuration = ref(5); // minutes
 const showInstitutionalSettings = ref(false);
 const isInstitutionalMode = ref(false);
 
-const orderBookAsks = computed(() => {
-  return orderBook.value.asks.slice(0, 15).map(a => ({ price: a[0], amount: a[1] }));
-});
-const orderBookBids = computed(() => {
-  return orderBook.value.bids.slice(0, 15).map(b => ({ price: b[0], amount: b[1] }));
-});
+const percentage = ref(0);
+const marginEnabled = ref(false);
+const leverage = ref(10);
+const showOrderTypeDropdown = ref(false);
 
+const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
+const orderType = ref<typeof orderTypes[number]>('Limit');
 
-const marketSentiment = computed(() => {
-  const totalBids = orderBookBids.value.reduce((acc, b) => acc + b.amount, 0);
-  const totalAsks = orderBookAsks.value.reduce((acc, a) => acc + a.amount, 0);
-  if (totalBids + totalAsks === 0) return 50;
-  return (totalBids / (totalBids + totalAsks)) * 100;
-});
+const orderTypeDetails = {
+  'Limit': { desc: 'Buy or Sell at a specific price or better', icon: CornerDownRight },
+  'Market': { desc: 'Buy or Sell at the best available market price', icon: TrendingDown },
+  'Stop-Limit': { desc: 'Triggers a Limit order when Stop price is reached.', icon: GitCommit },
+  'Stop Market': { desc: 'Triggers a Market order when Stop price is reached.', icon: Activity },
+  'Trailing Stop': { desc: 'Places an order when the price reaches the predefined point', icon: Activity },
+  'OCO': { desc: 'Places two orders at once. When either is triggered, the other is canceled.', icon: Waypoints }
+};
 
 watch(currentPrice, (newPrice, oldPrice) => {
-    if (newPrice > oldPrice) {
-      priceChangeClass.value = 'animate-price-up';
-    } else if (newPrice < oldPrice) {
-      priceChangeClass.value = 'animate-price-down';
-    }
-    setTimeout(() => { priceChangeClass.value = ''; }, 300);
-
     lastOrderPrice.value = newPrice;
     if (orderType.value === 'Market') {
       orderPrice.value = newPrice;
@@ -71,89 +65,6 @@ watch(selectedPrice, (newPrice) => {
         }
     }
 });
-
-const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
-const orderType = ref<typeof orderTypes[number]>('Limit');
-
-const orderTypeDetails = {
-  'Limit': { desc: 'Buy or Sell at a specific price or better', icon: CornerDownRight },
-  'Market': { desc: 'Buy or Sell at the best available market price', icon: TrendingDown },
-  'Stop-Limit': { desc: 'Triggers a Limit order when Stop price is reached.', icon: GitCommit },
-  'Stop Market': { desc: 'Triggers a Market order when Stop price is reached.', icon: Activity },
-  'Trailing Stop': { desc: 'Places an order when the price reaches the predefined point', icon: Activity },
-  'OCO': { desc: 'Places two orders at once. When either is triggered, the other is canceled.', icon: Waypoints }
-};
-
-const showOrderTypeDropdown = ref(false);
-const marginEnabled = ref(false);
-const leverage = ref(10);
-const viewMode = ref<'orderbook' | 'depth'>('orderbook');
-
-const depthCanvas = ref<HTMLCanvasElement | null>(null);
-
-const drawDepthChart = () => {
-    if (!depthCanvas.value) return;
-    const ctx = depthCanvas.value.getContext('2d');
-    if (!ctx) return;
-
-    const w = depthCanvas.value.width;
-    const h = depthCanvas.value.height;
-    ctx.clearRect(0, 0, w, h);
-
-    const bids = orderBook.value.bids;
-    const asks = orderBook.value.asks;
-    if (bids.length === 0 || asks.length === 0) return;
-
-    // Normalize prices
-    const minPrice = bids[bids.length - 1][0];
-    const maxPrice = asks[asks.length - 1][0];
-    const range = maxPrice - minPrice;
-
-    const getX = (p: number) => ((p - minPrice) / range) * w;
-
-    // Calculate cumulative volume
-    let bidVol = 0;
-    const bidPoints = bids.map(b => {
-        bidVol += b[1];
-        return { x: getX(b[0]), y: bidVol };
-    });
-
-    let askVol = 0;
-    const askPoints = asks.map(a => {
-        askVol += a[1];
-        return { x: getX(a[0]), y: askVol };
-    });
-
-    const maxVol = Math.max(bidVol, askVol);
-    const getY = (v: number) => h - (v / maxVol) * h * 0.8;
-
-    // Draw Bids
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    bidPoints.forEach(p => ctx.lineTo(p.x, getY(p.y)));
-    ctx.lineTo(getX(bids[0][0]), h);
-    ctx.fillStyle = 'rgba(14, 203, 129, 0.2)';
-    ctx.fill();
-    ctx.strokeStyle = '#0ecb81';
-    ctx.stroke();
-
-    // Draw Asks
-    ctx.beginPath();
-    ctx.moveTo(w, h);
-    askPoints.forEach(p => ctx.lineTo(p.x, getY(p.y)));
-    ctx.lineTo(getX(asks[0][0]), h);
-    ctx.fillStyle = 'rgba(246, 70, 93, 0.2)';
-    ctx.fill();
-    ctx.strokeStyle = '#f6465d';
-    ctx.stroke();
-};
-
-watch([orderBook, viewMode], () => {
-    if (viewMode.value === 'depth') {
-        nextTick(drawDepthChart);
-    }
-}, { deep: true });
-const percentage = ref(0);
 
 // Load Preferences
 onMounted(() => {
@@ -220,26 +131,32 @@ const totalCost = computed(() => {
 
 const tpError = computed(() => {
   if (!tpPrice.value || !orderPrice.value) return false;
+  if (tpPrice.value <= 0 || tpPrice.value > 10000000) return true;
   return orderSide.value === 'Buy' ? tpPrice.value <= orderPrice.value : tpPrice.value >= orderPrice.value;
 });
 
 const slError = computed(() => {
   if (!slPrice.value || !orderPrice.value) return false;
+  if (slPrice.value <= 0 || slPrice.value > 10000000) return true;
   return orderSide.value === 'Buy' ? slPrice.value >= orderPrice.value : slPrice.value <= orderPrice.value;
 });
 
 const orderPriceError = computed(() => {
   if (['Limit', 'Stop-Limit', 'OCO'].includes(orderType.value)) {
      if (orderPrice.value === null || orderPrice.value <= 0) return 'Price must be greater than 0';
+     if (orderPrice.value > 10000000) return 'Price exceeds maximum limit';
   }
   if (['Stop-Limit', 'OCO'].includes(orderType.value)) {
      if (stopPrice.value === null || stopPrice.value <= 0) return 'Stop Price must be greater than 0';
+     if (stopPrice.value > 10000000) return 'Stop Price exceeds maximum limit';
   }
   if (orderType.value === 'OCO') {
      if (limitPrice.value === null || limitPrice.value <= 0) return 'Limit Price must be greater than 0';
+     if (limitPrice.value > 10000000) return 'Limit Price exceeds maximum limit';
   }
   if (orderType.value === 'Trailing Stop') {
      if (callbackRate.value === null || callbackRate.value < 0.1 || callbackRate.value > 5) return 'Callback must be 0.1% - 5.0%';
+     if (activationPrice.value !== null && (activationPrice.value <= 0 || activationPrice.value > 10000000)) return 'Activation Price must be valid';
   }
   return null;
 });
@@ -247,6 +164,7 @@ const orderPriceError = computed(() => {
 const orderAmountError = computed(() => {
   if (orderAmount.value === null) return null;
   if (orderAmount.value <= 0) return 'Amount must be greater than 0';
+  if (orderAmount.value > 10000) return 'Amount exceeds maximum limit'; // Reasonable limit for BTC amount
   if (orderAmount.value > maxAmount.value) {
     return orderSide.value === 'Buy' ? 'Exceeds max buy amount/margin' : 'Exceeds available balance';
   }
@@ -258,6 +176,8 @@ const isFormValid = computed(() => {
     if (!slPrice.value || slError.value) return false;
     if (calculatedRiskSize.value <= 0) return false;
     if (requiredRiskMargin.value > availableUsdt.value) return false;
+    if (riskInputMode.value === 'percent' && (riskPercentOfBalance.value <= 0 || riskPercentOfBalance.value > 100)) return false;
+    if (riskInputMode.value === 'absolute' && riskAmountAbsolute.value <= 0) return false;
     return true;
   }
   if (!orderAmount.value || orderAmount.value <= 0) return false;
@@ -436,185 +356,15 @@ watch(tpSl, (val) => {
   }
 });
 
-onMounted(() => {
-  const updateTime = () => {
-    const d = new Date();
-    currentTime.value = d.toLocaleTimeString('en-US', { hour12: false });
-  };
-  updateTime();
-  timer = setInterval(updateTime, 1000);
-});
-
-onUnmounted(() => {
-  clearInterval(timer);
-});
-
-// ── Virtual Scrolling ──────────────────────────────────────────
-const ROW_HEIGHT = 20; // px — fixed row height
-const OVERSCAN = 3;    // extra rows above/below viewport
-
-const obContainer = ref<HTMLDivElement | null>(null);
-const scrollTop = ref(0);
-const containerHeight = ref(300); // measured on mount
-
-const onObScroll = () => {
-  scrollTop.value = obContainer.value?.scrollTop ?? 0;
-};
-
-// Source of truth: full sorted order book arrays (unbounded)
-const allAsks = computed(() => orderBook.value.asks.map(a => ({ price: a[0], amount: a[1] })));
-const allBids = computed(() => orderBook.value.bids.map(b => ({ price: b[0], amount: b[1] })));
-
-// Windowed slices
-const virtualAsks = computed(() => {
-  const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN);
-  const end = start + Math.ceil(containerHeight.value / ROW_HEIGHT) + OVERSCAN * 2;
-  return allAsks.value.slice(start, end);
-});
-
-const virtualBids = computed(() => {
-  const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN);
-  const end = start + Math.ceil(containerHeight.value / ROW_HEIGHT) + OVERSCAN * 2;
-  return allBids.value.slice(start, end);
-});
-
-// Spacers (keep scrollbar accurate)
-const askPaddingTop = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN) * ROW_HEIGHT);
-const askPaddingBottom = computed(() => Math.max(0, allAsks.value.length - virtualAsks.value.length) * ROW_HEIGHT - askPaddingTop.value);
-const bidPaddingTop = computed(() => Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN) * ROW_HEIGHT);
-const bidPaddingBottom = computed(() => Math.max(0, allBids.value.length - virtualBids.value.length) * ROW_HEIGHT - bidPaddingTop.value);
-
-const maxObVisualAmount = computed(() => {
-  const allAmounts = [...allAsks.value, ...allBids.value].map(r => r.amount);
-  return Math.max(...allAmounts, 0.001);
-});
-
-// Measure container on mount
-onMounted(() => {
-  if (obContainer.value) {
-    containerHeight.value = obContainer.value.clientHeight;
-    const ro = new ResizeObserver(entries => {
-      containerHeight.value = entries[0].contentRect.height;
-    });
-    ro.observe(obContainer.value);
-    onUnmounted(() => ro.disconnect());
-  }
-});
-
 </script>
 
 <template>
   <div class="flex flex-row gap-1 sm:gap-2 h-[460px] lg:h-full w-full">
     <!-- Left: Order Book / Trades Panel -->
-    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] flex flex-col overflow-hidden w-[calc(40%-0.5rem)] shrink-0 gpu-glass">
-        <!-- View Mode Toggle -->
-        <div class="flex items-center justify-between px-1 sm:px-2 py-1.5 sm:py-2 border-b border-[#1e2329] bg-[#161a1e]/30">
-          <div class="flex items-center gap-1 sm:gap-2">
-            <button 
-              @click="viewMode = 'orderbook'"
-              :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'orderbook' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
-            >
-              Order Book
-            </button>
-            <button 
-              @click="viewMode = 'depth'"
-              :class="cn('px-2 py-1 text-[9px] sm:text-[10px] font-bold uppercase rounded transition-all', viewMode === 'depth' ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]')"
-            >
-              Depth Chart
-            </button>
-          </div>
-          <div class="text-[#848e9c] text-[9px] sm:text-[10px] font-mono mr-1">
-            {{ currentTime }}
-          </div>
-        </div>
-
-        <div v-if="viewMode === 'orderbook'" class="flex-1 flex flex-col overflow-hidden p-1 sm:p-2">
-          <!-- Table Headers -->
-          <div class="flex justify-between px-1 mb-1 text-[#848e9c] text-[9px] sm:text-[10px] uppercase font-bold sticky top-0 bg-[#0b0e11] z-30">
-            <span>Price(USDT)</span>
-            <span>Amount(BTC)</span>
-          </div>
-
-          <!-- NEW: Virtual Order Book Container -->
-          <div 
-            ref="obContainer" 
-            class="flex-1 overflow-y-auto no-scrollbar relative font-mono tracking-tight"
-            @scroll.passive="onObScroll"
-          >
-            <!-- Asks (spacers + slice) -->
-            <div :style="{ paddingTop: askPaddingTop + 'px', paddingBottom: askPaddingBottom + 'px' }">
-              <div
-                v-for="ask in virtualAsks"
-                :key="ask.price"
-                class="flex justify-between px-1 py-[2px] cursor-pointer relative group hover:bg-[#1e2329]/80 transition-colors duration-150"
-                style="height: 20px;"
-                @click="selectedPrice = ask.price"
-              >
-                <!-- Volume bar background -->
-                <div 
-                  class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#f6465d]/20 to-transparent group-hover:from-[#f6465d]/30 z-0 transition-all duration-300 ease-out"
-                  :style="{ width: `${(ask.amount / maxObVisualAmount) * 100}%` }"
-                />
-                <span class="text-[#f6465d] text-[11px] sm:text-[12px] relative z-10">{{ ask.price.toFixed(2) }}</span>
-                <span class="text-[#EAECEF] text-[11px] sm:text-[12px] relative z-10">{{ ask.amount.toFixed(4) }}</span>
-              </div>
-            </div>
-
-            <!-- Middle: Market Price (sticky) -->
-            <div class="sticky top-0 z-20 py-1 sm:py-2 border-y border-[#1e2329] my-0.5 text-center bg-[#0b0e11]/90 backdrop-blur-md transition-all duration-300 gpu-glass" :class="priceChangeClass">
-              <div class="flex flex-col items-center justify-center py-0.5 sm:py-1">
-                <div class="flex items-center gap-1 sm:gap-2">
-                  <span :class="cn('font-bold text-base sm:text-xl transition-colors duration-300 flex items-center', currentPrice >= previousPrice ? 'text-[#0ecb81]' : 'text-[#f6465d]')">
-                    {{ currentPrice.toFixed(2) }} 
-                    <ArrowUp v-if="currentPrice >= previousPrice" class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
-                    <ArrowDown v-else class="w-3 h-3 sm:w-5 sm:h-5 ml-1" />
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Bids (spacers + slice) -->
-            <div :style="{ paddingTop: bidPaddingTop + 'px', paddingBottom: bidPaddingBottom + 'px' }">
-              <div
-                v-for="bid in virtualBids"
-                :key="bid.price"
-                class="flex justify-between px-1 py-[2px] cursor-pointer relative group hover:bg-[#1e2329]/80 transition-colors duration-150"
-                style="height: 20px;"
-                @click="selectedPrice = bid.price"
-              >
-                <!-- Volume bar background -->
-                <div 
-                  class="absolute inset-y-0 right-0 bg-gradient-to-l from-[#0ecb81]/20 to-transparent group-hover:from-[#0ecb81]/30 z-0 transition-all duration-300 ease-out"
-                  :style="{ width: `${(bid.amount / maxObVisualAmount) * 100}%` }"
-                />
-                <span class="text-[#0ecb81] text-[11px] sm:text-[12px] relative z-10">{{ bid.price.toFixed(2) }}</span>
-                <span class="text-[#EAECEF] text-[11px] sm:text-[12px] relative z-10">{{ bid.amount.toFixed(4) }}</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- Sentiment Bar -->
-          <div class="px-2 py-1.5 border-t border-[#1e2329] bg-[#0b0e11] shrink-0">
-              <div class="flex justify-between text-[9px] font-bold uppercase tracking-wider mb-1">
-                  <span class="text-[#0ecb81]">{{ marketSentiment.toFixed(1) }}% Buy</span>
-                  <span class="text-[#f6465d]">{{ (100 - marketSentiment).toFixed(1) }}% Sell</span>
-              </div>
-              <div class="h-1.5 w-full bg-[#1e2329] rounded-full overflow-hidden flex">
-                  <div class="h-full bg-[#0ecb81] transition-all duration-500 ease-out" :style="`width: ${marketSentiment}%`"></div>
-                  <div class="h-full bg-[#f6465d] transition-all duration-500 ease-out" :style="`width: ${100 - marketSentiment}%`"></div>
-              </div>
-          </div>
-        </div>
-
-        <!-- Depth Chart View -->
-        <div v-else class="flex-1 flex flex-col min-h-[250px] relative p-2 bg-[#0b0e11]">
-            <canvas ref="depthCanvas" class="w-full h-full" width="400" height="300"></canvas>
-            <div class="absolute top-2 left-2 text-[9px] text-[#848e9c] font-mono">LIQUIDITY DEPTH</div>
-        </div>
-      </div>
+    <OrderBookPanel class="w-[45%] max-w-[260px] shrink-0" />
 
     <!-- Right: Order Panel -->
-    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] p-1.5 sm:p-4 flex flex-col flex-1 shrink-0 text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass">
+    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] p-1.5 sm:p-4 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass">
       <!-- Header -->
       <div class="flex items-center justify-between mb-2 sm:mb-4 border-b border-[#1e2329] pb-2 sm:pb-3 transition-all duration-300">
         <span class="text-white text-[17px] leading-[22.2857px] font-mono font-normal pl-[10px] text-left no-underline truncate">
@@ -788,11 +538,11 @@ onMounted(() => {
               </div>
 
               <div v-if="riskInputMode === 'percent'" class="flex items-center gap-2 bg-[#0b0e11] rounded px-3 py-1.5 border border-[#2b3139] focus-within:border-[#F0B90B]">
-                <input type="number" v-model="riskPercentOfBalance" step="0.1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
+                <input type="number" min="0" max="100" v-model="riskPercentOfBalance" step="0.1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
                 <span class="text-[10px] text-[#848e9c] font-bold">% Balance</span>
               </div>
               <div v-else class="flex items-center gap-2 bg-[#0b0e11] rounded px-3 py-1.5 border border-[#2b3139] focus-within:border-[#F0B90B]">
-                <input type="number" v-model="riskAmountAbsolute" step="1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
+                <input type="number" min="0" v-model="riskAmountAbsolute" step="1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
                 <span class="text-[10px] text-[#848e9c] font-bold">USDT</span>
               </div>
 
@@ -828,7 +578,7 @@ onMounted(() => {
         
         <!-- Stop Price (for Stop-Limit and OCO) -->
         <div v-if="orderType === 'Stop-Limit' || orderType === 'Stop Market' || orderType === 'OCO'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (stopPrice === null || stopPrice <= 0) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Stop Price') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
             <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="stopPrice = Math.max(0, parseFloat(((stopPrice || 0) - 0.1).toFixed(2)))" />
             <div class="flex-1 flex flex-col justify-center items-center h-full relative">
               <div v-show="stopPrice !== null && stopPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Stop (USDT)</div>
@@ -840,7 +590,7 @@ onMounted(() => {
         
         <!-- Limit Price (for OCO) -->
         <div v-if="orderType === 'OCO'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (limitPrice === null || limitPrice <= 0) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Limit Price') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
             <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="limitPrice = Math.max(0, parseFloat(((limitPrice || 0) - 0.1).toFixed(2)))" />
             <div class="flex-1 flex flex-col justify-center items-center h-full relative">
               <div v-show="limitPrice !== null && limitPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Limit (USDT)</div>
@@ -852,7 +602,7 @@ onMounted(() => {
 
         <!-- Callback Rate (for Trailing Stop) -->
         <div v-if="orderType === 'Trailing Stop'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (callbackRate === null || callbackRate < 0.1 || callbackRate > 5) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Callback') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
             <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="callbackRate = Math.max(0.1, parseFloat(((callbackRate || 1) - 0.1).toFixed(1)))" />
             <div class="flex-1 flex flex-col justify-center items-center h-full relative">
               <div v-show="callbackRate !== null && callbackRate > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Callback Rate (%)</div>
@@ -864,7 +614,7 @@ onMounted(() => {
         
         <!-- Activation Price (for Trailing Stop) -->
         <div v-if="orderType === 'Trailing Stop'" class="flex flex-col gap-1">
-          <div class="flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] focus-within:border-[#F0B90B]">
+          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Activation') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
             <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="activationPrice = Math.max(0, parseFloat(((activationPrice || 0) - 0.1).toFixed(2)))" />
             <div class="flex-1 flex flex-col justify-center items-center h-full relative">
               <div v-show="activationPrice !== null && activationPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Activation (USDT)</div>
@@ -877,7 +627,7 @@ onMounted(() => {
         <!-- Price Input (for Limit, Stop-Limit, OCO) -->
         <div v-if="['Limit', 'Stop-Limit', 'OCO'].includes(orderType)" class="flex gap-2">
           <div class="flex-1 flex flex-col gap-1">
-            <div :class="cn('flex items-center transition-colors rounded-lg h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && (orderPrice === null || orderPrice <= 0) ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
+            <div :class="cn('flex items-center transition-colors rounded-lg h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.startsWith('Price') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
               <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderPrice = Math.max(0, parseFloat(((orderPrice || 0) - 0.1).toFixed(2)))" />
               <div class="flex-1 flex flex-col justify-center items-center h-full relative">
                 <div v-show="orderPrice !== null && orderPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Limit (USDT)</div>
