@@ -75,7 +75,7 @@ const hasNotifications = computed(() => activeNotifications.value.length > 0);
 
 <template>
   <header
-    class="h-[76px] border-b border-white/[0.05] flex items-center justify-between px-4 lg:px-6 shrink-0 z-40 bg-[#0a0c10]/80 backdrop-blur-3xl text-white/70 shadow-[0_4px_40px_rgba(0,0,0,0.6)] select-none relative overflow-visible"
+    class="sticky top-0 h-[76px] border-b border-white/[0.05] flex items-center justify-between px-4 lg:px-6 shrink-0 z-40 bg-[#0a0c10]/80 backdrop-blur-3xl text-white/70 shadow-[0_4px_40px_rgba(0,0,0,0.6)] select-none overflow-visible"
   >
     <!-- Subtle top ambient light -->
     <div

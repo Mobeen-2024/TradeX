@@ -141,7 +141,7 @@ const formatNum = (num: number, decimals: number = 2) => num.toLocaleString('en-
 
         <!-- The List -->
         <div class="bg-white/[0.02] backdrop-blur-2xl border border-white/5 rounded-2xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.12)]">
-          <div class="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_2fr] gap-4 p-4 border-b border-white/5 bg-black/20 text-[#848e9c] text-xs font-bold uppercase tracking-wider">
+          <div class="grid grid-cols-[1fr_1fr] sm:grid-cols-[1fr_1fr_1fr_1fr] md:grid-cols-[1fr_1fr_1fr_1fr_1fr] lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_2fr] gap-4 p-4 border-b border-white/5 bg-black/20 text-[#848e9c] text-xs font-bold uppercase tracking-wider">
             <div class="pl-4">Asset</div>
             <div class="text-right">Price</div>
             <div class="text-right">24h Change</div>
@@ -186,7 +186,7 @@ const formatNum = (num: number, decimals: number = 2) => num.toLocaleString('en-
               
               <div class="h-12 w-full pr-4 opacity-70 group-hover:opacity-100 transition-opacity hidden lg:block pointer-events-none">
                 <!-- Using MiniSparkline to represent the 7D trend -->
-                <MiniSparkline :symbol="market.symbol" :color="market.change >= 0 ? '#0ecb81' : '#f6465d'" />
+                <MiniSparkline :data="[10, 15, 8, 20, 12, 25, 18]" :color="market.change >= 0 ? '#0ecb81' : '#f6465d'" />
               </div>
             </div>
             

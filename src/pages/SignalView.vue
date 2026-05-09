@@ -47,11 +47,11 @@ const closeStrategy = () => {
     </div>
 
     <!-- MAIN DASHBOARD VIEW (When no specific builder is open) -->
-    <div v-if="!selectedStrategyId" class="relative z-10 flex w-full h-full">
+    <div v-if="!selectedStrategyId" class="relative z-10 flex flex-col lg:flex-row w-full h-full">
       
-      <!-- Left Navigation -->
-      <div class="w-64 border-r border-white/5 bg-black/40 backdrop-blur-xl flex flex-col pt-8 pb-6 px-4">
-         <div class="flex items-center gap-3 px-2 mb-10">
+      <!-- Navigation (Sidebar on Desktop, Tab Bar on Mobile) -->
+      <div class="lg:w-64 w-full border-r lg:border-b-0 border-b border-white/5 bg-black/40 backdrop-blur-xl flex flex-col pt-4 lg:pt-8 pb-4 lg:pb-6 px-4 shrink-0">
+         <div class="hidden lg:flex items-center gap-3 px-2 mb-10">
             <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F0B90B]/20 to-[#f59e0b]/10 border border-[#F0B90B]/30 flex items-center justify-center shadow-[0_0_20px_rgba(240,185,11,0.15)] relative overflow-hidden group">
                <div class="absolute inset-0 bg-gradient-to-br from-[#F0B90B] to-transparent opacity-0 group-hover:opacity-10 transition-opacity"></div>
                <Bot class="w-5 h-5 text-[#F0B90B]" />
@@ -65,20 +65,20 @@ const closeStrategy = () => {
             </div>
          </div>
 
-         <!-- Vertical Tabs -->
-         <nav class="flex flex-col gap-2">
+         <!-- Tabs (Vertical on Desktop, Horizontal on Mobile) -->
+         <nav class="flex lg:flex-col flex-row gap-2 overflow-x-auto no-scrollbar pb-2 lg:pb-0">
             <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id"
-              :class="cn('w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group relative overflow-hidden', activeTab === tab.id ? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-white/10' : 'text-white/40 hover:text-white/80 hover:bg-white/[0.03] border border-transparent')">
+              :class="cn('lg:w-full flex items-center gap-3 px-4 py-2.5 lg:py-3 rounded-xl transition-all duration-300 group relative overflow-hidden whitespace-nowrap', activeTab === tab.id ? 'bg-white/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] border border-white/10' : 'text-white/40 hover:text-white/80 hover:bg-white/[0.03] border border-transparent')">
                
                <!-- Active Indicator line -->
-               <div :class="cn('absolute left-0 top-1/2 -translate-y-1/2 w-1 h-1/2 bg-[#F0B90B] rounded-r-full transition-transform duration-300', activeTab === tab.id ? 'scale-y-100' : 'scale-y-0')"></div>
+               <div :class="cn('absolute lg:left-0 lg:top-1/2 lg:-translate-y-1/2 lg:w-1 lg:h-1/2 bottom-0 left-1/4 right-1/4 h-0.5 lg:bottom-auto lg:right-auto bg-[#F0B90B] rounded-full transition-transform duration-300', activeTab === tab.id ? 'scale-100' : 'scale-0')"></div>
                
-               <component :is="tab.icon" :class="cn('w-5 h-5 transition-colors', activeTab === tab.id ? 'text-[#F0B90B]' : 'text-white/40 group-hover:text-white/60')" />
-               <span class="font-bold text-sm tracking-wide">{{ tab.label }}</span>
+               <component :is="tab.icon" :class="cn('w-4 h-4 lg:w-5 lg:h-5 transition-colors', activeTab === tab.id ? 'text-[#F0B90B]' : 'text-white/40 group-hover:text-white/60')" />
+               <span class="font-bold text-xs lg:text-sm tracking-wide">{{ tab.label }}</span>
             </button>
          </nav>
 
-         <div class="mt-auto px-2">
+         <div class="hidden lg:block mt-auto px-2">
             <div class="bg-gradient-to-br from-white/5 to-transparent border border-white/5 rounded-2xl p-4">
                <div class="flex items-center gap-2 mb-2">
                   <Crosshair class="w-4 h-4 text-[#F0B90B]" />
@@ -90,7 +90,7 @@ const closeStrategy = () => {
       </div>
 
       <!-- Main Content Area -->
-      <div class="flex-1 relative z-10">
+      <div class="flex-1 relative z-10 overflow-y-auto no-scrollbar">
          <transition mode="out-in" enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 translate-y-4" enter-to-class="opacity-100 translate-y-0" leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 -translate-y-4">
            <AiStrategyPlanner v-if="activeTab === 'AI Planner'" @openStrategy="handleOpenStrategy" />
            <SignalStrategies v-else-if="activeTab === 'Strategies'" @openStrategy="handleOpenStrategy" />

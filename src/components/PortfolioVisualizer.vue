@@ -75,7 +75,7 @@ const getRotation = (index: number) => {
             </div>
             <h3 class="text-[#848e9c] text-sm font-bold uppercase tracking-widest">Asset Allocation</h3>
         </div>
-        <div class="flex items-center gap-8 flex-1">
+        <div class="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 flex-1">
             <div class="relative w-32 h-32 flex-shrink-0">
                 <svg viewBox="0 0 42 42" class="w-full h-full transform -rotate-90">
                     <circle v-for="(asset, i) in allocation" 

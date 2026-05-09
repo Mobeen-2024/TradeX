@@ -7,37 +7,51 @@ import {
 import { activePositions } from '../store/tradeStore';
 
 const isCollapsed = ref(false);
+const isMobileOpen = ref(false);
 const activeTab = ref('strategies'); // strategies, positions, ai
 
 const strategies = ref([
   { id: 1, name: 'Delta Neutral', status: 'running', apy: '12.4%', uptime: '5d 14h' },
   { id: 2, name: 'Grid Bot (BTC)', status: 'stopped', apy: '--', uptime: '--' },
 ]);
+
+defineExpose({
+  openMobile: () => isMobileOpen.value = true,
+  closeMobile: () => isMobileOpen.value = false
+});
 </script>
 
 <template>
+  <!-- Backdrop for mobile -->
+  <div 
+    v-if="isMobileOpen" 
+    class="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[45]"
+    @click="isMobileOpen = false"
+  ></div>
+
   <div 
     :class="cn(
-      'h-full border-l border-white/5 bg-[#0b0e11]/80 backdrop-blur-xl flex flex-col transition-all duration-300 z-10',
-      isCollapsed ? 'w-[60px]' : 'w-[320px]'
+      'h-full border-l border-white/5 bg-[#0b0e11]/80 backdrop-blur-xl flex flex-col transition-all duration-500 z-50 lg:z-10 lg:relative fixed inset-y-0 right-0',
+      isMobileOpen ? 'translate-x-0 w-[300px]' : 'translate-x-full lg:translate-x-0',
+      !isMobileOpen && isCollapsed ? 'lg:w-[60px]' : 'lg:w-[320px] w-[300px]'
     )"
   >
     <!-- Header / Toggle -->
     <div class="h-14 border-b border-white/5 flex items-center px-4 shrink-0 justify-between">
       <button 
-        @click="isCollapsed = !isCollapsed"
+        @click="isMobileOpen ? (isMobileOpen = false) : (isCollapsed = !isCollapsed)"
         class="w-8 h-8 flex items-center justify-center rounded hover:bg-white/5 text-[#848e9c] hover:text-white transition-colors -ml-2"
       >
-        <ChevronRight :class="cn('w-4 h-4 transition-transform', isCollapsed ? 'rotate-180' : '')" />
+        <ChevronRight :class="cn('w-4 h-4 transition-transform', (isCollapsed && !isMobileOpen) ? 'rotate-180' : (isMobileOpen ? 'rotate-0' : ''))" />
       </button>
 
-      <div v-if="!isCollapsed" class="font-bold text-sm text-[#EAECEF] uppercase tracking-widest flex items-center gap-2">
+      <div v-if="!isCollapsed || isMobileOpen" class="font-bold text-sm text-[#EAECEF] uppercase tracking-widest flex items-center gap-2">
         Command Center
       </div>
     </div>
 
     <!-- Tabs -->
-    <div v-if="!isCollapsed" class="flex p-2 gap-1 border-b border-white/5 shrink-0 bg-white/[0.02]">
+    <div v-if="!isCollapsed || isMobileOpen" class="flex p-2 gap-1 border-b border-white/5 shrink-0 bg-white/[0.02]">
       <button 
         @click="activeTab = 'strategies'"
         :class="cn(

@@ -18,7 +18,7 @@ const usdtBalance = computed(() => balances.value.find(b => b.asset === 'USDT')?
   <div class="flex flex-col xl:flex-row gap-4 p-4 bg-dash-card border border-dash-border rounded-xl">
     
     <!-- Wallet Balance -->
-    <div class="flex-1 flex justify-between items-center pr-6 xl:border-r border-dash-border min-w-[300px]">
+    <div class="flex-1 flex justify-between items-center pr-0 xl:pr-6 xl:border-r border-dash-border min-w-0 sm:min-w-[300px]">
       <div class="flex flex-col gap-1">
         <div class="flex items-center gap-2 text-dash-text-muted text-sm">
           <Wallet class="w-4 h-4" />

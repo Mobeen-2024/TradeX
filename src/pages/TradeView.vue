@@ -59,7 +59,7 @@ const activeBottomTab = ref<'positions' | 'orders' | 'history'>('positions');
     <div class="flex flex-col h-full p-2 sm:p-3 xl:p-4 gap-3 xl:gap-4 z-10">
       
       <!-- Top Header Bar (Market Info) -->
-      <header class="shrink-0 relative overflow-hidden rounded-2xl bg-white/[0.02] backdrop-blur-3xl border border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-500 hover:bg-white/[0.04]" style="height: 56px;">
+      <header class="shrink-0 relative overflow-hidden rounded-2xl bg-white/[0.02] backdrop-blur-3xl border border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all duration-500 hover:bg-white/[0.04] min-h-[56px]">
         
         <div class="flex items-center gap-6 z-10 w-full sm:w-auto overflow-x-auto no-scrollbar">
           <!-- Pair Identity -->
@@ -157,7 +157,7 @@ const activeBottomTab = ref<'positions' | 'orders' | 'history'>('positions');
         </div>
 
         <!-- Order Station (OrderBook + Inputs) -->
-        <div class="lg:w-[600px] xl:w-[680px] shrink-0 flex flex-col rounded-2xl bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] relative overflow-hidden group" style="height: 543px; padding-top: 3px;">
+        <div class="lg:w-[600px] xl:w-[680px] shrink-0 flex flex-col rounded-2xl bg-gradient-to-b from-white/[0.03] to-transparent backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] relative overflow-hidden group lg:h-[543px] pt-[3px]">
            <!-- Internal Container to hold the OrderPanel which has its own height expectations -->
            <div class="w-full h-full p-1 sm:p-2">
              <OrderPanel class="h-full !gap-2" />
@@ -167,7 +167,7 @@ const activeBottomTab = ref<'positions' | 'orders' | 'history'>('positions');
       </div>
 
       <!-- Bottom Zone (Positions & History) -->
-      <div class="shrink-0 rounded-2xl bg-white/[0.02] backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col z-10 overflow-hidden group pl-0 pb-0" style="height: 150px;">
+      <div class="shrink-0 rounded-2xl bg-white/[0.02] backdrop-blur-2xl border border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col z-10 overflow-hidden group pl-0 pb-0 lg:h-[150px] min-h-[150px]">
          
          <!-- Tab Header -->
          <div class="flex items-center gap-6 px-4 pt-3 pb-0 border-b border-white/5 relative z-10 bg-black/20">
@@ -204,7 +204,7 @@ const activeBottomTab = ref<'positions' | 'orders' | 'history'>('positions');
          <!-- Tab Content -->
          <div class="flex-1 overflow-hidden relative">
            
-           <div v-show="activeBottomTab === 'positions'" class="absolute inset-0 overflow-y-auto no-scrollbar" style="height: 130.438px;">
+           <div v-show="activeBottomTab === 'positions'" class="absolute inset-0 overflow-y-auto no-scrollbar">
              <!-- ActivePositions component is originally tailored to be a standalone card, so we wrap it to fit liquid style -->
              <!-- We apply negative margins if ActivePositions has built-in padding we want to override, but usually passing classes works -->
              <ActivePositions class="w-full !border-0 !bg-transparent !shadow-none !rounded-none !p-2" />
