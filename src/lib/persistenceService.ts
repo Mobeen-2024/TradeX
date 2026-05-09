@@ -98,7 +98,8 @@ class PersistenceService {
             lastPing: new Date(),
             nodes: strategy.nodes,
             edges: strategy.edges,
-            settings: strategy.settings
+            settings: strategy.settings,
+            pairs: Array.isArray(strategy.pairs) ? strategy.pairs.join(',') : (strategy.pairs || '')
           },
           create: {
             id: strategy.id,
@@ -106,7 +107,7 @@ class PersistenceService {
             type: strategy.type,
             status: strategy.status,
             alloc: strategy.alloc,
-            pairs: strategy.pairs || [],
+            pairs: Array.isArray(strategy.pairs) ? strategy.pairs.join(',') : (strategy.pairs || ''),
             nodes: strategy.nodes,
             edges: strategy.edges,
             settings: strategy.settings

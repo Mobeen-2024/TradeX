@@ -27,7 +27,10 @@ export const bootManager = {
         });
         
         for (const strategy of dbStrategies) {
-          await stateSyncManager.snapshotStrategy(strategy);
+          await stateSyncManager.snapshotStrategy({
+            ...strategy,
+            pairs: typeof strategy.pairs === 'string' ? strategy.pairs.split(',').filter(Boolean) : []
+          });
         }
         console.log(`[Boot] ✅ Hydrated ${dbStrategies.length} strategies to hot state.`);
       }
