@@ -373,7 +373,7 @@ watch(tpSl, (val) => {
     </div>
 
     <!-- Right: Order Panel - Fully Glassmorphism -->
-    <div class="bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-[60px] border border-white/[0.08] shadow-[0_24px_64px_rgba(0,0,0,0.5)] rounded-[24px] p-5 lg:p-6 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass z-20 overflow-hidden transform-gpu" style="padding-left: 41px; padding-right: 65px; padding-top: 28px; padding-bottom: 11px; width: 164.11px; height: 530px; font-size: 35px; line-height: 18.29px; text-align: center; font-weight: normal;">
+    <div class="bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-[60px] border border-white/[0.08] shadow-[0_24px_64px_rgba(0,0,0,0.5)] rounded-[24px] p-5 lg:p-6 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass z-20 overflow-hidden transform-gpu">
       
       <!-- Liquid Background Ambient Glow Inside Container -->
       <div 
@@ -382,7 +382,7 @@ watch(tpSl, (val) => {
       </div>
 
       <!-- Header -->
-      <div class="flex items-center justify-between mb-5 border-b border-white/[0.05] pb-4 transition-all duration-300 relative z-10" style="padding-bottom: 22px; margin-bottom: 2px; width: 272.11px; height: 36.27px; padding-top: 7px;">
+      <div class="flex items-center justify-between mb-5 border-b border-white/[0.05] pb-4 transition-all duration-300 relative z-10">
         
         <div class="flex flex-col gap-1">
           <span class="text-white text-[20px] font-bold tracking-tight text-left">
@@ -407,12 +407,11 @@ watch(tpSl, (val) => {
       </div>
 
       <!-- Buy / Sell Segmented Control -->
-      <div class="flex p-1.5 rounded-2xl bg-black/20 backdrop-blur-md border border-white/5 mb-5 relative z-10 shadow-inner" style="height: 44.56px; font-size: 21px; padding-bottom: 6px; margin-bottom: 5px; border-radius: 24px; border-width: 0px;">
+      <div class="flex p-1.5 rounded-2xl bg-black/20 backdrop-blur-md border border-white/5 mb-5 relative z-10 shadow-inner">
         <button 
           @click="orderSide = 'Buy'"
           class="flex-1 py-3 rounded-xl font-black text-[13px] uppercase tracking-widest transition-all duration-500 text-center relative overflow-hidden group"
           :class="orderSide === 'Buy' ? 'text-white shadow-[0_8px_30px_rgba(14,203,129,0.3)] bg-gradient-to-r from-[#0ecb81]/80 to-[#2ebd85]/80 border border-[#0ecb81]/40' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5 border border-transparent'"
-          style="line-height: 7.57px; border-radius: 55px; border-width: 0px; font-size: 14px; text-align: center;"
         >
           Buy
         </button>
@@ -420,7 +419,6 @@ watch(tpSl, (val) => {
           @click="orderSide = 'Sell'"
           class="flex-1 py-3 rounded-xl font-black text-[13px] uppercase tracking-widest transition-all duration-500 text-center relative overflow-hidden group"
           :class="orderSide === 'Sell' ? 'text-white shadow-[0_8px_30px_rgba(246,70,93,0.3)] bg-gradient-to-r from-[#f6465d]/80 to-[#eb3b51]/80 border border-[#f6465d]/40' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5 border border-transparent'"
-          style="text-align: center; border-width: 0px; padding-top: 8px;"
         >
           Sell
         </button>
@@ -450,7 +448,7 @@ watch(tpSl, (val) => {
       </div>
 
       <!-- Type Select & Params -->
-      <div class="flex flex-col gap-4 relative z-10 flex-1 min-h-[0]" style="font-size: 11px; line-height: 14.28px; text-align: justify;">
+      <div class="flex flex-col gap-4 relative z-10 flex-1 min-h-[0]">
         
         <!-- Strategy / Type Select -->
         <div class="flex justify-between items-center mb-2">
@@ -459,7 +457,6 @@ watch(tpSl, (val) => {
              <button 
                @click="showOrderTypeDropdown = !showOrderTypeDropdown"
                class="flex items-center gap-1.5 text-white font-bold text-sm bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-xl transition-all shadow-sm focus:ring-2 focus:ring-[#F0B90B]/50 outline-none"
-               style="text-align: center; line-height: 15px; font-size: 10px;"
              >
                {{ orderType }}
                <ChevronDown class="w-4 h-4 text-[#848e9c]" />
@@ -493,18 +490,18 @@ watch(tpSl, (val) => {
            </div>
            
            <!-- Setup Toggle Grid -->
-           <div class="flex bg-black/20 p-1 rounded-xl border border-white/5" style="width: 172.02px; height: 41.55px; padding-bottom: 2px; margin-bottom: 0px; padding-left: 0px; padding-right: 0px; padding-top: 2px; border-radius: 4px; font-size: 10px; line-height: 15.28px; text-align: center;">
+           <div class="flex bg-black/20 p-1 rounded-xl border border-white/5" >
              <button 
                 @click="isRiskMode = false"
                 class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
                 :class="!isRiskMode ? 'bg-[#F0B90B] text-black shadow-md' : 'text-[#848e9c] hover:text-white'"
-                style="border-radius: 5px; font-size: 10px; line-height: 10.28px; text-align: justify; height: 32.56px; width: 80.41px; padding-left: 12px; margin-left: 15px; margin-right: 1px;"
+                
              >Standard</button>
              <button 
                 @click="isRiskMode = true"
                 class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5"
                 :class="isRiskMode ? 'bg-gradient-to-br from-[#0ecb81] to-[#2ebd85] text-white shadow-md' : 'text-[#848e9c] hover:text-white'"
-                style="width: 72.61px; height: 33.56px; margin-left: 4px; margin-right: -4px; text-align: center; font-size: 8px; border-radius: 8px;"
+                
              ><Shield class="w-3 h-3" /> Risk Setup</button>
            </div>
         </div>
@@ -634,7 +631,7 @@ watch(tpSl, (val) => {
                </div>
 
                <!-- Optional Total -->
-               <div class="flex items-center justify-between text-[#848e9c] bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 shadow-inner" style="padding-top: 10px; padding-left: 17px;">
+               <div class="flex items-center justify-between text-[#848e9c] bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 shadow-inner">
                  <span class="text-[11px] font-bold uppercase tracking-widest">Total</span>
                  <span class="font-mono text-[14px] text-white">{{ totalCost }} <span class="text-[10px] text-[#848e9c]">USDT</span></span>
                </div>
@@ -738,7 +735,7 @@ watch(tpSl, (val) => {
       </div>
 
       <!-- Footer Info & Button -->
-      <div class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-3 relative z-10 bg-gradient-to-t from-black/20 to-transparent" style="padding-top: 34px; font-size: 16px; height: 117.42px; line-height: 3.28px; text-align: justify;">
+      <div class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-3 relative z-10 bg-gradient-to-t from-black/20 to-transparent">
          <div class="flex justify-between items-center text-xs font-medium px-2">
              <span class="text-[#848e9c]">Avbl Balance</span>
              <span class="text-white font-mono">{{ orderSide === 'Buy' ? availableUsdt.toFixed(2) + ' USDT' : availableBtc.toFixed(4) + ' BTC' }}</span>
