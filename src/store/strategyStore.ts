@@ -15,6 +15,18 @@ export interface LatencyMetrics {
   network: number;
 }
 
+export interface AiAdvisory {
+  id: string;
+  strategyId: string;
+  type: 'OPTIMIZATION' | 'RISK_ALERT' | 'ANOMALY';
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  suggestion: string;
+  impact: string;
+  timestamp: number;
+  isApplied: boolean;
+}
+
 export interface NodeExecutionState {
   status: NodeStatus;
   latency: number;
@@ -39,8 +51,6 @@ export interface Strategy {
   latency: LatencyMetrics;
   errorCount: number;
   signalsProcessed: number;
-  nodes?: any[];
-  edges?: any[];
 }
 
 export interface ExecutionLog {
@@ -58,7 +68,6 @@ export interface AiSignal {
   asset: string;
   direction: 'long' | 'short';
   confidence: number;
-  riskScore: 'low' | 'medium' | 'high';
   entry: number;
   stopLoss: number;
   takeProfit: number;
@@ -66,7 +75,7 @@ export interface AiSignal {
   timestamp: number;
 }
 
-// --- Reactive State ---
+// --- Reactive State (The Runtime Core) ---
 
 export const strategies = ref<Strategy[]>([
   { 
@@ -74,24 +83,21 @@ export const strategies = ref<Strategy[]>([
     roi: 12.4, trades: 14, winRate: 68, pnlUsdt: 12.50, alloc: 100,
     pairs: ['BTC/USDT', 'ETH/USDT'], lastPing: '12ms', lastHeartbeat: Date.now(),
     latency: { exchange: 12, ai: 450, network: 15 },
-    errorCount: 0, signalsProcessed: 142,
-    nodes: [], edges: []
+    errorCount: 0, signalsProcessed: 142
   },
   { 
     id: '4', name: 'Delta Neutral Hedge', type: 'Risk Manager', status: 'running', health: 'optimal',
     roi: 1.8, trades: 42, winRate: 98, pnlUsdt: 2.70, alloc: 150,
     pairs: ['SOL/USDT', 'BNB/USDT'], lastPing: '8ms', lastHeartbeat: Date.now(),
     latency: { exchange: 8, ai: 380, network: 12 },
-    errorCount: 0, signalsProcessed: 850,
-    nodes: [], edges: []
+    errorCount: 0, signalsProcessed: 850
   },
   { 
     id: '2', name: 'Bin/Byb Arb', type: 'Arb Network', status: 'paused', health: 'critical',
     roi: 2.1, trades: 104, winRate: 94, pnlUsdt: 1.05, alloc: 50,
     pairs: ['XRP/USDT', 'ADA/USDT'], lastPing: 'Offline', lastHeartbeat: 0,
     latency: { exchange: 0, ai: 0, network: 0 },
-    errorCount: 12, signalsProcessed: 1204,
-    nodes: [], edges: []
+    errorCount: 12, signalsProcessed: 1204
   },
 ]);
 
@@ -99,6 +105,7 @@ export const activeExecutions = ref<Record<string, { startTime: number; lastTick
 export const executionLogs = ref<ExecutionLog[]>([]);
 export const signalQueue = ref<AiSignal[]>([]);
 export const nodeExecutionMap = ref<Record<string, Record<string, NodeExecutionState>>>({});
+export const aiAdvisories = ref<AiAdvisory[]>([]);
 
 export const portfolioMetrics = ref({
   totalEquity: 10000,
@@ -134,22 +141,53 @@ export const logRuntimeEvent = (strategyId: string, level: ExecutionLog['level']
 };
 
 /**
- * PHASE 4: Strategy Health Monitoring Engine
- * Updates heartbeat and analyzes execution health
+ * PHASE 7: AI ORCHESTRATION LAYER
+ * Autonomous analysis and advisory generation
  */
+const runAiOrchestrator = (strategy: Strategy) => {
+  // 1. Performance Degradation Check
+  if (strategy.status === 'running' && strategy.errorCount > 5) {
+    const existing = aiAdvisories.value.find(a => a.strategyId === strategy.id && a.type === 'RISK_ALERT');
+    if (!existing) {
+      const advisory: AiAdvisory = {
+        id: `adv_${Math.random().toString(36).substring(7)}`,
+        strategyId: strategy.id,
+        type: 'RISK_ALERT',
+        severity: 'high',
+        message: `${strategy.name} error rate is critical (>5 failures).`,
+        suggestion: 'Reduce leverage by 50% or pause for diagnostics.',
+        impact: 'High risk of liquidation on partial fills.',
+        timestamp: Date.now(),
+        isApplied: false
+      };
+      aiAdvisories.value.unshift(advisory);
+      eventBus.publish('ai:analysis-complete', { type: 'advisory', advisory }, strategy.id);
+      
+      // Autonomous Intervention
+      if (strategy.errorCount > 15) {
+         strategy.status = 'paused';
+         logRuntimeEvent(strategy.id, 'ERROR', 'AI ORCHESTRATOR: Strategy auto-paused due to critical failure rate.');
+         addNotification({ type: 'error', title: 'Autonomous Intervention', message: `${strategy.name} auto-paused for safety.` });
+      }
+    }
+  }
+
+  // 2. Latency Anomaly Detection
+  if (strategy.latency.ai > 800) {
+     logRuntimeEvent(strategy.id, 'WARN', `AI ORCHESTRATOR: Neural inference latency spike detected (${strategy.latency.ai}ms).`);
+  }
+};
+
 export const updateStrategyHealth = (id: string) => {
   const strategy = strategies.value.find(s => s.id === id);
   if (!strategy) return;
 
   strategy.lastHeartbeat = Date.now();
-  
-  // Fluctuate latency for institutional credibility
   strategy.latency.exchange = Math.floor(Math.random() * 20 + 5);
   strategy.latency.ai = Math.floor(Math.random() * 200 + 300);
   strategy.latency.network = Math.floor(Math.random() * 10 + 5);
   strategy.lastPing = `${strategy.latency.exchange}ms`;
 
-  // Determine health status based on error count and latency
   if (strategy.errorCount > 10 || strategy.latency.ai > 1000) {
     strategy.health = 'critical';
   } else if (strategy.errorCount > 2 || strategy.latency.exchange > 50) {
@@ -157,20 +195,11 @@ export const updateStrategyHealth = (id: string) => {
   } else {
     strategy.health = 'optimal';
   }
+
+  // Run Orchestrator
+  runAiOrchestrator(strategy);
 };
 
-export const updateNodeExecution = (strategyId: string, nodeId: string, updates: Partial<NodeExecutionState>) => {
-  if (!nodeExecutionMap.value[strategyId]) nodeExecutionMap.value[strategyId] = {};
-  nodeExecutionMap.value[strategyId][nodeId] = {
-    ...(nodeExecutionMap.value[strategyId][nodeId] || { status: 'idle', latency: 0, output: {}, lastExecution: 0 }),
-    ...updates,
-    lastExecution: updates.status === 'success' || updates.status === 'failed' ? Date.now() : (nodeExecutionMap.value[strategyId][nodeId]?.lastExecution || 0)
-  };
-};
-
-/**
- * Pipeline Execution with Health Tracking
- */
 export const toggleStrategyState = async (id: string) => {
   const strategy = strategies.value.find(s => s.id === id);
   if (!strategy) return;
@@ -187,14 +216,11 @@ export const toggleStrategyState = async (id: string) => {
 export const dispatchSignal = async (rawSignal: any) => {
   if (portfolioMetrics.value.isLocked) return false;
 
-  // Find associated strategy if any
   const strategyId = rawSignal.strategyId || 'system';
   const strategy = strategies.value.find(s => s.id === strategyId);
 
-  // Layer 0: AI Analysis Complete
   eventBus.publish('ai:analysis-complete', { asset: rawSignal.asset, confidence: rawSignal.confidence }, strategyId);
 
-  // Parse & Validate
   const signal = {
     id: rawSignal.id || `sig_${Math.random().toString(36).substring(7)}`,
     asset: rawSignal.asset || 'BTCUSDT',
@@ -244,6 +270,7 @@ export const dispatchSignal = async (rawSignal: any) => {
     return false;
   }
 };
+
 export const triggerMacro = async (macroId: string) => {
   logRuntimeEvent('system', 'WARN', `Macro ${macroId} invoked.`);
   try {
@@ -271,20 +298,15 @@ if (typeof window !== 'undefined') {
   setInterval(() => {
     strategies.value.forEach(s => {
       if (s.status === 'running') {
-        // 1. Performance Sim
         s.roi = parseFloat((s.roi + (Math.random() - 0.5) * 0.05).toFixed(2));
         s.pnlUsdt = parseFloat((s.pnlUsdt + (Math.random() - 0.5) * 0.1).toFixed(2));
-        
-        // 2. Health Heartbeat
         updateStrategyHealth(s.id);
 
-        // 3. Simulated Websocket Frame Tracking (for credibility)
         const droppedFrames = Math.random() > 0.99 ? 1 : 0;
         if (droppedFrames) logRuntimeEvent(s.id, 'WARN', 'Websocket frame dropped. Resyncing...');
       }
     });
 
-    // 4. Safety Monitor
     const currentPnl = activePositions.value.reduce((acc, p) => acc + (p.pnl || 0), 0);
     const totalEquity = availableUsdt.value + currentPnl;
     const drawdown = ((portfolioMetrics.value.initialEquity - totalEquity) / portfolioMetrics.value.initialEquity) * 100;
