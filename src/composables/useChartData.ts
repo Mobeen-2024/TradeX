@@ -122,10 +122,19 @@ export function useChartData() {
     // --------------------------------------------------------
 
     /**
-     * Fetch historical klines with Exponential Backoff
+     * Fetch historical klines with Exponential Backoff and Request Cancellation
      */
+    let fetchController: AbortController | null = null;
+
     const fetchKlines = async (symbol: string, interval: string) => {
         const currentGen = ++generation;
+        
+        // Cancel any pending fetch
+        if (fetchController) {
+            fetchController.abort();
+        }
+        fetchController = new AbortController();
+
         const binanceInterval = interval === '1s' ? '1s' : interval.toLowerCase();
         const symbolClean = symbol.replace(/[^A-Za-z0-9]/g, '');
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbolClean}&interval=${binanceInterval}&limit=500`;
@@ -136,7 +145,7 @@ export function useChartData() {
         while (retryCount <= MAX_RETRIES) {
             transitionTo(retryCount > 0 ? 'PROCESSING' : 'FETCHING');
             try {
-                const response = await fetch(url);
+                const response = await fetch(url, { signal: fetchController.signal });
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
                 const data = await response.json();
@@ -174,6 +183,11 @@ export function useChartData() {
                 return { candlestick, volume };
 
             } catch (error: any) {
+                if (error.name === 'AbortError') {
+                    console.log('[ChartLogic] Fetch aborted for', symbol);
+                    return { candlestick: [], volume: [] };
+                }
+
                 retryCount++;
                 if (retryCount > MAX_RETRIES) {
                     transitionTo('FAILURE', 'Network timeout after multiple retries. Using mock fallback.');
@@ -183,7 +197,19 @@ export function useChartData() {
                 // Exponential backoff
                 const backoffTime = BASE_BACKOFF_MS * Math.pow(2, retryCount - 1);
                 console.warn(`[ChartLogic] Network fault, retrying in ${backoffTime}ms... (Attempt ${retryCount}/${MAX_RETRIES})`);
-                await new Promise(resolve => registerTimeout(() => resolve(true), backoffTime));
+                
+                try {
+                    await new Promise((resolve, reject) => {
+                        const timeout = registerTimeout(() => resolve(true), backoffTime);
+                        fetchController?.signal.addEventListener('abort', () => {
+                            clearTimeout(timeout);
+                            reject(new DOMException('Aborted', 'AbortError'));
+                        });
+                    });
+                } catch (e: any) {
+                    if (e.name === 'AbortError') return { candlestick: [], volume: [] };
+                    throw e;
+                }
             }
         }
         return generateMockData();
