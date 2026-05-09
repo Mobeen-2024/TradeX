@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import gsap from 'gsap';
+import { animate } from 'motion';
 
 import Sidebar from './components/Sidebar.vue';
 import TopHeader from './components/TopHeader.vue';
@@ -8,17 +10,19 @@ import QuickTradeView from './components/QuickTradeView.vue';
 import ToastProvider from './components/ToastProvider.vue';
 import LeaderBoard from './components/LeaderBoard.vue';
 import Tournaments from './components/Tournaments.vue';
-import TradingSignals from './components/TradingSignals.vue';
 
 // Page Views
 import MarketView from './pages/MarketView.vue';
 import TradeView from './pages/TradeView.vue';
 import TransactionsView from './pages/TransactionsView.vue';
 import AnalyticsView from './pages/AnalyticsView.vue';
+import SignalView from './pages/SignalView.vue';
 
 import { initAIStore } from './store/aiStore';
 import { initSystemStore } from './store/systemStore';
 import { quickTradeMode } from './store/tradeStore';
+import { useLiquidStore } from './store/liquidStore';
+import { initSocket } from './services/socketService';
 import { cn } from './lib/utils';
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts';
 import { Zap } from 'lucide-vue-next';
@@ -27,6 +31,8 @@ const activeItem = ref('Market');
 
 const settingsPanel = ref<InstanceType<typeof SettingsPanel> | null>(null);
 const uiFlash = ref<'buy' | 'sell' | null>(null);
+
+const bgOrbs = ref<HTMLElement | null>(null);
 
 const triggerFlash = (type: 'buy' | 'sell') => {
     uiFlash.value = type;
@@ -39,14 +45,34 @@ useKeyboardShortcuts({ triggerFlash });
 onMounted(() => {
     initAIStore();
     initSystemStore();
+    initSocket();
+    
+    // Liquid Pinia Store Usage
+    const liquidStore = useLiquidStore();
+    liquidStore.addEvent('App Mounted - Liquid Tech Stack Initialized');
+
+    // GSAP Physics simulation for background glow elements
+    const handleMouseMove = (e: MouseEvent) => {
+        gsap.to('.orb-physics-layer', {
+            x: -((e.clientX / window.innerWidth) - 0.5) * 50,
+            y: -((e.clientY / window.innerHeight) - 0.5) * 50,
+            duration: 1.5,
+            ease: 'power3.out'
+        });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+
+    // Motion One animation for the main layout entry
+    animate('#main-layout', { opacity: [0, 1], scale: [0.98, 1] }, { duration: 0.6, easing: 'ease-out' });
 });
 </script>
 
 <template>
-  <div class="flex h-[100dvh] w-full bg-[#0b0e11] overflow-hidden text-[#EAECEF] text-sm flex-col md:flex-row relative">
+  <div id="main-layout" class="flex h-[100dvh] w-full bg-[#0b0e11] overflow-hidden text-[#EAECEF] text-sm flex-col md:flex-row relative">
     
     <!-- Premium Dynamic Glassmorphism Background -->
-    <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505]">
+    <div ref="bgOrbs" class="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505] orb-physics-layer">
+
       <!-- Animated Mesh Gradient Orbs -->
       <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-gradient-to-br from-[#F0B90B]/10 to-[#F0B90B]/5 blur-[120px] rounded-full mix-blend-screen animate-float"></div>
       <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-gradient-to-tl from-[#0ecb81]/10 to-[#0ecb81]/5 blur-[150px] rounded-full mix-blend-screen animate-float" style="animation-delay: 2s;"></div>
@@ -75,11 +101,11 @@ onMounted(() => {
     <div class="flex h-full w-full z-10 flex-col md:flex-row">
       <Sidebar class="order-2 md:order-none shrink-0" :active-item="activeItem" @update:active-item="activeItem = $event" />
       <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
-      <TopHeader :title="activeItem" @open-settings="settingsPanel?.open()" />
+      <TopHeader v-if="activeItem !== 'Trade'" :title="activeItem" @open-settings="settingsPanel?.open()" />
       
-      <TradeView v-if="activeItem === 'Market'" />
+      <TradeView v-if="activeItem === 'Trade'" @open-settings="settingsPanel?.open()" />
       
-      <MarketView v-else-if="activeItem === 'Trade'" />
+      <MarketView v-else-if="activeItem === 'Market'" />
 
       <TransactionsView v-else-if="activeItem === 'Transactions'" />
 
@@ -93,8 +119,8 @@ onMounted(() => {
         <Tournaments />
       </div>
 
-      <div v-else-if="activeItem === 'Trading signals'" class="flex-1 overflow-y-auto no-scrollbar">
-        <TradingSignals />
+      <div v-else-if="activeItem === 'Signal'" class="flex-1 overflow-hidden flex flex-col">
+        <SignalView />
       </div>
       
       <div v-else class="flex-1 flex items-center justify-center text-dash-text-muted">
