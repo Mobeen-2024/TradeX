@@ -259,6 +259,6 @@ const activeBottomTab = ref<'positions' | 'orders' | 'history'>('positions');
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
   will-change: transform, opacity;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0-[.05]);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 </style>
