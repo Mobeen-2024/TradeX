@@ -63,7 +63,7 @@ onMounted(() => {
     window.addEventListener('mousemove', handleMouseMove);
 
     // Motion One animation for the main layout entry
-    animate('#main-layout', { opacity: [0, 1], scale: [0.98, 1] }, { duration: 0.6, easing: 'ease-out' });
+    animate('#main-layout', { opacity: [0, 1], scale: [0.98, 1] }, { duration: 0.6, ease: 'ease-out' });
 });
 </script>
 

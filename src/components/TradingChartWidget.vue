@@ -147,7 +147,7 @@ const initChart = async () => {
     emaSeries = chart.addSeries(LineSeries, {
         color: '#F0B90B',
         lineWidth: 1,
-        lineStyle: 2,
+        lineStyle: LineStyle.Dashed,
         visible: activeIndicators.value.includes('EMA')
     });
     
@@ -166,8 +166,8 @@ const initChart = async () => {
     bbMiddleSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.7)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
     bbLowerSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.4)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
 
-    macdLineSeries = chart.addSeries(LineSeries, { color: '#2962FF', lineWidth: 1.5, priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
-    macdSignalSeries = chart.addSeries(LineSeries, { color: '#FF6D00', lineWidth: 1.5, priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
+    macdLineSeries = chart.addSeries(LineSeries, { color: '#2962FF', lineWidth: 2, priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
+    macdSignalSeries = chart.addSeries(LineSeries, { color: '#FF6D00', lineWidth: 2, priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
     macdHistSeries = chart.addSeries(HistogramSeries, { color: '#26A69A', priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
     macdLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, autoScale: true });
 
