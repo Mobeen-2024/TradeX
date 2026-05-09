@@ -1,27 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { activePositions, selectedPrice, openOrders, alerts, createAlert, currentPrice, sharedSlPrice, isRiskModeActive, chartInterval } from '../store/tradeStore';
-import { globalSymbol, workspacePanels, activeTool, setGlobalTool, updateGlobalInterval, type Drawing } from '../store/workspaceStore';
+import { globalSymbol, workspacePanels, activeTool, setGlobalTool, updateGlobalInterval } from '../store/workspaceStore';
 import { IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine, createChart } from 'lightweight-charts';
 import { calculateEMA, calculateRSI, calculateBollingerBands } from '../utils/indicators';
 import { useChartData } from '../composables/useChartData';
-import { FootprintRenderer, FootprintData } from '../lib/chart/FootprintRenderer';
+import { FootprintRenderer } from '../lib/chart/FootprintRenderer';
 import { DrawingManager } from '../lib/chart/DrawingManager';
 import { OrderLinesRenderer } from '../lib/chart/OrderLinesRenderer';
 import { aiLevels, initAIStore } from '../store/aiStore';
-
-// Strict Type Definitions
-interface DrawingPoint {
-    price: number;
-    time: any;
-}
-
-interface TradeUpdate {
-    p: number;
-    q: number;
-    m: boolean;
-    t: number;
-}
+import { LineStyle } from 'lightweight-charts';
 
 // Sub-components
 import ChartToolbar from './trading-chart/ChartToolbar.vue';
@@ -39,21 +27,9 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:symbol', 'update:interval', 'update:isSynced', 'remove']);
 
-const { 
-    allCandles, 
-    lastPriceData, 
-    fetchKlines, 
-    subscribeKline, 
-    subscribeTrades,
-    currentState,
-    lastError
-} = useChartData();
+const { allCandles, lastPriceData, fetchKlines, subscribeKline, subscribeTrades } = useChartData();
 
-// Internal Lifecycle State
-let isUnmounted = false;
-let latestIndicatorRequestId = 0;
 const chartContainer = ref<HTMLDivElement | null>(null);
-const heatmapCanvas = ref<HTMLCanvasElement | null>(null);
 let chart: IChartApi | null = null;
 let candleSeries: ISeriesApi<"Candlestick"> | null = null;
 let lineSeries: ISeriesApi<"Line"> | null = null;
@@ -63,14 +39,17 @@ let rsiSeries: ISeriesApi<"Line"> | null = null;
 let bbUpperSeries: ISeriesApi<"Line"> | null = null;
 let bbMiddleSeries: ISeriesApi<"Line"> | null = null;
 let bbLowerSeries: ISeriesApi<"Line"> | null = null;
+let macdLineSeries: ISeriesApi<"Line"> | null = null;
+let macdSignalSeries: ISeriesApi<"Line"> | null = null;
+let macdHistSeries: ISeriesApi<"Histogram"> | null = null;
 
-const activeIndicators = ref<string[]>([]);
 const chartType = ref<'candle' | 'line'>('candle');
 const showVolume = ref(true);
+const activeIndicators = ref<string[]>([]);
 const showFootprint = ref(false);
 const showTape = ref(false);
-const recentTrades = ref<TradeUpdate[]>([]);
-const footprintDataMap = ref<Map<number, FootprintData>>(new Map());
+const recentTrades = ref<any[]>([]);
+const footprintDataMap = ref<Map<number, any>>(new Map());
 const footprintSettings = ref({
     tickSize: 10,
     imbalanceRatio: 3,
@@ -81,26 +60,19 @@ const footprintSettings = ref({
     showUnfinishedBusiness: true
 });
 
-const hoveredCell = ref<{
-    price: number;
-    bidVolume: number;
-    askVolume: number;
-    totalVolume: number;
-    time: number;
-    delta: number;
-} | null>(null);
+const hoveredCell = ref<any>(null);
 const tooltipPosition = ref({ x: 0, y: 0 });
 const showFootprintSettings = ref(false);
 
-const isLoading = computed(() => currentState.value === 'FETCHING' || currentState.value === 'PROCESSING');
-const hasError = computed(() => currentState.value === 'FAILURE');
+const isLoading = ref(true);
+const hasError = ref(false);
 const isEmpty = ref(false);
 
 watch(footprintSettings, () => {
     if (allCandles.value.length > 0) updateChartData();
 }, { deep: true });
 
-const drawings = ref<Drawing[]>([]);
+const drawings = ref<any[]>([]);
 
 // Task 5.1 — Persist drawings to workspace store
 watch(drawings, (newDrawings) => {
@@ -116,10 +88,10 @@ let ohlcvWorker: Worker | null = null;
 let heatmapRafId: number | null = null;
 
 const scheduleHeatmap = () => {
-    if (heatmapRafId || isUnmounted) return;
+    if (heatmapRafId) return;
     heatmapRafId = requestAnimationFrame(() => {
         heatmapRafId = null;
-        if (!isUnmounted) renderHeatmap();
+        renderHeatmap();
     });
 };
 
@@ -134,18 +106,21 @@ watch([activePositions, openOrders, alerts, currentPrice, aiLevels], () => {
 const updateIndicators = (candlestick: CandlestickData[]) => {
     if (!ohlcvWorker || !candlestick.length || activeIndicators.value.length === 0) return;
 
-    const requestId = ++latestIndicatorRequestId;
     ohlcvWorker.postMessage({
         type: 'compute_indicators',
-        requestId,
+        requestId: Date.now(),
         candles: candlestick,
         config: {
             ema: activeIndicators.value.includes('EMA'),
             rsi: activeIndicators.value.includes('RSI'),
             bollinger: activeIndicators.value.includes('BOLL'),
+            macd: activeIndicators.value.includes('MACD'),
             emaPeriod: 21,
             rsiPeriod: 14,
-            bbPeriod: 20
+            bbPeriod: 20,
+            macdFast: 12,
+            macdSlow: 26,
+            macdSignal: 9
         }
     });
 };
@@ -191,26 +166,23 @@ const initChart = async () => {
     bbMiddleSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.7)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
     bbLowerSeries = chart.addSeries(LineSeries, { color: 'rgba(100,100,255,0.4)', lineWidth: 1, visible: activeIndicators.value.includes('BOLL') });
 
+    macdLineSeries = chart.addSeries(LineSeries, { color: '#2962FF', lineWidth: 1.5, priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
+    macdSignalSeries = chart.addSeries(LineSeries, { color: '#FF6D00', lineWidth: 1.5, priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
+    macdHistSeries = chart.addSeries(HistogramSeries, { color: '#26A69A', priceScaleId: 'macd', visible: activeIndicators.value.includes('MACD') });
+    macdLineSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, autoScale: true });
+
     drawingManager = new DrawingManager(chart, candleSeries);
 
     chart.subscribeCrosshairMove((param) => {
         if (!param.time || !candleSeries || !volumeSeries || !param.point) { hoveredCell.value = null; return; }
-        const timeVal = param.time as any;
-        const fp = footprintDataMap.value.get(timeVal);
+        const fp = footprintDataMap.value.get(param.time as number);
         if (showFootprint.value && fp) {
             const price = candleSeries.coordinateToPrice(param.point.y);
             if (price) {
                 const targetPrice = Math.round(price / footprintSettings.value.tickSize) * footprintSettings.value.tickSize;
                 const cell = fp.cells.find((c: any) => Math.abs(c.price - targetPrice) < footprintSettings.value.tickSize / 2);
                 if (cell) {
-                    hoveredCell.value = { 
-                        price: cell.price,
-                        bidVolume: cell.bidVolume,
-                        askVolume: cell.askVolume,
-                        totalVolume: cell.totalVolume,
-                        time: timeVal, 
-                        delta: cell.askVolume - cell.bidVolume 
-                    };
+                    hoveredCell.value = { ...cell, time: param.time, delta: cell.askVolume - cell.bidVolume };
                     tooltipPosition.value = { x: param.point.x, y: param.point.y };
                 } else hoveredCell.value = null;
             }
@@ -230,15 +202,12 @@ const initChart = async () => {
     });
 
     chart.timeScale().subscribeVisibleTimeRangeChange(() => scheduleHeatmap());
-    
-    if (!isUnmounted) {
-        await updateChartData();
-    }
+    await updateChartData();
 };
 
 const renderHeatmap = () => {
-    const canvas = heatmapCanvas.value;
-    if (!canvas || !chart || !candleSeries || isUnmounted) return;
+    const canvas = document.getElementById(`heatmap-${props.panelId}`) as HTMLCanvasElement;
+    if (!canvas || !chart || !candleSeries) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
@@ -247,12 +216,9 @@ const renderHeatmap = () => {
     const cssW = container.clientWidth;
     const cssH = container.clientHeight;
 
-    const targetWidth = Math.floor(cssW * dpr);
-    const targetHeight = Math.floor(cssH * dpr);
-
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
+    if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
         canvas.style.width = `${cssW}px`;
         canvas.style.height = `${cssH}px`;
     }
@@ -368,39 +334,38 @@ const renderAILevels = (ctx: CanvasRenderingContext2D) => {
 const updateChartData = async () => {
     if (!candleSeries || !volumeSeries || !lineSeries || !chart) return;
     
-    isEmpty.value = false;
+    try {
+        isLoading.value = true;
+        hasError.value = false;
+        isEmpty.value = false;
 
-    // fetchKlines now internally handles currentState and retry logic
-    const data = await fetchKlines(props.symbol, props.interval);
-    
-    if (isUnmounted) return;
+        const data = await fetchKlines(props.symbol, props.interval);
+        
+        if (!data || !data.candlestick || data.candlestick.length === 0) {
+            isEmpty.value = true;
+            isLoading.value = false;
+            return;
+        }
 
-    if (!data || !data.candlestick || data.candlestick.length === 0) {
-        isEmpty.value = true;
-        return;
+        if (!chart) return;
+        candleSeries.setData(data.candlestick);
+        volumeSeries.setData(data.volume);
+        lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
+        updateIndicators(data.candlestick);
+        footprintDataMap.value.clear();
+        let prevFp: any = null;
+        data.candlestick.forEach((c, idx) => {
+            const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
+            footprintDataMap.value.set(c.time as number, fp);
+            prevFp = fp;
+        });
+        if (chart) chart.timeScale().fitContent();
+    } catch(err) {
+        console.error("Failed to fetch klines:", err);
+        hasError.value = true;
+    } finally {
+        isLoading.value = false;
     }
-
-    if (!chart) return;
-    candleSeries.setData(data.candlestick);
-    volumeSeries.setData(data.volume);
-    lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
-    updateIndicators(data.candlestick);
-    footprintDataMap.value.clear();
-    let prevFp: any = null;
-    data.candlestick.forEach((c, idx) => {
-        const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
-        footprintDataMap.value.set(c.time as number, fp);
-        prevFp = fp;
-    });
-
-    // Memory Guard: Prune old footprint data if map is too large
-    if (footprintDataMap.value.size > 2000) {
-        const sortedTimes = Array.from(footprintDataMap.value.keys()).sort((a, b) => a - b);
-        const toRemove = sortedTimes.slice(0, 500);
-        toRemove.forEach(t => footprintDataMap.value.delete(t));
-    }
-
-    if (chart) chart.timeScale().fitContent();
 };
 
 let disconnectKline: (() => void) | null = null;
@@ -418,13 +383,13 @@ const internalSubscribe = () => {
         
         // For historical footprints, if they don't exist yet, we can mock them.
         // But for the active kline, we rely on the trades stream.
-        if (!footprintDataMap.value.has(update.time as any)) {
-            const allTimes = Array.from(footprintDataMap.value.keys()).sort((a: any, b: any) => (a as number) - (b as number));
-            const prevFp = allTimes.length > 0 ? footprintDataMap.value.get(allTimes[allTimes.length - 1] as any) : null;
+        if (!footprintDataMap.value.has(update.time as number)) {
+            const allTimes = Array.from(footprintDataMap.value.keys()).sort((a, b) => a - b);
+            const prevFp = allTimes.length > 0 ? footprintDataMap.value.get(allTimes[allTimes.length - 1]) : null;
             
             // Initialize empty footprint for the new kline
-            footprintDataMap.value.set(update.time as any, {
-                time: update.time as any,
+            footprintDataMap.value.set(update.time as number, {
+                time: update.time as number,
                 isUp: update.close >= update.open,
                 cells: [],
                 delta: 0,
@@ -433,8 +398,8 @@ const internalSubscribe = () => {
                 isMultipleHVN: false
             });
         } else {
-            const fp = footprintDataMap.value.get(update.time as any);
-            if (fp) fp.isUp = update.close >= update.open;
+            const fp = footprintDataMap.value.get(update.time as number);
+            fp.isUp = update.close >= update.open;
         }
         
         renderHeatmap();
@@ -448,11 +413,11 @@ const internalSubscribe = () => {
         if (!showFootprint.value || allCandles.value.length === 0) return;
         
         const lastCandle = allCandles.value[allCandles.value.length - 1];
-        let currentFp = footprintDataMap.value.get(lastCandle.time as any);
+        let currentFp = footprintDataMap.value.get(lastCandle.time as number);
         
         if (!currentFp) {
             currentFp = {
-                time: lastCandle.time as any,
+                time: lastCandle.time as number,
                 isUp: lastCandle.close >= lastCandle.open,
                 cells: [],
                 delta: 0,
@@ -460,12 +425,12 @@ const internalSubscribe = () => {
                 hvnPrice: 0,
                 isMultipleHVN: false
             };
-            footprintDataMap.value.set(lastCandle.time as any, currentFp);
+            footprintDataMap.value.set(lastCandle.time as number, currentFp);
         }
 
-        const allTimes = Array.from(footprintDataMap.value.keys()).sort((a: any, b: any) => (a as number) - (b as number));
-        const currIdx = allTimes.indexOf(lastCandle.time as any);
-        const prevFp = currIdx > 0 ? footprintDataMap.value.get(allTimes[currIdx - 1] as any) : null;
+        const allTimes = Array.from(footprintDataMap.value.keys()).sort((a, b) => a - b);
+        const currIdx = allTimes.indexOf(lastCandle.time as number);
+        const prevFp = currIdx > 0 ? footprintDataMap.value.get(allTimes[currIdx - 1]) : null;
 
         FootprintRenderer.updateLiveFootprint(currentFp, trade, footprintSettings.value, prevFp);
         scheduleHeatmap();
@@ -485,12 +450,17 @@ const toggleIndicator = (type: string) => {
         bbMiddleSeries?.applyOptions({ visible: isVisible });
         bbLowerSeries?.applyOptions({ visible: isVisible });
     }
+    if (type === 'MACD') {
+        macdLineSeries?.applyOptions({ visible: isVisible });
+        macdSignalSeries?.applyOptions({ visible: isVisible });
+        macdHistSeries?.applyOptions({ visible: isVisible });
+    }
 
     updateIndicators(allCandles.value);
 };
 
 const addHorizontalLine = (price: number) => {
-    const draw: Drawing = { type: 'hline', price, id: Math.random().toString(36).slice(2) };
+    const draw = { type: 'hline', price, id: Math.random().toString(36).slice(2) };
     drawings.value.push(draw);
     drawingManager?.addPriceLine(price, 'rgba(240, 185, 11, 0.5)', 'Level');
 };
@@ -498,15 +468,7 @@ const addHorizontalLine = (price: number) => {
 const handleFibClick = (price: number, time: any) => {
     if (!fibStart.value) fibStart.value = { price, time };
     else {
-        const drawing: Drawing = { 
-            type: 'fib', 
-            id: Math.random().toString(36).slice(2),
-            points: [
-                { price: fibStart.value.price, time: fibStart.value.time },
-                { price, time }
-            ] 
-        };
-        drawings.value.push(drawing);
+        drawings.value.push({ type: 'fib', points: [fibStart.value, { price, time }] });
         fibStart.value = null; setGlobalTool('none'); scheduleHeatmap();
     }
 };
@@ -514,15 +476,7 @@ const handleFibClick = (price: number, time: any) => {
 const handleTrendClick = (price: number, time: any) => {
     if (!trendStart.value) trendStart.value = { price, time };
     else {
-        const drawing: Drawing = { 
-            type: 'trend', 
-            id: Math.random().toString(36).slice(2),
-            points: [
-                { price: trendStart.value.price, time: trendStart.value.time },
-                { price, time }
-            ] 
-        };
-        drawings.value.push(drawing);
+        drawings.value.push({ type: 'trend', points: [trendStart.value, { price, time }] });
         trendStart.value = null; setGlobalTool('none'); scheduleHeatmap();
     }
 };
@@ -535,8 +489,6 @@ onMounted(async () => {
     );
 
     ohlcvWorker.onmessage = ({ data }) => {
-        if (isUnmounted || data.requestId !== latestIndicatorRequestId) return;
-        
         if (data.type === 'indicators_ready') {
             if (data.ema && emaSeries) emaSeries.setData(data.ema);
             if (data.rsi && rsiSeries) rsiSeries.setData(data.rsi);
@@ -544,6 +496,15 @@ onMounted(async () => {
                 bbUpperSeries?.setData(data.bollinger.upper);
                 bbMiddleSeries?.setData(data.bollinger.middle);
                 bbLowerSeries?.setData(data.bollinger.lower);
+            }
+            if (data.macd) {
+                macdLineSeries?.setData(data.macd.macd);
+                macdSignalSeries?.setData(data.macd.signal);
+                const coloredHist = data.macd.histogram.map((d: any) => ({
+                    ...d,
+                    color: d.value >= 0 ? '#26A69A' : '#EF5350'
+                }));
+                macdHistSeries?.setData(coloredHist);
             }
         }
     };
@@ -564,31 +525,33 @@ onMounted(async () => {
 
     internalSubscribe();
     if (chartContainer.value) {
+        let resizeTimeout: number | undefined;
         resizeObserver = new ResizeObserver(() => {
-            if (chart && chartContainer.value) {
-                chart.applyOptions({ width: chartContainer.value.clientWidth, height: chartContainer.value.clientHeight });
-                scheduleHeatmap();
-            }
+            if (resizeTimeout) cancelAnimationFrame(resizeTimeout);
+            resizeTimeout = requestAnimationFrame(() => {
+                if (chart && chartContainer.value) {
+                    chart.applyOptions({ width: chartContainer.value.clientWidth, height: chartContainer.value.clientHeight });
+                    scheduleHeatmap();
+                }
+            });
         });
         resizeObserver.observe(chartContainer.value);
     }
 });
 
 onUnmounted(() => {
-    isUnmounted = true;
     disconnectKline?.();
     disconnectTrades?.();
     if (ohlcvWorker) ohlcvWorker.terminate();
     if (resizeObserver) resizeObserver.disconnect();
-    if (heatmapRafId) cancelAnimationFrame(heatmapRafId);
-    
+    if (heatmapRafId) {
+        cancelAnimationFrame(heatmapRafId);
+        heatmapRafId = null;
+    }
     if (chart) {
         chart.remove();
         chart = null;
     }
-    
-    footprintDataMap.value.clear();
-    recentTrades.value = [];
 });
 
 watch(() => props.symbol, () => { updateChartData(); internalSubscribe(); }, { flush: 'sync' });
@@ -684,9 +647,9 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
     <ChartLegend :data="lastPriceData" />
 
     <div class="flex-grow flex relative overflow-hidden bg-transparent">
-        <div class="flex-grow relative h-full overflow-hidden" style="width: 898px;">
-            <canvas ref="heatmapCanvas" class="absolute inset-0 pointer-events-none z-10 w-full h-full"></canvas>
-            <div ref="chartContainer" class="absolute inset-0" style="height: 450px;"></div>
+        <div class="flex-grow relative h-full overflow-hidden w-full">
+            <canvas :id="`heatmap-${panelId}`" class="absolute inset-0 pointer-events-none z-10 w-full h-full"></canvas>
+            <div ref="chartContainer" class="absolute inset-0 w-full h-full"></div>
         </div>
         <transition enter-active-class="transition-all duration-300 ease-out" enter-from-class="translate-x-full opacity-0" enter-to-class="translate-x-0 opacity-100" leave-active-class="transition-all duration-300 ease-in" leave-from-class="translate-x-0 opacity-100" leave-to-class="translate-x-full opacity-0">
             <TimeAndSales v-if="showTape" :trades="recentTrades" :minLargeTrade="footprintSettings.minTradeFilter" class="shrink-0 z-20" />
