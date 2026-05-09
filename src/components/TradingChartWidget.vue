@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { activePositions, selectedPrice, openOrders, alerts, createAlert, currentPrice, sharedSlPrice, isRiskModeActive, chartInterval } from '../store/tradeStore';
 import { globalSymbol, workspacePanels, activeTool, setGlobalTool, updateGlobalInterval } from '../store/workspaceStore';
 import { IChartApi, ISeriesApi, CandlestickData, Time, CandlestickSeries, LineSeries, HistogramSeries, IPriceLine, createChart } from 'lightweight-charts';
@@ -27,7 +27,15 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:symbol', 'update:interval', 'update:isSynced', 'remove']);
 
-const { allCandles, lastPriceData, fetchKlines, subscribeKline, subscribeTrades } = useChartData();
+const { 
+    allCandles, 
+    lastPriceData, 
+    fetchKlines, 
+    subscribeKline, 
+    subscribeTrades,
+    currentState,
+    lastError
+} = useChartData();
 
 const chartContainer = ref<HTMLDivElement | null>(null);
 let chart: IChartApi | null = null;
@@ -61,8 +69,8 @@ const hoveredCell = ref<any>(null);
 const tooltipPosition = ref({ x: 0, y: 0 });
 const showFootprintSettings = ref(false);
 
-const isLoading = ref(true);
-const hasError = ref(false);
+const isLoading = computed(() => currentState.value === 'FETCHING' || currentState.value === 'PROCESSING');
+const hasError = computed(() => currentState.value === 'FAILURE');
 const isEmpty = ref(false);
 
 watch(footprintSettings, () => {
@@ -322,38 +330,29 @@ const renderAILevels = (ctx: CanvasRenderingContext2D) => {
 const updateChartData = async () => {
     if (!candleSeries || !volumeSeries || !lineSeries || !chart) return;
     
-    try {
-        isLoading.value = true;
-        hasError.value = false;
-        isEmpty.value = false;
+    isEmpty.value = false;
 
-        const data = await fetchKlines(props.symbol, props.interval);
-        
-        if (!data || !data.candlestick || data.candlestick.length === 0) {
-            isEmpty.value = true;
-            isLoading.value = false;
-            return;
-        }
-
-        if (!chart) return;
-        candleSeries.setData(data.candlestick);
-        volumeSeries.setData(data.volume);
-        lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
-        updateIndicators(data.candlestick);
-        footprintDataMap.value.clear();
-        let prevFp: any = null;
-        data.candlestick.forEach((c, idx) => {
-            const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
-            footprintDataMap.value.set(c.time as number, fp);
-            prevFp = fp;
-        });
-        if (chart) chart.timeScale().fitContent();
-    } catch(err) {
-        console.error("Failed to fetch klines:", err);
-        hasError.value = true;
-    } finally {
-        isLoading.value = false;
+    // fetchKlines now internally handles currentState and retry logic
+    const data = await fetchKlines(props.symbol, props.interval);
+    
+    if (!data || !data.candlestick || data.candlestick.length === 0) {
+        isEmpty.value = true;
+        return;
     }
+
+    if (!chart) return;
+    candleSeries.setData(data.candlestick);
+    volumeSeries.setData(data.volume);
+    lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
+    updateIndicators(data.candlestick);
+    footprintDataMap.value.clear();
+    let prevFp: any = null;
+    data.candlestick.forEach((c, idx) => {
+        const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
+        footprintDataMap.value.set(c.time as number, fp);
+        prevFp = fp;
+    });
+    if (chart) chart.timeScale().fitContent();
 };
 
 let disconnectKline: (() => void) | null = null;
