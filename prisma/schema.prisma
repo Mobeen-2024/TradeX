@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Strategy {
+  id              String   @id @default(uuid())
+  name            String
+  type            String
+  status          String   // RUNNING, PAUSED, ERROR
+  roi             Float    @default(0)
+  trades          Int      @default(0)
+  winRate         Float    @default(0)
+  pnlUsdt         Float    @default(0)
+  alloc           Float
+  pairs           String[]
+  nodes           Json?    // VueFlow nodes
+  edges           Json?    // VueFlow edges
+  settings        Json?    // Strategy-specific settings
+  errorCount      Int      @default(0)
+  signalsProcessed Int     @default(0)
+  lastPing        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  logs            ExecutionLog[]
+  positions       Position[]
+}
+
+model Position {
+  id              String   @id @default(uuid())
+  strategyId      String?
+  pair            String
+  type            String   // LONG, SHORT
+  leverage        Int      @default(1)
+  size            Float
+  cost            Float
+  entry           Float
+  mark            Float    @default(0)
+  pnl             Float?
+  status          String   @default("OPEN") // OPEN, CLOSED
+  openedAt        DateTime @default(now())
+  closedAt        DateTime?
+  strategy        Strategy? @relation(fields: [strategyId], references: [id])
+}
+
+model ExecutionLog {
+  id              String   @id @default(uuid())
+  strategyId      String
+  level           String   // INFO, EXEC, ERROR, WARN
+  message         String
+  nodeId          String?
+  data            Json?
+  timestamp       DateTime @default(now())
+  strategy        Strategy @relation(fields: [strategyId], references: [id])
+}
+
+model AiAdvisory {
+  id              String   @id @default(uuid())
+  strategyId      String
+  type            String   // RISK_ALERT, OPTIMIZATION, OPPORTUNITY
+  severity        String   // low, medium, high
+  message         String
+  suggestion      String?
+  impact          String?
+  timestamp       DateTime @default(now())
+  isApplied       Boolean  @default(false)
+}

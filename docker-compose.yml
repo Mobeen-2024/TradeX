@@ -22,6 +22,18 @@ services:
       QDB_CAIRO_COMMIT_LAG: 1000
       QDB_CAIRO_MAX_UNCOMMITTED_ROWS: 100000
 
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: tradex
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   app:
     build: .
     restart: unless-stopped
@@ -39,3 +51,4 @@ services:
 volumes:
   redis_data:
   questdb_data:
+  postgres_data:

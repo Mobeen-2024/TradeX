@@ -1,4 +1,5 @@
 import { executeWorkflow } from './engine.ts';
+import { stateSyncManager } from '../stateSyncManager.ts';
 
 // In-Memory Queue Simulation since Redis is unavailable in this environment
 interface Job {
@@ -51,5 +52,18 @@ export const workflowWorker = new MockWorker('workflow_queue', async (job: Job) 
 workflowQueue.worker = workflowWorker;
 
 export async function submitWorkflow(workflowId: string, nodes: any[], edges: any[], settings: any) {
+  // Snapshot before queuing
+  await stateSyncManager.snapshotStrategy({
+    id: workflowId,
+    name: settings.name || `Workflow ${workflowId}`,
+    type: 'Node Workflow',
+    status: 'RUNNING',
+    nodes,
+    edges,
+    settings,
+    alloc: settings.alloc || 0,
+    createdAt: Date.now()
+  });
+
   await workflowQueue.add('execute', { workflowId, nodes, edges, settings });
 }

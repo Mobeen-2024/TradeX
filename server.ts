@@ -24,6 +24,9 @@ import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.ts';
 import { startAIAnalytics } from './src/lib/aiAnalytics.ts';
 import { circuitBreakers } from './src/lib/circuitBreaker.ts';
 import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSchema } from './src/lib/schemas.ts';
+import { bootManager } from './src/lib/bootManager.ts';
+import { persistenceService } from './src/lib/persistenceService.ts';
+import { stateSyncManager } from './src/lib/stateSyncManager.ts';
 import { z } from 'zod';
 
 async function start() {
@@ -38,6 +41,10 @@ async function start() {
 
   await fastify.register(fastifyWebsocket);
   await fastify.register(middie);
+
+  // ── Start Persistence & Hydration ──────────────────────────
+  await bootManager.hydrateRuntime();
+  persistenceService.start();
 
   const isProd = process.env.NODE_ENV === 'production';
   const clients = new Set<any>();
@@ -308,6 +315,18 @@ async function start() {
     try {
       const { type, config } = request.body as any;
       const workerId = await workerManager.start(type, config);
+      
+      // Snapshot strategy metadata
+      await stateSyncManager.snapshotStrategy({
+        id: workerId,
+        name: config.name || type,
+        type,
+        status: 'RUNNING',
+        alloc: config.alloc || 0,
+        pairs: [config.symbol || 'BTCUSDT'],
+        createdAt: Date.now()
+      });
+
       return { success: true, workerId };
     } catch (e: any) {
       return reply.status(500).send({ error: e.message });
