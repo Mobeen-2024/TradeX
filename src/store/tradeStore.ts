@@ -22,6 +22,7 @@ export const activePositions = ref<{
   pnlPercent?: number;
   tp?: number;
   sl?: number;
+  liqPrice?: number;
   time?: number;
 }[]>([]);
 

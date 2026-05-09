@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { activePositions, closePosition } from '../store/tradeStore';
+import { activePositions, closePosition, currentPrice } from '../store/tradeStore';
 import { cn } from '../lib/utils';
-import { Activity, X, TrendingUp, TrendingDown, Target, Shield, Info, ArrowUpRight, ArrowDownRight } from 'lucide-vue-next';
+import { Activity, X, TrendingUp, TrendingDown, Target, Shield, Info, ArrowUpRight, ArrowDownRight, Settings2 } from 'lucide-vue-next';
 
 const formatNum = (num: number, decimals: number = 2) => 
   num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -19,11 +19,15 @@ const handleClose = (id: string) => {
 };
 
 const getPnlColor = (pnl: number) => pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]';
-const getPnlBg = (pnl: number) => pnl >= 0 ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20';
 
 const calculatePnl = (pos: any) => {
-  const pnl = (pos.markPrice - pos.entryPrice) * pos.size * (pos.side === 'Long' ? 1 : -1);
-  const pnlPercent = (pnl / (pos.entryPrice * pos.size / parseFloat(pos.leverage))) * 100;
+  if (pos.pnl !== undefined && pos.pnlPercent !== undefined) {
+    return { pnl: pos.pnl, pnlPercent: pos.pnlPercent };
+  }
+  const mark = pos.mark || currentPrice.value;
+  const entry = pos.entry;
+  const pnl = (mark - entry) * pos.size * (pos.type === 'LONG' ? 1 : -1);
+  const pnlPercent = (pnl / (entry * pos.size / parseFloat(pos.leverage))) * 100;
   return { pnl, pnlPercent };
 };
 </script>
@@ -53,14 +57,14 @@ const calculatePnl = (pos: any) => {
               <div class="flex flex-col gap-1">
                 <div class="flex items-center gap-2">
                    <span class="text-sm font-black text-white">BTC/USDT</span>
-                   <span :class="cn('px-1.5 py-0.5 rounded text-[9px] font-black tracking-tight border', pos.side === 'Long' ? 'text-[#0ecb81] border-[#0ecb81]/20 bg-[#0ecb81]/10' : 'text-[#f6465d] border-[#f6465d]/20 bg-[#f6465d]/10')">
-                     {{ pos.leverage }}x
+                   <span :class="cn('px-1.5 py-0.5 rounded text-[9px] font-black tracking-tight border', pos.type === 'LONG' ? 'text-[#0ecb81] border-[#0ecb81]/20 bg-[#0ecb81]/10' : 'text-[#f6465d] border-[#f6465d]/20 bg-[#f6465d]/10')">
+                     {{ pos.leverage }}
                    </span>
                 </div>
                 <div class="flex items-center gap-1.5">
-                   <ArrowUpRight v-if="pos.side === 'Long'" class="w-3 h-3 text-[#0ecb81]" />
+                   <ArrowUpRight v-if="pos.type === 'LONG'" class="w-3 h-3 text-[#0ecb81]" />
                    <ArrowDownRight v-else class="w-3 h-3 text-[#f6465d]" />
-                   <span :class="cn('text-[10px] font-bold uppercase tracking-wider', pos.side === 'Long' ? 'text-[#0ecb81]' : 'text-[#f6465d]')">{{ pos.side }}</span>
+                   <span :class="cn('text-[10px] font-bold uppercase tracking-wider', pos.type === 'LONG' ? 'text-[#0ecb81]' : 'text-[#f6465d]')">{{ pos.type === 'LONG' ? 'Long' : 'Short' }}</span>
                 </div>
               </div>
             </td>
@@ -69,27 +73,27 @@ const calculatePnl = (pos: any) => {
             <td class="px-4 py-4">
                <div class="flex flex-col gap-0.5">
                   <span class="text-sm font-bold text-[#EAECEF]">{{ pos.size }} BTC</span>
-                  <span class="text-[9px] text-[#848e9c] font-mono">${{ formatNum(pos.size * pos.entryPrice, 0) }}</span>
+                  <span class="text-[9px] text-[#848e9c] font-mono">${{ formatNum(pos.size * pos.entry, 0) }}</span>
                </div>
             </td>
 
             <!-- Entry / Mark -->
             <td class="px-4 py-4 text-right">
                <div class="flex flex-col items-end gap-0.5">
-                  <span class="text-sm font-mono font-black text-white">${{ formatNum(pos.entryPrice) }}</span>
-                  <span class="text-[10px] font-mono font-bold text-[#0ecb81]">${{ formatNum(pos.markPrice) }}</span>
+                  <span class="text-sm font-mono font-black text-white">${{ formatNum(pos.entry) }}</span>
+                  <span class="text-[10px] font-mono font-bold text-[#0ecb81]">${{ formatNum(pos.mark || currentPrice) }}</span>
                </div>
             </td>
 
             <!-- Liq. Price -->
             <td class="px-4 py-4 text-right">
-               <span class="text-sm font-mono font-black text-[#F0B90B]">${{ formatNum(pos.liqPrice || pos.entryPrice * 0.85) }}</span>
+               <span class="text-sm font-mono font-black text-[#F0B90B]">${{ formatNum(pos.liqPrice || pos.entry * 0.85) }}</span>
             </td>
 
             <!-- Margin / Ratio -->
             <td class="px-4 py-4 text-right">
                <div class="flex flex-col items-end gap-1">
-                  <span class="text-sm font-bold text-[#EAECEF]">${{ formatNum(pos.entryPrice * pos.size / parseFloat(pos.leverage)) }}</span>
+                  <span class="text-sm font-bold text-[#EAECEF]">${{ formatNum(pos.entry * pos.size / parseFloat(pos.leverage)) }}</span>
                   <div class="w-16 h-1 bg-white/5 rounded-full overflow-hidden border border-white/5">
                      <div class="h-full bg-[#0ecb81] rounded-full" style="width: 12%"></div>
                   </div>
