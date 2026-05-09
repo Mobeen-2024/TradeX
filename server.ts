@@ -49,6 +49,20 @@ async function start() {
     }
   });
 
+  const { setWorkflowBroadcast, submitWorkflow } = await import('./src/lib/workflow/orchestrator.ts').then(async (m) => {
+    const engineModule = await import('./src/lib/workflow/engine.ts');
+    return {
+      setWorkflowBroadcast: engineModule.setWorkflowBroadcast,
+      submitWorkflow: m.submitWorkflow
+    };
+  });
+
+  setWorkflowBroadcast((payload: string) => {
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
+
   // ── Start Background Services ──────────────────────────────
   // (AI Analytics is now handled by workerManager at the bottom of the file)
 
@@ -397,6 +411,8 @@ async function start() {
         } else if (data.type === 'close_position') {
           await deletePosition(data.id);
           workerManager.postMessageToAll({ type: 'mock_sync', key: KEYS.positions, value: await getPositions() });
+        } else if (data.type === 'execute_workflow') {
+          await submitWorkflow(data.workflowId, data.nodes, data.edges, data.settings);
         }
       } catch (e) {
         console.error('Error handling WS message:', e);
