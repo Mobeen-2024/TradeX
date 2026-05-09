@@ -5,6 +5,7 @@ import {
   Activity, CheckCircle2, XCircle, ChevronRight, TriangleAlert
 } from 'lucide-vue-next';
 import { cn } from '../../lib/utils';
+import { triggerMacro as triggerMacroAction } from '../../store/strategyStore';
 
 interface Macro {
   id: string;
@@ -27,7 +28,7 @@ const macros: Macro[] = [
 
 const executionState = ref<Record<string, 'idle' | 'confirm' | 'executing' | 'success' | 'error'>>({});
 
-const triggerMacro = (id: string, requiresConfirm: boolean) => {
+const triggerMacro = async (id: string, requiresConfirm: boolean) => {
   if (requiresConfirm && executionState.value[id] !== 'confirm') {
     executionState.value[id] = 'confirm';
     return;
@@ -35,15 +36,19 @@ const triggerMacro = (id: string, requiresConfirm: boolean) => {
   
   executionState.value[id] = 'executing';
   
-  // Simulate API call for execution
-  setTimeout(() => {
+  const success = await triggerMacroAction(id);
+  
+  if (success) {
     executionState.value[id] = 'success';
-    
-    // Reset back to idle after a few seconds
     setTimeout(() => {
        executionState.value[id] = 'idle';
     }, 3000);
-  }, 1500);
+  } else {
+    executionState.value[id] = 'error';
+    setTimeout(() => {
+       executionState.value[id] = 'idle';
+    }, 3000);
+  }
 };
 
 const cancelConfirm = (id: string, e: Event) => {

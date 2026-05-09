@@ -13,6 +13,8 @@ import AnimatedEdge from '../modules/strategy-engine/edges/AnimatedEdge.vue';
 import { Play, Square, Settings2, X, Plus, Locate, ZoomIn, ZoomOut, MousePointer2, Move } from 'lucide-vue-next';
 import InspectorPanel from './InspectorPanel.vue';
 import CommandPalette from './CommandPalette.vue';
+import { nodeExecutionMap, strategies, logRuntimeEvent } from '../store/strategyStore';
+import { watch } from 'vue';
 
 const { project, onNodeClick, onPaneClick, fitView, zoomIn, zoomOut } = useVueFlow();
 
@@ -117,11 +119,48 @@ function connectWs() {
   };
 }
 
+const props = defineProps<{
+  strategyId?: string;
+}>();
+
+// Sync store runtime state to visual nodes
+watch(() => nodeExecutionMap.value[props.strategyId || ''], (runtimeState) => {
+  if (!runtimeState) return;
+  
+  nodes.value = nodes.value.map(node => {
+    const state = runtimeState[node.id];
+    if (state) {
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          status: state.status,
+          latency: state.latency,
+          outputs: state.output,
+          lastExecution: state.lastExecution
+        }
+      };
+    }
+    return node;
+  });
+}, { deep: true });
+
 function updateNodeState(nodeId: string, status: string, outputs: any, logs: string[], latency: number) {
   const node = nodes.value.find(n => n.id === nodeId);
   if (node) {
-    node.data = { ...node.data, status, outputs, logs, latency };
-    nodes.value = [...nodes.value];
+    // If we have a strategy context, update the central runtime engine
+    if (props.strategyId) {
+      const { updateNodeExecution } = require('../store/strategyStore');
+      updateNodeExecution(props.strategyId, nodeId, {
+        status: status as any,
+        latency,
+        output: outputs
+      });
+    } else {
+      // Fallback for isolated testing
+      node.data = { ...node.data, status, outputs, logs, latency };
+      nodes.value = [...nodes.value];
+    }
     
     const allDone = nodes.value.every(n => n.data?.status === 'success' || n.data?.status === 'failed' || n.data?.status === 'idle');
     if (status === 'success' || status === 'failed') {

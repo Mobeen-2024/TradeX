@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { activePositions } from '../../store/tradeStore';
+import { activePositions, closePosition, currentPrice } from '../../store/tradeStore';
 import { TrendingUp, TrendingDown, Target, Activity, Share2, Expand, X, Shield, Clock } from 'lucide-vue-next';
 import { cn } from '../../lib/utils';
 
@@ -139,7 +139,9 @@ const getPnlBg = (val: number) => {
              <button class="w-10 h-10 flex items-center justify-center rounded-xl bg-[#0a0c10] border border-white/10 hover:border-white/30 hover:bg-white/5 transition-all group/btn" title="Share PNL">
                <Share2 class="w-4 h-4 text-white/60 group-hover/btn:text-white" />
              </button>
-             <button class="px-5 py-2.5 rounded-xl border border-[#f6465d]/20 bg-[#f6465d]/10 hover:bg-[#f6465d] hover:text-white text-[#f6465d] text-xs font-black tracking-widest uppercase transition-all shadow-[0_0_15px_rgba(246,70,93,0)] hover:shadow-[0_0_20px_rgba(246,70,93,0.4)] flex items-center gap-2">
+             <button 
+                @click="closePosition(pos.id)"
+                class="px-5 py-2.5 rounded-xl border border-[#f6465d]/20 bg-[#f6465d]/10 hover:bg-[#f6465d] hover:text-white text-[#f6465d] text-xs font-black tracking-widest uppercase transition-all shadow-[0_0_15px_rgba(246,70,93,0)] hover:shadow-[0_0_20px_rgba(246,70,93,0.4)] flex items-center gap-2">
                Close <X class="w-4 h-4" />
              </button>
           </div>

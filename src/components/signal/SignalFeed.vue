@@ -4,6 +4,7 @@ import { BrainCircuit, Activity, ArrowRight, Zap, Target, TrendingUp, TrendingDo
 import { cn } from '../../lib/utils';
 import { aiAlerts } from '../../store/aiStore';
 import { currentPrice } from '../../store/tradeStore';
+import { executeSignal } from '../../store/strategyStore';
 
 // UI States
 const isScanning = ref(true);
@@ -136,18 +137,21 @@ const handleAnalyze = (id: string) => {
   }, 2000);
 };
 
-const handleExecute = (id: string) => {
+const handleExecute = async (id: string) => {
   if (executeState.value[id] !== 'idle') return;
+  
+  const signal = aiSignals.value.find(s => s.id === id);
+  if (!signal) return;
+
   executeState.value[id] = 'executing';
-  setTimeout(() => {
-    // 90% chance of success
-    executeState.value[id] = Math.random() > 0.1 ? 'success' : 'error';
-    
-    // Auto reset error state
-    if (executeState.value[id] === 'error') {
-       setTimeout(() => { executeState.value[id] = 'idle'; }, 3000);
-    }
-  }, 1500);
+  
+  const success = await executeSignal(signal);
+  
+  executeState.value[id] = success ? 'success' : 'error';
+  
+  if (!success) {
+    setTimeout(() => { executeState.value[id] = 'idle'; }, 3000);
+  }
 };
 
 </script>

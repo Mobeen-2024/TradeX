@@ -24,6 +24,7 @@ import {
   activeStrategies,
   Strategy,
   StrategyStatus,
+  toggleStrategyState
 } from "../../store/strategyStore";
 
 const isLoading = ref(true);
@@ -83,35 +84,26 @@ const getStatusGlow = (status: StrategyStatus) => {
   }
 };
 
-const toggleStrategy = (strategy: Strategy) => {
+const toggleStrategy = async (strategy: Strategy) => {
   if (executionStates.value[strategy.id] !== "idle") return;
 
   executionStates.value[strategy.id] = "toggling";
 
-  setTimeout(() => {
-    // 90% success rate mock
-    const success = Math.random() > 0.1;
-    if (success) {
-      executionStates.value[strategy.id] = "success";
-      strategy.status = strategy.status === "running" ? "paused" : "running";
-      if (strategy.status === "running") strategy.lastPing = "15ms";
-      else strategy.lastPing = "Offline";
-
-      eventBus.publish("strategy_status_change", {
-        id: strategy.id,
-        status: strategy.status,
-      });
-
-      setTimeout(() => {
-        executionStates.value[strategy.id] = "idle";
-      }, 1000);
-    } else {
-      executionStates.value[strategy.id] = "failed";
-      setTimeout(() => {
-        executionStates.value[strategy.id] = "idle";
-      }, 2000);
-    }
-  }, 1000);
+  try {
+    await toggleStrategyState(strategy.id);
+    executionStates.value[strategy.id] = "success";
+    
+    eventBus.publish("strategy_status_change", {
+      id: strategy.id,
+      status: strategy.status,
+    });
+  } catch (err) {
+    executionStates.value[strategy.id] = "failed";
+  } finally {
+    setTimeout(() => {
+      executionStates.value[strategy.id] = "idle";
+    }, 1500);
+  }
 };
 
 const emits = defineEmits(["openStrategy"]);

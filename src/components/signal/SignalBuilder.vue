@@ -28,6 +28,7 @@ import {
   addStrategy,
   updateStrategy,
   activeStrategies,
+  toggleStrategyState
 } from "../../store/strategyStore";
 
 const props = defineProps<{
@@ -73,43 +74,57 @@ onMounted(() => {
   }
 });
 
-const saveStrategy = () => {
-  if (isSaving.value) return;
+const saveStrategy = async (): Promise<string | null> => {
+  if (isSaving.value) return null;
   isSaving.value = true;
 
-  // Simulate API delay
-  setTimeout(() => {
-    const nodes = workflowRef.value?.nodes || [];
-    const edges = workflowRef.value?.edges || [];
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const nodes = workflowRef.value?.nodes || [];
+      const edges = workflowRef.value?.edges || [];
+      let finalId = props.strategyId;
 
-    if (props.strategyId === "new") {
-      const newId = Math.random().toString(36).substring(7);
-      addStrategy({
-        id: newId,
-        name: currentName.value,
-        type: "Custom AI",
-        status: "paused",
-        roi: 0,
-        trades: 0,
-        winRate: 0,
-        pnlUsdt: 0,
-        alloc: 10000,
-        pairs: ["BTC/USDT"],
-        lastPing: "Offline",
-        nodes,
-        edges,
-      });
-      emits("close"); // Close on save for 'new'
-    } else if (props.strategyId) {
-      updateStrategy(props.strategyId, {
-        name: currentName.value,
-        nodes,
-        edges,
-      });
-    }
+      if (props.strategyId === "new") {
+        finalId = "agent_" + Math.random().toString(36).substring(7);
+        addStrategy({
+          id: finalId,
+          name: currentName.value,
+          type: "Custom AI",
+          status: "paused",
+          roi: 0,
+          trades: 0,
+          winRate: 0,
+          pnlUsdt: 0,
+          alloc: 10000,
+          pairs: ["BTC/USDT"],
+          lastPing: "Offline",
+          nodes,
+          edges,
+        });
+      } else if (props.strategyId) {
+        updateStrategy(props.strategyId, {
+          name: currentName.value,
+          nodes,
+          edges,
+        });
+      }
 
-    isSaving.value = false;
-  }, 800);
+      isSaving.value = false;
+      resolve(finalId);
+    }, 800);
+  });
+};
+
+const handleDeploy = async () => {
+  const strategyId = await saveStrategy();
+  if (!strategyId) return;
+
+  try {
+    await toggleStrategyState(strategyId);
+    emits("close");
+  } catch (err) {
+    console.error("Failed to deploy strategy:", err);
+  }
 };
 
 const loadTemplate = (id: string) => {
@@ -458,7 +473,7 @@ const loadTemplate = (id: string) => {
             class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+PHBhdGggZD0iTTAgMGg0MHY0MEgweiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0wIDIwaDQwTTAgNDBoNDBNMjAgMHY0ME00MCAwdjQwIiBzdHJva2U9InJnYmEoMjU1LDI1NSwyNTUsMC4wMykiIHN0cm9rZS13aWR0aD0iMSIvPjwvc3ZnPg==')] pointer-events-none opacity-30 group-hover:opacity-60 transition-opacity duration-1000"
           ></div>
 
-          <WorkflowEditor ref="workflowRef" class="relative z-10" />
+          <WorkflowEditor ref="workflowRef" :strategy-id="strategyId" class="relative z-10" />
         </div>
 
         <!-- Bottom Dock -->
@@ -674,11 +689,11 @@ const loadTemplate = (id: string) => {
         </div>
       </div>
 
-      <!-- Drawer Footer Actions -->
       <div
         class="p-5 border-t border-white/5 bg-gradient-to-t from-black/50 to-transparent"
       >
         <button
+          @click="handleDeploy"
           class="w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all duration-300 shadow-xl flex items-center justify-center gap-2 hover:-translate-y-0.5"
           :class="
             executionMode === 'live'
