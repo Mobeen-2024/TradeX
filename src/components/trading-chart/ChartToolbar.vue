@@ -51,9 +51,9 @@ const macroIntervals = ['1H', '2H', '4H', '6H', '8H', '12H', '1D', '3D', '1W', '
 
 <template>
   <div class="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-gradient-to-r from-[#0C0E14]/90 via-[#11141A]/90 to-[#0C0E14]/90 backdrop-blur-xl relative z-30">
-    <div class="flex items-center gap-4 overflow-hidden" style="width: 490px; height: 36.28px;">
+    <div class="flex items-center gap-4 overflow-hidden flex-1">
       <!-- Resolution Strip (Liquid glass) -->
-      <div class="flex items-center gap-1 bg-white/[0.02] backdrop-blur-2xl rounded-xl p-1 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] border border-white-[0.05] shrink-0" style="width: 161.66px; height: 28px;">
+      <div class="flex items-center gap-1 bg-white/[0.02] backdrop-blur-2xl rounded-xl p-1 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] border border-white-[0.05] shrink-0">
         <div class="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 px-1">
           <button 
             v-for="int in intervals.slice(0, 5)" 
@@ -81,7 +81,7 @@ const macroIntervals = ['1H', '2H', '4H', '6H', '8H', '12H', '1D', '3D', '1W', '
       <div class="w-px h-5 bg-gradient-to-b from-transparent via-white/10 to-transparent shrink-0"></div>
 
       <!-- Chart Type Selection -->
-      <div class="flex items-center gap-1 shrink-0 bg-white/[0.02] rounded-xl p-1 border border-white-[0.05]" style="width: 68px; height: 28px;">
+      <div class="flex items-center gap-1 shrink-0 bg-white/[0.02] rounded-xl p-1 border border-white-[0.05]">
         <button 
           @click="$emit('update:chartType', 'candle')"
           :class="cn(
@@ -150,7 +150,7 @@ const macroIntervals = ['1H', '2H', '4H', '6H', '8H', '12H', '1D', '3D', '1W', '
         <!-- Indicators Group -->
         <div class="hidden lg:flex items-center gap-1 bg-white/[0.02] rounded-xl border border-white-[0.05] p-1">
           <button 
-            v-for="ind in ['EMA', 'RSI', 'BOLL']"
+            v-for="ind in ['EMA', 'RSI', 'BOLL', 'MACD']"
             :key="ind"
             @click="$emit('toggleIndicator', ind)"
             :class="cn(
