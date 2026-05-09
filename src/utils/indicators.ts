@@ -96,3 +96,55 @@ export function calculateBollingerBands(data: CandlestickData[], period: number,
 
     return { upper, middle, lower };
 }
+
+/**
+ * Calculates MACD
+ */
+export function calculateMACD(data: CandlestickData[], fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+    const macdSeries: IndicatorData[] = [];
+    const signalSeries: IndicatorData[] = [];
+    const histogramSeries: IndicatorData[] = [];
+
+    if (data.length <= slowPeriod) return { macdSeries, signalSeries, histogramSeries };
+
+    const fastEma = calculateEMA(data, fastPeriod);
+    const slowEma = calculateEMA(data, slowPeriod);
+
+    const fastMap = new Map();
+    fastEma.forEach(d => fastMap.set(d.time, d.value));
+
+    const macdDataRaw: CandlestickData[] = [];
+
+    slowEma.forEach(slowD => {
+        const fastVal = fastMap.get(slowD.time);
+        if (fastVal !== undefined) {
+            const macdDiff = fastVal - slowD.value;
+            macdSeries.push({ time: slowD.time, value: parseFloat(macdDiff.toFixed(4)) });
+            macdDataRaw.push({ time: slowD.time, close: macdDiff } as any);
+        }
+    });
+
+    const signalData = calculateEMA(macdDataRaw, signalPeriod);
+    const signalMap = new Map();
+    signalData.forEach(d => signalMap.set(d.time, d.value));
+
+    macdSeries.forEach(macd => {
+        const sigVal = signalMap.get(macd.time);
+        if (sigVal !== undefined) {
+            signalSeries.push({ time: macd.time, value: sigVal });
+            histogramSeries.push({
+                time: macd.time,
+                value: parseFloat((macd.value - sigVal).toFixed(4))
+            });
+        }
+    });
+
+    const validTimes = new Set(histogramSeries.map(d => d.time as number | string));
+    const finalMacd = macdSeries.filter(d => validTimes.has(d.time as number | string));
+
+    return {
+        macd: finalMacd,
+        signal: signalSeries,
+        histogram: histogramSeries
+    };
+}
