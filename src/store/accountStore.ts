@@ -8,9 +8,9 @@ export interface Balance {
 }
 
 export const balances = ref<Balance[]>([
-  { asset: 'USDT', free: 125000.50, locked: 0 },
-  { asset: 'BTC', free: 0.34545, locked: 0 },
-  { asset: 'ETH', free: 12.345, locked: 0 },
+  { asset: 'USDT', free: 300.00, locked: 0 },
+  { asset: 'BTC', free: 0, locked: 0 },
+  { asset: 'ETH', free: 0, locked: 0 },
 ]);
 
 export interface VaultAccount {
@@ -32,7 +32,7 @@ export const fetchVaultAccounts = async () => {
             vaultAccounts.value = res.data.accounts;
         }
     } catch (e) {
-        console.error('Failed to fetch vault accounts:', e);
+        // Mock fallback if api fails
     }
 };
 

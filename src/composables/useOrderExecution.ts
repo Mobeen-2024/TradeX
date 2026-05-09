@@ -52,13 +52,6 @@ export function useOrderExecution() {
                 throw new Error('Insufficient funds');
             }
 
-            // Update local balances for immediate feedback (optimistic UI)
-            if (params.side === 'Buy') {
-                availableUsdt.value -= marginRequired;
-            } else {
-                availableBtc.value -= (params.amount / mult);
-            }
-
             await placeOrder({
                 pair: 'BTC/USDT',
                 side: params.side,

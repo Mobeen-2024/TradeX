@@ -63,11 +63,20 @@ export const WsUnsubscribeSchema = z.object({
   stream: z.string(),
 }).strict();
 
+export const WsExecuteWorkflowSchema = z.object({
+  type: z.literal('execute_workflow'),
+  workflowId: z.string(),
+  nodes: z.array(z.any()),
+  edges: z.array(z.any()),
+  settings: z.any().optional(),
+});
+
 export const WsMessageSchema = z.discriminatedUnion('type', [
   WsPlaceOrderSchema,
   WsClosePositionSchema,
   WsSubscribeSchema,
   WsUnsubscribeSchema,
+  WsExecuteWorkflowSchema,
 ]);
 
 // ── REST: Vault Account ───────────────────────────────────────────

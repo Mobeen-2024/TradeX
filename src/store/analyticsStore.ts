@@ -18,7 +18,7 @@ export const analyticsData = computed(() => {
     let winningTrades = 0;
     let grossProfit = 0;
     let grossLoss = 0;
-    let currentEquity = 10000; // Starting base for equity curve
+    let currentEquity = 300; // Starting base for equity curve
     const equityCurve: { time: number; value: number }[] = [];
     
     // Initial point

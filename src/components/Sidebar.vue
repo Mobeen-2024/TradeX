@@ -6,7 +6,7 @@ import {
   Crown, 
   HeadphonesIcon, 
   Settings, 
-  Signal, 
+  Signal,
   Trophy, 
   Wallet,
   Pin,
@@ -15,7 +15,6 @@ import {
 import { computed } from 'vue';
 import { cn } from '../lib/utils';
 import { useSidebar } from '../composables/useSidebar';
-import { currentPrice, previousPrice, marketData } from '../store/tradeStore';
 import SidebarProfile from './SidebarProfile.vue';
 import MobileBottomBar from './MobileBottomBar.vue';
 
@@ -31,7 +30,7 @@ const navItems = [
   { icon: BarChart2, label: 'Analytics' },
   { icon: Wallet, label: 'Transactions' },
   { icon: Crown, label: 'Leader Board', badge: 12 },
-  { icon: Signal, label: 'Trading signals', isNew: true },
+  { icon: Signal, label: 'Signal' },
 ];
 
 const activeIndex = computed(() => navItems.findIndex(item => item.label === props.activeItem));
@@ -94,33 +93,8 @@ const activeIndex = computed(() => navItems.findIndex(item => item.label === pro
             </button>
           </div>
 
-          <!-- Mini Ticker -->
-          <div 
-            class="px-4 transition-all duration-300 overflow-hidden"
-            :class="isExpanded ? 'h-10 opacity-100' : 'h-0 opacity-0'"
-          >
-            <div class="flex items-center justify-between bg-[#2b3139]/30 rounded-lg px-2 py-1.5 border border-[#2b3139]">
-              <span class="text-[10px] font-bold text-[#848e9c]">BTC/USDT</span>
-              <span 
-                class="text-xs font-mono font-bold transition-colors duration-300"
-                :class="currentPrice >= previousPrice ? 'text-[#0ECB81]' : 'text-[#f6465d]'"
-              >
-                {{ currentPrice.toLocaleString() }}
-              </span>
-            </div>
-          </div>
-
           <!-- Nav Links -->
           <nav class="flex flex-col px-2 gap-1 shrink-0 relative">
-            <!-- Active Indicator -->
-            <div 
-              class="absolute left-0 w-1 bg-[#F0B90B] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] rounded-r"
-              :style="{ 
-                height: '32px', 
-                top: `${activeIndex * 48 + 6}px`,
-                opacity: activeIndex !== -1 ? 1 : 0
-              }"
-            ></div>
 
             <button
               v-for="(item, index) in navItems"

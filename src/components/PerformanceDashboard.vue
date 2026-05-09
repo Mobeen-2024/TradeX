@@ -105,9 +105,9 @@ const initChart = () => {
 };
 
 const updateChart = () => {
-    if (!areaSeries || !stats.value.equityCurve.length) return;
+    if (!areaSeries || !stats.value.equityCurve.length || !chart) return;
     areaSeries.setData(stats.value.equityCurve as any);
-    chart?.timeScale().fitContent();
+    chart.timeScale().fitContent();
 };
 
 watch(() => stats.value.equityCurve, updateChart, { deep: true });
@@ -130,8 +130,11 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    if (chart) chart.remove();
     if (resizeObserver) resizeObserver.disconnect();
+    if (chart) {
+        chart.remove();
+        chart = null;
+    }
 });
 
 </script>

@@ -58,7 +58,7 @@ const getRotation = (index: number) => {
                 ${{ totalUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
             </div>
             <div class="text-xs text-[#848e9c] flex items-center gap-1">
-                <span class="text-[#0ecb81]">+$1,240.50</span> from last 24h
+                <span class="text-[#0ecb81]">+$1.50</span> from last 24h
             </div>
         </div>
         <div class="flex gap-2">
@@ -123,7 +123,7 @@ const getRotation = (index: number) => {
                     </div>
                     <div>
                         <div class="text-[10px] text-[#848e9c] font-bold uppercase">7D Growth</div>
-                        <div class="text-sm font-mono font-bold text-[#0ecb81]">+$4,821.90</div>
+                        <div class="text-sm font-mono font-bold text-[#0ecb81]">+$21.90</div>
                     </div>
                 </div>
                 <div class="w-16 h-8 flex items-end gap-[1px]">

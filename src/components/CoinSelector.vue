@@ -27,15 +27,14 @@ const formatVolume = (vol: string) => {
 
 const fetchTickers = async () => {
   try {
-    const response = await fetch("https://api.binance.com/api/v3/ticker/24hr");
+    const response = await fetch("https://data-api.binance.vision/api/v3/ticker/24hr");
     if (!response.ok) throw new Error("Failed to fetch");
     const data: BinanceTicker[] = await response.json();
     allPairs.value = data
       .filter((d) => d.symbol.endsWith("USDT"))
       .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume));
   } catch (e) {
-    console.error("Failed to fetch Binance tickers", e);
-    // Fallback data if API is blocked (e.g. CORS)
+    // API might be blocked (e.g., CORS), fallback to mock data
     allPairs.value = [
       { symbol: "BTCUSDT", lastPrice: "75000", priceChangePercent: "2.5", quoteVolume: "2000000000" },
       { symbol: "ETHUSDT", lastPrice: "3800", priceChangePercent: "1.2", quoteVolume: "1000000000" },

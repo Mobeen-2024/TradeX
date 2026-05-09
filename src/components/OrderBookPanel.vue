@@ -152,7 +152,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-xl flex flex-col overflow-hidden flex-1 gpu-glass">
+  <div class="relative bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-xl flex flex-col overflow-hidden flex-1 gpu-glass" style="height: 450px;">
     <!-- Ambient Tinting -->
     <div class="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-emerald-500/5 to-transparent z-0"></div>
     

@@ -95,7 +95,7 @@ const usdtBalance = computed(() => balances.value.find(b => b.asset === 'USDT')?
            </template>
         </div>
         <div class="text-sm text-dash-text-muted">
-           {{ hideBalance ? '****** USD' : '37870,88 USD' }}
+           {{ hideBalance ? '****** USD' : (ethBalance * 3200).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD' }}
         </div>
       </div>
     </div>

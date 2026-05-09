@@ -61,6 +61,10 @@ const hoveredCell = ref<any>(null);
 const tooltipPosition = ref({ x: 0, y: 0 });
 const showFootprintSettings = ref(false);
 
+const isLoading = ref(true);
+const hasError = ref(false);
+const isEmpty = ref(false);
+
 watch(footprintSettings, () => {
     if (allCandles.value.length > 0) updateChartData();
 }, { deep: true });
@@ -316,20 +320,40 @@ const renderAILevels = (ctx: CanvasRenderingContext2D) => {
 };
 
 const updateChartData = async () => {
-    if (!candleSeries || !volumeSeries || !lineSeries) return;
-    const data = await fetchKlines(props.symbol, props.interval);
-    candleSeries.setData(data.candlestick);
-    volumeSeries.setData(data.volume);
-    lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
-    updateIndicators(data.candlestick);
-    footprintDataMap.value.clear();
-    let prevFp: any = null;
-    data.candlestick.forEach((c, idx) => {
-        const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
-        footprintDataMap.value.set(c.time as number, fp);
-        prevFp = fp;
-    });
-    if (chart) chart.timeScale().fitContent();
+    if (!candleSeries || !volumeSeries || !lineSeries || !chart) return;
+    
+    try {
+        isLoading.value = true;
+        hasError.value = false;
+        isEmpty.value = false;
+
+        const data = await fetchKlines(props.symbol, props.interval);
+        
+        if (!data || !data.candlestick || data.candlestick.length === 0) {
+            isEmpty.value = true;
+            isLoading.value = false;
+            return;
+        }
+
+        if (!chart) return;
+        candleSeries.setData(data.candlestick);
+        volumeSeries.setData(data.volume);
+        lineSeries.setData(data.candlestick.map(d => ({ time: d.time, value: d.close })));
+        updateIndicators(data.candlestick);
+        footprintDataMap.value.clear();
+        let prevFp: any = null;
+        data.candlestick.forEach((c, idx) => {
+            const fp = FootprintRenderer.generateMock(c, data.volume[idx].value, footprintSettings.value, prevFp);
+            footprintDataMap.value.set(c.time as number, fp);
+            prevFp = fp;
+        });
+        if (chart) chart.timeScale().fitContent();
+    } catch(err) {
+        console.error("Failed to fetch klines:", err);
+        hasError.value = true;
+    } finally {
+        isLoading.value = false;
+    }
 };
 
 let disconnectKline: (() => void) | null = null;
@@ -486,9 +510,14 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    disconnectKline?.();
+    disconnectTrades?.();
     if (ohlcvWorker) ohlcvWorker.terminate();
     if (resizeObserver) resizeObserver.disconnect();
-    if (chart) chart.remove();
+    if (chart) {
+        chart.remove();
+        chart = null;
+    }
 });
 
 watch(() => props.symbol, () => { updateChartData(); internalSubscribe(); }, { flush: 'sync' });
@@ -506,24 +535,55 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-[#0b0e11]/60 backdrop-blur-md text-[#EAECEF] overflow-hidden select-none border border-white/5 hover:border-[#F0B90B]/30 transition-colors rounded-[16px] m-1 shadow-2xl relative gpu-glass">
+  <div class="flex flex-col h-full bg-[#06080C]/80 backdrop-blur-3xl text-slate-100 overflow-hidden select-none border border-white/[0.08] hover:border-white/[0.15] transition-colors duration-500 rounded-2xl m-1 shadow-[0_8px_32px_rgba(0,0,0,0.4)] relative group">
     
-    <div v-if="hoveredCell && showFootprint" 
-         class="absolute z-50 bg-[#161a1e]/95 backdrop-blur-md border border-white/10 p-2.5 rounded-lg shadow-2xl pointer-events-none text-[10px] min-w-[120px] gpu-overlay"
-         :style="{ left: `${tooltipPosition.x + 15}px`, top: `${tooltipPosition.y + 15}px` }">
-        <div class="flex justify-between border-b border-white/5 pb-1 mb-1">
-            <span class="text-[#848e9c]">Price</span>
-            <span class="font-bold text-[#F0B90B]">{{ hoveredCell.price }}</span>
+    <!-- Loading Overlay -->
+    <div v-if="isLoading" class="absolute inset-0 z-40 bg-[#06080C]/50 backdrop-blur-md flex flex-col items-center justify-center fade-in">
+        <div class="relative w-16 h-16 flex items-center justify-center">
+            <div class="absolute inset-0 rounded-full border-t-2 border-cyan-400 animate-spin opacity-80"></div>
+            <div class="absolute inset-2 rounded-full border-r-2 border-indigo-400 animate-[spin_1.5s_reverse_infinite] opacity-60"></div>
+            <div class="w-2 h-2 bg-white rounded-full animate-pulse shadow-[0_0_10px_white]"></div>
         </div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-            <span class="text-[#848e9c]">Bid Vol</span>
-            <span class="text-right text-[#f6465d]">{{ hoveredCell.bidVolume }}</span>
-            <span class="text-[#848e9c]">Ask Vol</span>
-            <span class="text-right text-[#0ecb81]">{{ hoveredCell.askVolume }}</span>
-            <span class="text-[#848e9c]">Total</span>
-            <span class="text-right font-bold">{{ hoveredCell.totalVolume }}</span>
-            <span class="text-[#848e9c]">Delta</span>
-            <span :class="['text-right font-bold', hoveredCell.delta > 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]']">
+        <p class="mt-4 text-xs font-bold tracking-widest text-slate-400 uppercase">Loading Data Feed</p>
+    </div>
+
+    <!-- Error State Overlay -->
+    <div v-if="hasError" class="absolute inset-0 z-40 bg-[#06080C]/80 backdrop-blur-xl flex flex-col items-center justify-center border border-red-500/20 m-4 rounded-xl">
+        <div class="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+            <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <p class="text-sm font-bold text-white tracking-wider mb-2">Connection Disturbed</p>
+        <p class="text-xs text-slate-400 max-w-[250px] text-center mb-6">Unable to sync the live data feed. Please verify network status.</p>
+        <button @click="updateChartData" class="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-bold uppercase tracking-wider transition-all">Retry Connection</button>
+    </div>
+
+    <!-- Empty State Overlay -->
+    <div v-if="isEmpty && !isLoading && !hasError" class="absolute inset-0 z-40 bg-[#06080C]/50 backdrop-blur-sm flex flex-col items-center justify-center">
+        <div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 border border-white/10 shadow-[inset_0_2px_10px_rgba(255,255,255,0.05)]">
+            <svg class="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+        </div>
+        <p class="text-sm font-bold text-slate-300 tracking-wider">No Data Available</p>
+        <p class="text-xs text-slate-500 mt-1">Select a valid symbol or timeframe</p>
+    </div>
+
+    <!-- Footprint Hover Tooltip -->
+    <div v-if="hoveredCell && showFootprint" 
+         class="absolute z-50 bg-[#0A0C10]/90 backdrop-blur-2xl border border-white/10 p-3 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] pointer-events-none text-[10px] min-w-[140px]"
+         :style="{ left: `${tooltipPosition.x + 15}px`, top: `${tooltipPosition.y + 15}px` }">
+        <div class="flex justify-between border-b border-white/5 pb-1.5 mb-2">
+            <span class="text-slate-500 font-medium">Price</span>
+            <span class="font-black text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]">{{ hoveredCell.price }}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            <span class="text-slate-500 font-medium">Bid Vol</span>
+            <span class="text-right font-bold text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]">{{ hoveredCell.bidVolume }}</span>
+            <span class="text-slate-500 font-medium">Ask Vol</span>
+            <span class="text-right font-bold text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">{{ hoveredCell.askVolume }}</span>
+            <div class="col-span-2 h-px bg-white/5 my-0.5"></div>
+            <span class="text-slate-400 font-medium">Total</span>
+            <span class="text-right font-black text-white">{{ hoveredCell.totalVolume }}</span>
+            <span class="text-slate-400 font-medium">Delta</span>
+            <span :class="['text-right font-black', hoveredCell.delta > 0 ? 'text-emerald-400' : 'text-red-400']">
                 {{ hoveredCell.delta > 0 ? '+' : '' }}{{ hoveredCell.delta }}
             </span>
         </div>
@@ -553,9 +613,9 @@ watch(showVolume, (val) => volumeSeries?.applyOptions({ visible: val }));
     <ChartLegend :data="lastPriceData" />
 
     <div class="flex-grow flex relative overflow-hidden bg-transparent">
-        <div class="flex-grow relative h-full overflow-hidden">
+        <div class="flex-grow relative h-full overflow-hidden" style="width: 898px;">
             <canvas :id="`heatmap-${panelId}`" class="absolute inset-0 pointer-events-none z-10 w-full h-full"></canvas>
-            <div ref="chartContainer" class="absolute inset-0"></div>
+            <div ref="chartContainer" class="absolute inset-0" style="height: 450px;"></div>
         </div>
         <transition enter-active-class="transition-all duration-300 ease-out" enter-from-class="translate-x-full opacity-0" enter-to-class="translate-x-0 opacity-100" leave-active-class="transition-all duration-300 ease-in" leave-from-class="translate-x-0 opacity-100" leave-to-class="translate-x-full opacity-0">
             <TimeAndSales v-if="showTape" :trades="recentTrades" :minLargeTrade="footprintSettings.minTradeFilter" class="shrink-0 z-20" />

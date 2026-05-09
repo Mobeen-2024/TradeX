@@ -197,7 +197,7 @@ export function createRedisClient(options: Record<string, any> = {}): any {
           if (
             err?.message?.includes('Connection is closed') ||
             err?.message?.includes('ECONNREFUSED') ||
-            err?.message?.includes('Stream isn\'t writeable') ||
+            err?.message?.includes("Stream isn't writeable") ||
             err?.code === 'ECONNREFUSED'
           ) {
             useMock = true;

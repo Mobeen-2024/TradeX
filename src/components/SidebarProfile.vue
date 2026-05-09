@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Star } from 'lucide-vue-next';
+import { totalUsdtBalance } from '../store/accountStore';
 
 defineProps<{ isExpanded: boolean }>();
 </script>
@@ -29,7 +30,7 @@ defineProps<{ isExpanded: boolean }>();
           <span class="text-[8px] text-[#F0B90B] font-black uppercase">Gold</span>
         </div>
       </div>
-      <span class="text-[10px] text-[#848e9c] whitespace-nowrap">Portfolio: $24,500.80</span>
+      <span class="text-[10px] text-[#848e9c] whitespace-nowrap">Portfolio: ${{ totalUsdtBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
     </div>
   </div>
 </template>

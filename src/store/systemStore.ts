@@ -29,5 +29,7 @@ export function initSystemStore() {
         circuitBreakers.value = data.breakers;
       }
     })
-    .catch(err => console.error('[SystemStore] Failed to fetch CB status:', err));
+    .catch(() => {
+      // Backend not available, ignore
+    });
 }

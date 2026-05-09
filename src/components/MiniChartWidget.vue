@@ -58,10 +58,11 @@ const fetchData = async () => {
     isLoading.value = true;
     hasError.value = false;
     try {
-        const symbolClean = props.symbol.replace('/','').replace('USDT', 'USDT');
-        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbolClean}&interval=1m&limit=60`);
+        const symbolClean = props.symbol.replace(/[^A-Za-z0-9]/g, '');
+        const response = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${symbolClean}&interval=1m&limit=60`);
         if (!response.ok) throw new Error('Fetch failed');
         const data = await response.json();
+        if (!chart) return;
         const candles = data.map((d: any) => ({
             time: (d[0] / 1000) as Time,
             open: parseFloat(d[1]),
@@ -76,6 +77,7 @@ const fetchData = async () => {
     } catch (e) {
         isLoading.value = false;
         console.warn(`[MiniChart] Failed to load data for ${props.symbol}, using fallback:`, e);
+        if (!chart) return;
         const candles: any[] = [];
         const now = Math.floor(Date.now() / 1000);
         let p = 50000;
@@ -112,12 +114,15 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    if (chart) chart.remove();
     if (resizeObserver) resizeObserver.disconnect();
+    if (chart) {
+        chart.remove();
+        chart = null;
+    }
 });
 
 watch(currentPrice, (newPrice) => {
-    if (!candleSeries || !allLocalCandles.value.length) return;
+    if (!candleSeries || !allLocalCandles.value.length || !chart) return;
     const last = allLocalCandles.value[allLocalCandles.value.length - 1];
     const updated = { 
         ...last, 

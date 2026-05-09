@@ -1,35 +1,24 @@
 <script setup lang="ts">
 import {
-  ChevronDown,
-  Settings,
-  PlayCircle,
-  ArrowUp,
-  ArrowDown,
   Search,
-  Download,
   Bell,
-  User,
   Globe,
-  Cpu,
-  Wallet,
+  Settings,
   Menu,
+  Activity,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
 } from "lucide-vue-next";
 import { cn } from "../lib/utils";
-import {
-  currentPrice,
-  previousPrice,
-  marketData,
-  isLiveMode,
-} from "../store/tradeStore";
+import { currentPrice, previousPrice, marketData } from "../store/tradeStore";
 import {
   activeNotifications,
   notificationHistory,
   markAsRead,
   clearNotifications,
 } from "../store/alertStore";
-import { isLoggedIn, userProfile, login, logout } from "../store/authStore";
 import CoinSelector from "./CoinSelector.vue";
-import CandleCountdown from "./CandleCountdown.vue";
 import SearchModal from "./SearchModal.vue";
 import NotificationHistoryModal from "./NotificationHistoryModal.vue";
 import MarketTicker from "./MarketTicker.vue";
@@ -37,43 +26,40 @@ import SystemStatusBar from "./SystemStatusBar.vue";
 import { ref, onMounted, onUnmounted, computed } from "vue";
 
 const showNotifications = ref(false);
-const showUserDropdown = ref(false);
 const isSearchOpen = ref(false);
 const isNotifHistoryOpen = ref(false);
 const currentTime = ref("");
 let timer: any;
 
+// Status state mapping mock
+const connectionStatus = ref<"connecting" | "connected" | "error">("connected");
+
 const formatNumber = (num: string | number) => {
-  const n = typeof num === 'string' ? parseFloat(num) : num;
-  if(isNaN(n)) return num;
-  if(n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-  if(n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if(n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+  const n = typeof num === "string" ? parseFloat(num) : num;
+  if (isNaN(n)) return num;
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(2) + "K";
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
-
-const pulsePrice = ref(false);
-let lastUpdatePrice = currentPrice.value;
 
 const closeDropdowns = (e: MouseEvent) => {
   const target = e.target as HTMLElement;
   if (!target.closest(".nav-notif-container")) showNotifications.value = false;
-  if (!target.closest(".nav-user-container")) showUserDropdown.value = false;
 };
-
-const handleDeposit = () => {
-    // Mock deposit logic
-    alert("Deposit Flow Triggered");
-}
 
 onMounted(() => {
   const updateTime = () => {
     const d = new Date();
-    currentTime.value = `${d.getUTCHours().toString().padStart(2,'0')}:${d.getUTCMinutes().toString().padStart(2,'0')}:${d.getUTCSeconds().toString().padStart(2,'0')} UTC`;
+    currentTime.value = `${d.getUTCHours().toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")}:${d.getUTCSeconds().toString().padStart(2, "0")} UTC`;
   };
   updateTime();
   timer = setInterval(updateTime, 1000);
   window.addEventListener("mousedown", closeDropdowns);
+
+  // Simulate startup connection
+  connectionStatus.value = "connecting";
+  setTimeout(() => (connectionStatus.value = "connected"), 1500);
 });
 
 onUnmounted(() => {
@@ -83,34 +69,50 @@ onUnmounted(() => {
 
 defineProps<{ title?: string }>();
 const emit = defineEmits(["open-settings", "toggle-sidebar"]);
+
+const hasNotifications = computed(() => activeNotifications.value.length > 0);
 </script>
 
 <template>
   <header
-    class="h-[64px] border-b border-[#2b3139] flex items-center justify-between pl-2 pr-4 shrink-0 z-40 bg-[#0b0e11]/90 backdrop-blur-3xl text-[#848e9c] shadow-[0_4px_30px_rgba(0,0,0,0.3)] select-none"
+    class="h-[76px] border-b border-white/[0.05] flex items-center justify-between px-4 lg:px-6 shrink-0 z-40 bg-[#0a0c10]/80 backdrop-blur-3xl text-white/70 shadow-[0_4px_40px_rgba(0,0,0,0.6)] select-none relative overflow-visible"
   >
-    <!-- Left Section -->
+    <!-- Subtle top ambient light -->
     <div
-      class="flex items-center gap-2 md:gap-5 min-w-0 flex-1 h-full"
-    >
-      <!-- Mobile Menu Button (Only needed if you want standalone logic, emit to parent) -->
-      <button @click="emit('toggle-sidebar')" class="md:hidden p-2 hover:bg-[#2b3139] rounded-lg transition-colors">
-        <Menu class="w-5 h-5 text-[#EAECEF]" />
+      class="absolute top-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-[#F0B90B]/30 to-transparent"
+    ></div>
+
+    <!-- Left Section -->
+    <div class="flex items-center gap-4 md:gap-6 min-w-0 flex-1 h-full">
+      <!-- Mobile Menu Button -->
+      <button
+        @click="emit('toggle-sidebar')"
+        class="md:hidden p-2.5 bg-white/[0.02] hover:bg-white/[0.08] active:scale-95 border border-white/[0.05] rounded-xl transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0e11]"
+        aria-label="Toggle Menu"
+      >
+        <Menu class="w-5 h-5 text-white/80" />
       </button>
 
-      <!-- 1. Trading Pair Selector (CoinSelector is self-contained) -->
-      <div class="shrink-0 relative z-50">
+      <!-- 1. Trading Pair Selector -->
+      <div class="shrink-0 relative z-50 flex items-center gap-3">
         <CoinSelector />
       </div>
 
-      <!-- 2. Live Price Display -->
-      <div class="hidden sm:flex flex-col justify-center shrink-0 min-w-[90px]">
+      <!-- 2. Live Price Display w/ Loading State -->
+      <div
+        class="hidden sm:flex flex-col justify-center shrink-0 min-w-[120px] px-4 border-l border-white/[0.05]"
+      >
+        <div
+          v-if="connectionStatus === 'connecting'"
+          class="h-6 w-24 bg-white/[0.05] animate-pulse rounded mb-1"
+        ></div>
         <span
+          v-else
           :class="[
-            'font-mono font-bold text-lg xl:text-xl tracking-tight transition-colors duration-300',
+            'font-mono font-black text-xl xl:text-2xl tracking-tight transition-colors duration-500',
             currentPrice >= previousPrice
-              ? 'text-[#0ECB81] drop-shadow-[0_0_8px_rgba(14,203,129,0.3)]'
-              : 'text-[#f6465d] drop-shadow-[0_0_8px_rgba(246,70,93,0.3)]',
+              ? 'text-[#0ECB81] drop-shadow-[0_0_12px_rgba(14,203,129,0.4)]'
+              : 'text-[#f6465d] drop-shadow-[0_0_12px_rgba(246,70,93,0.4)]',
           ]"
         >
           {{
@@ -120,25 +122,66 @@ const emit = defineEmits(["open-settings", "toggle-sidebar"]);
             })
           }}
         </span>
-        <span class="text-[10px] font-mono text-[#848e9c] flex items-center gap-1.5 opacity-80 uppercase tracking-widest mt-[-2px]">
-            <span class="inline-block w-1.5 h-1.5 rounded-full bg-[#0ECB81] animate-pulse"></span>
-            Live
-        </span>
+
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <span
+            v-if="connectionStatus === 'connected'"
+            class="relative flex h-2 w-2"
+          >
+            <span
+              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0ECB81] opacity-75"
+            ></span>
+            <span
+              class="relative inline-flex rounded-full h-2 w-2 bg-[#0ECB81]"
+            ></span>
+          </span>
+          <AlertCircle
+            v-else-if="connectionStatus === 'error'"
+            class="w-2.5 h-2.5 text-[#f6465d]"
+          />
+          <Activity v-else class="w-2.5 h-2.5 text-[#F0B90B] animate-spin" />
+
+          <span
+            :class="
+              cn(
+                'text-[9px] font-mono flex items-center gap-1.5 uppercase tracking-widest font-black',
+                connectionStatus === 'connected'
+                  ? 'text-[#0ECB81]/80'
+                  : connectionStatus === 'connecting'
+                    ? 'text-[#F0B90B]/80'
+                    : 'text-[#f6465d]/80',
+              )
+            "
+          >
+            {{
+              connectionStatus === "connected"
+                ? "Live Stream"
+                : connectionStatus === "connecting"
+                  ? "Connecting..."
+                  : "Disconnected"
+            }}
+          </span>
+        </div>
       </div>
 
       <!-- 3. Market Statistics (Desktop Only) -->
-      <div
-        class="hidden xl:flex items-center gap-6 pl-6 border-l border-[#2b3139]/50 h-10"
-      >
-        <div class="flex flex-col justify-center cursor-pointer hover:bg-white/5 px-2 py-0.5 rounded transition-colors group">
+      <div class="hidden xl:flex items-center gap-3 pl-6 h-full py-4">
+        <div
+          class="flex flex-col justify-center bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.15] px-4 py-1.5 rounded-xl transition-all group relative cursor-help"
+        >
+          <div
+            class="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#0a0c10] border border-white/10 px-3 py-1.5 rounded-lg text-[10px] text-white/80 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl"
+          >
+            Rolling 24 Hour Change percentage
+          </div>
           <span
-            class="text-[9px] text-[#5e6673] flex items-center gap-1 uppercase tracking-widest font-black"
+            class="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5"
             >24h Change</span
           >
           <span
             v-if="marketData.change24h"
             :class="[
-              'text-[12px] font-mono font-bold transition-all',
+              'text-[13px] font-mono font-black transition-all drop-shadow-sm',
               marketData.change24h.startsWith('+')
                 ? 'text-[#0ECB81]'
                 : 'text-[#f6465d]',
@@ -146,249 +189,270 @@ const emit = defineEmits(["open-settings", "toggle-sidebar"]);
           >
             {{ marketData.change24h }}
           </span>
-          <span v-else class="text-[12px] font-mono font-bold text-[#848e9c]">--</span>
+          <span v-else class="text-[13px] font-mono font-black text-white/20"
+            >--</span
+          >
         </div>
 
-        <div class="flex flex-col justify-center cursor-pointer hover:bg-white/5 px-2 py-0.5 rounded transition-colors">
-          <span class="text-[9px] text-[#5e6673] uppercase tracking-widest font-black">24h High</span>
-          <span class="text-[12px] font-mono font-bold text-[#EAECEF]">{{ formatNumber(currentPrice * 1.05) }}</span>
-        </div>
-        
-        <div class="flex flex-col justify-center cursor-pointer hover:bg-white/5 px-2 py-0.5 rounded transition-colors">
-          <span class="text-[9px] text-[#5e6673] uppercase tracking-widest font-black">24h Low</span>
-          <span class="text-[12px] font-mono font-bold text-[#EAECEF]">{{ formatNumber(currentPrice * 0.95) }}</span>
+        <div
+          class="flex flex-col justify-center bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.15] px-4 py-1.5 rounded-xl transition-all cursor-default"
+        >
+          <span
+            class="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5"
+            >24h High</span
+          >
+          <span class="text-[13px] font-mono font-black text-white/90">{{
+            formatNumber(currentPrice * 1.05)
+          }}</span>
         </div>
 
-        <div class="flex flex-col justify-center cursor-pointer hover:bg-white/5 px-2 py-0.5 rounded transition-colors">
-          <span class="text-[9px] text-[#5e6673] uppercase tracking-widest font-black">24h Vol (USDT)</span>
-          <span class="text-[12px] font-mono font-bold text-[#EAECEF]">{{ marketData.volUsdt24h || '--' }}</span>
+        <div
+          class="flex flex-col justify-center bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.15] px-4 py-1.5 rounded-xl transition-all cursor-default"
+        >
+          <span
+            class="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5"
+            >24h Low</span
+          >
+          <span class="text-[13px] font-mono font-black text-white/90">{{
+            formatNumber(currentPrice * 0.95)
+          }}</span>
+        </div>
+
+        <div
+          class="flex flex-col justify-center bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.15] px-4 py-1.5 rounded-xl transition-all cursor-default relative group"
+        >
+          <div
+            class="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#0a0c10] border border-white/10 px-3 py-1.5 rounded-lg text-[10px] text-white/80 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl"
+          >
+            Total Traded Volume in USDT
+          </div>
+          <span
+            class="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5"
+            >24h Vol (USDT)</span
+          >
+          <span class="text-[13px] font-mono font-black text-white/90">{{
+            marketData.volUsdt24h || "--"
+          }}</span>
         </div>
       </div>
     </div>
 
     <!-- Right Section -->
-    <div class="flex items-center gap-2 md:gap-3 ml-auto">
-      <MarketTicker class="hidden xl:flex" />
-      <SystemStatusBar class="hidden 2xl:flex" />
-      
+    <div class="flex items-center gap-3 lg:gap-4 ml-auto h-full py-4">
+      <MarketTicker
+        class="hidden 2xl:flex scale-90 origin-right transition-all"
+      />
+      <SystemStatusBar class="hidden 3xl:flex" />
+
       <!-- Clock -->
-      <div class="hidden md:flex items-center text-[#848e9c] text-xs font-mono font-bold tracking-widest bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
+      <div
+        class="hidden md:flex items-center gap-2 text-white/50 text-[11px] font-mono font-black tracking-widest bg-black/40 px-3 py-2 rounded-xl border border-white/[0.05] shadow-inner"
+      >
+        <Clock class="w-3.5 h-3.5 text-white/30" />
         {{ currentTime }}
       </div>
-      
-      <!-- Quick Action Icons -->
-      <div
-        @click="isSearchOpen = true"
-        class="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 hover:bg-[#2b3139] hover:text-white rounded-lg cursor-pointer transition-colors relative group"
-        title="Search (Ctrl+K)"
-      >
-        <Search class="w-4 h-4 md:w-4 md:h-4" />
-      </div>
-      
-      <!-- Notifications -->
-      <div
-        class="nav-notif-container flex items-center justify-center w-8 h-8 md:w-9 md:h-9 hover:bg-[#2b3139] hover:text-white rounded-lg cursor-pointer transition-colors relative"
-      >
-        <div @click="showNotifications = !showNotifications" class="relative w-full h-full flex items-center justify-center">
-          <Bell class="w-4 h-4 md:w-4 md:h-4" />
-          <div
-            v-if="activeNotifications.length > 0"
-            class="absolute top-1.5 right-1.5 min-w-[14px] h-[14px] bg-[#f0b90b] rounded-full border border-[#0b0e11] flex items-center justify-center text-[9px] font-black text-black px-0.5 animate-pulse"
-          >
-            {{ activeNotifications.length > 9 ? "9+" : activeNotifications.length }}
-          </div>
-        </div>
 
-        <!-- Notification Dropdown -->
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0 translate-y-2 scale-95"
-          enter-to-class="opacity-100 translate-y-0 scale-100"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100 translate-y-0 scale-100"
-          leave-to-class="opacity-0 translate-y-2 scale-95"
+      <div class="h-8 w-px bg-white/[0.05] hidden md:block mx-1"></div>
+
+      <!-- Quick Action Icons -->
+      <div class="flex items-center gap-2">
+        <!-- Search -->
+        <button
+          @click="isSearchOpen = true"
+          class="group flex items-center justify-center w-10 h-10 bg-white/[0.02] hover:bg-white/[0.1] hover:text-[#F0B90B] border border-white/[0.05] hover:border-[#F0B90B]/30 rounded-xl cursor-pointer transition-all active:scale-95 focus:outline-none focus-[&:not(:focus-visible)]:ring-0 focus-visible:ring-2 focus-visible:ring-[#F0B90B]"
+          title="Search (Ctrl+K)"
+          aria-label="Search"
         >
+          <Search class="w-4 h-4 transition-transform group-hover:scale-110" />
+        </button>
+
+        <!-- Notifications -->
+        <div
+          class="nav-notif-container flex items-center justify-center relative"
+        >
+          <button
+            @click="showNotifications = !showNotifications"
+            class="group w-10 h-10 flex items-center justify-center bg-white/[0.02] hover:bg-white/[0.1] hover:text-[#F0B90B] border border-white/[0.05] hover:border-[#F0B90B]/30 rounded-xl cursor-pointer transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#F0B90B] focus:ring-offset-2 focus:ring-offset-[#0b0e11]"
+            aria-label="Notifications"
+          >
+            <Bell
+              class="w-4 h-4 transition-transform group-hover:scale-110 group-hover:animate-wiggle"
+            />
+            <div
+              v-if="hasNotifications"
+              class="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-[#f0b90b] rounded-full border-2 border-[#0a0c10] flex items-center justify-center text-[9px] font-black text-black px-1 shadow-[0_0_10px_rgba(240,185,11,0.5)] z-10"
+            >
+              {{
+                activeNotifications.length > 9
+                  ? "9+"
+                  : activeNotifications.length
+              }}
+            </div>
+          </button>
+
+          <!-- Notification Dropdown Menu -->
+          <Transition
+            enter-active-class="transition duration-300 ease-out cubic-bezier(0.16, 1, 0.3, 1)"
+            enter-from-class="opacity-0 translate-y-4 scale-95"
+            enter-to-class="opacity-100 translate-y-0 scale-100"
+            leave-active-class="transition duration-200 ease-in"
+            leave-from-class="opacity-100 translate-y-0 scale-100"
+            leave-to-class="opacity-0 translate-y-4 scale-95"
+          >
             <div
               v-if="showNotifications"
-              class="absolute top-[calc(100%+8px)] right-0 w-80 md:w-96 bg-[#161a1e]/95 backdrop-blur-3xl border border-[#2b3139] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-[100]"
+              class="absolute top-[calc(100%+16px)] right-0 w-[340px] md:w-[420px] bg-[#0f1217]/95 backdrop-blur-3xl border border-white/[0.08] rounded-2xl shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden z-[100] flex flex-col"
             >
+              <!-- Glossy highlight -->
               <div
-                class="px-5 py-4 border-b border-[#2b3139] flex items-center justify-between bg-[#1e2329]/50"
+                class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
+              ></div>
+
+              <div
+                class="px-5 py-4 border-b border-white/[0.05] flex items-center justify-between bg-white/[0.02] relative"
               >
-                <span class="text-sm font-black text-[#EAECEF] uppercase tracking-widest font-mono">Notifications</span>
+                <div class="flex items-center gap-2">
+                  <Bell class="w-4 h-4 text-[#F0B90B]" />
+                  <span
+                    class="text-xs font-black text-white uppercase tracking-widest"
+                    >System Alerts</span
+                  >
+                </div>
                 <button
+                  v-if="hasNotifications"
                   @click="clearNotifications"
-                  class="text-[10px] text-[#848e9c] hover:text-[#f0b90b] font-bold uppercase tracking-wider transition-colors"
+                  class="text-[10px] text-white/40 hover:text-[#f0b90b] font-black uppercase tracking-widest transition-colors px-2 py-1 hover:bg-white/5 rounded-lg"
                 >
                   Clear All
                 </button>
               </div>
 
-              <div class="max-h-[400px] overflow-y-auto no-scrollbar">
+              <div class="max-h-[420px] overflow-y-auto no-scrollbar relative">
+                <!-- Notifications List -->
                 <div
-                  v-for="notif in notificationHistory"
-                  :key="notif.id"
-                  class="px-5 py-4 border-b border-[#2b3139]/50 hover:bg-[#2b3139]/40 transition-colors relative group/item cursor-pointer"
-                  @click="markAsRead(notif.id)"
+                  v-if="notificationHistory.length > 0"
+                  class="flex flex-col"
                 >
-                  <div class="flex items-start gap-4">
-                    <div
-                      :class="
-                        cn(
-                          'w-2 h-2 rounded-full mt-1.5 shrink-0 transition-colors duration-300',
-                          notif.read
-                            ? 'bg-[#474d57]'
-                            : 'bg-[#f0b90b] shadow-[0_0_10px_rgba(240,185,11,0.5)]',
-                        )
-                      "
-                    ></div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center justify-between gap-2 mb-1">
-                        <span :class="cn('text-[12px] font-bold', notif.read ? 'text-[#848e9c]' : 'text-[#EAECEF]')">{{
-                          notif.title
-                        }}</span>
-                        <span class="text-[10px] text-[#474d57] font-mono font-medium">{{
-                          new Date(notif.time).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        }}</span>
+                  <div
+                    v-for="notif in notificationHistory"
+                    :key="notif.id"
+                    class="px-5 py-4 border-b border-white/[0.02] hover:bg-white/[0.04] transition-all relative group/item cursor-pointer"
+                    @click="markAsRead(notif.id)"
+                  >
+                    <div class="flex items-start gap-4">
+                      <div
+                        :class="
+                          cn(
+                            'w-2 h-2 rounded-full mt-1.5 shrink-0 transition-colors duration-500',
+                            notif.read
+                              ? 'bg-white/10'
+                              : 'bg-[#f0b90b] shadow-[0_0_12px_rgba(240,185,11,0.8)]',
+                          )
+                        "
+                      ></div>
+                      <div class="flex-1 min-w-0">
+                        <div
+                          class="flex items-center justify-between gap-2 mb-1.5"
+                        >
+                          <span
+                            :class="
+                              cn(
+                                'text-[12px] font-black tracking-wide',
+                                notif.read
+                                  ? 'text-white/40'
+                                  : 'text-white/90 group-hover/item:text-[#F0B90B] transition-colors',
+                              )
+                            "
+                            >{{ notif.title }}</span
+                          >
+                          <span
+                            class="text-[9px] text-white/30 font-mono font-bold tracking-widest"
+                            >{{
+                              new Date(notif.time).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            }}</span
+                          >
+                        </div>
+                        <p
+                          :class="
+                            cn(
+                              'text-[11px] leading-relaxed font-medium',
+                              notif.read ? 'text-white/30' : 'text-white/60',
+                            )
+                          "
+                        >
+                          {{ notif.message }}
+                        </p>
                       </div>
-                      <p :class="cn('text-[11px] leading-relaxed', notif.read ? 'text-[#5e6673]' : 'text-[#848e9c]')">
-                        {{ notif.message }}
-                      </p>
                     </div>
+
+                    <!-- Hover indication highlight -->
+                    <div
+                      class="absolute left-0 top-0 bottom-0 w-[2px] bg-[#F0B90B] scale-y-0 group-hover/item:scale-y-100 transition-transform origin-center"
+                    ></div>
                   </div>
                 </div>
 
+                <!-- Empty State -->
                 <div
-                  v-if="notificationHistory.length === 0"
-                  class="py-16 flex flex-col items-center justify-center text-center px-6"
+                  v-else
+                  class="py-20 flex flex-col items-center justify-center text-center px-6"
                 >
-                  <div class="w-12 h-12 rounded-full bg-[#1e2329] flex items-center justify-center mb-4">
-                      <Bell class="w-5 h-5 text-[#474d57]" />
+                  <div
+                    class="w-16 h-16 rounded-full bg-white/[0.02] border border-white/[0.05] flex items-center justify-center mb-5 relative group"
+                  >
+                    <div
+                      class="absolute inset-0 bg-[#F0B90B]/5 rounded-full blur-xl scale-0 group-hover:scale-100 transition-transform"
+                    ></div>
+                    <CheckCircle2 class="w-6 h-6 text-white/20" />
                   </div>
-                  <p class="text-[11px] text-[#5e6673] font-bold uppercase tracking-widest">
-                    You're all caught up
+                  <h4
+                    class="text-[13px] text-white/80 font-black uppercase tracking-widest mb-1.5"
+                  >
+                    No Active Alerts
+                  </h4>
+                  <p
+                    class="text-[11px] text-white/40 font-medium tracking-wide"
+                  >
+                    Your trading environment is optimal and quiet.
                   </p>
                 </div>
               </div>
 
-              <div class="px-5 py-3 bg-[#1e2329]/80 text-center border-t border-[#2b3139]">
+              <div
+                class="p-3 bg-black/40 border-t border-white/[0.05] relative z-10"
+              >
                 <button
                   @click="
                     isNotifHistoryOpen = true;
                     showNotifications = false;
                   "
-                  class="text-[11px] font-bold text-[#f0b90b] hover:text-white uppercase tracking-widest transition-colors w-full"
+                  class="w-full py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] text-[10px] font-black text-white/60 hover:text-[#f0b90b] uppercase tracking-widest transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F0B90B]"
                 >
-                  View All History
+                  View All Logs
                 </button>
               </div>
             </div>
-        </Transition>
-      </div>
-      
-      <div
-        @click="emit('open-settings')"
-        class="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 hover:bg-[#2b3139] hover:text-white rounded-lg cursor-pointer transition-colors"
-        title="Settings"
-      >
-        <Settings class="w-4 h-4 md:w-4 md:h-4" />
-      </div>
-
-      <!-- Auth Section -->
-      <div class="h-8 w-[1px] bg-[#2b3139] mx-1 md:mx-2 hidden sm:block"></div>
-
-      <div v-if="!isLoggedIn" class="flex items-center gap-3 pl-1">
-        <button
-          @click="login"
-          class="hidden sm:flex text-[13px] font-bold text-[#EAECEF] hover:text-[#F0B90B] transition-colors"
-        >
-          Log In
-        </button>
-        <button
-          @click="login"
-          class="text-[13px] font-black bg-[#F0B90B] text-[#0b0e11] px-5 py-2 rounded-lg hover:bg-[#FCD535] transition-all duration-300 shadow-[0_0_15px_rgba(240,185,11,0.2)] hover:shadow-[0_0_20px_rgba(240,185,11,0.4)] active:scale-95"
-        >
-          Sign Up
-        </button>
-      </div>
-
-      <div v-else class="flex items-center gap-2 md:gap-3 pl-1 relative nav-user-container">
-        <button 
-           @click="handleDeposit"
-           class="hidden lg:flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-300"
-        >
-           <Wallet class="w-3.5 h-3.5 text-[#0ECB81]" />
-           Deposit
-        </button>
-
-        <div
-          @click="showUserDropdown = !showUserDropdown"
-          class="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#f0b90b] text-[#0b0e11] hover:shadow-[0_0_15px_rgba(240,185,11,0.5)] cursor-pointer transition-all duration-300 group ring-2 ring-transparent hover:ring-[#f0b90b]/30"
-        >
-          <span class="font-black text-[13px]">{{ userProfile?.name.charAt(0) }}</span>
+          </Transition>
         </div>
 
-        <!-- User Dropdown (Premium Style) -->
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0 translate-y-2 scale-95"
-          enter-to-class="opacity-100 translate-y-0 scale-100"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100 translate-y-0 scale-100"
-          leave-to-class="opacity-0 translate-y-2 scale-95"
+        <!-- Settings -->
+        <button
+          @click="emit('open-settings')"
+          class="group flex items-center justify-center w-10 h-10 bg-white/[0.02] hover:bg-white/[0.1] hover:text-[#F0B90B] border border-white/[0.05] hover:border-[#F0B90B]/30 rounded-xl cursor-pointer transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#F0B90B]"
+          title="Environment Architecture"
+          aria-label="Settings"
         >
-            <div
-              v-if="showUserDropdown"
-              class="absolute top-[calc(100%+8px)] right-0 w-64 bg-[#161a1e]/95 backdrop-blur-3xl border border-[#2b3139] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-[100]"
-            >
-              <div class="px-5 py-4 border-b border-[#2b3139] bg-gradient-to-b from-white/[0.02] to-transparent">
-                <div class="flex items-center gap-3">
-                  <div
-                    class="w-10 h-10 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#c69700] flex items-center justify-center text-[#161a1e] font-black text-sm shadow-lg shadow-[#f0b90b]/20"
-                  >
-                    {{ userProfile?.name.charAt(0) }}
-                  </div>
-                  <div class="flex flex-col min-w-0">
-                    <span class="text-[14px] font-bold text-[#EAECEF] truncate leading-tight">{{
-                      userProfile?.name
-                    }}</span>
-                    <span class="text-[10px] text-[#f0b90b] font-bold tracking-widest uppercase mt-0.5"
-                      >VIP {{ userProfile?.vipLevel }}</span
-                    >
-                  </div>
-                </div>
-              </div>
-
-              <div class="p-2 flex flex-col gap-0.5">
-                <button
-                  class="w-full text-left px-4 py-2.5 text-[12px] font-bold text-[#848e9c] hover:text-[#EAECEF] hover:bg-[#2b3139]/50 rounded-lg transition-colors flex items-center gap-2"
-                >
-                  <User class="w-4 h-4" /> Dashboard
-                </button>
-                <button
-                  class="w-full text-left px-4 py-2.5 text-[12px] font-bold text-[#848e9c] hover:text-[#EAECEF] hover:bg-[#2b3139]/50 rounded-lg transition-colors flex items-center gap-2"
-                >
-                   <Wallet class="w-4 h-4" /> Balances
-                </button>
-                <div class="h-[1px] bg-[#2b3139] my-1 mx-2"></div>
-                <button
-                  @click="
-                    logout();
-                    showUserDropdown = false;
-                  "
-                  class="w-full text-left px-4 py-2.5 text-[12px] font-bold text-[#f6465d] hover:bg-[#f6465d]/10 rounded-lg transition-colors flex items-center gap-2"
-                >
-                  Log Out
-                </button>
-              </div>
-            </div>
-        </Transition>
+          <Settings
+            class="w-4 h-4 transition-transform group-hover:rotate-90 group-hover:scale-110 duration-500"
+          />
+        </button>
       </div>
     </div>
 
+    <!-- Modals -->
     <SearchModal :isOpen="isSearchOpen" @close="isSearchOpen = false" />
     <NotificationHistoryModal
       :isOpen="isNotifHistoryOpen"
@@ -396,3 +460,25 @@ const emit = defineEmits(["open-settings", "toggle-sidebar"]);
     />
   </header>
 </template>
+
+<style scoped>
+/* Optional custom utility animations for Navbar */
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+  75% {
+    transform: rotate(-5deg);
+  }
+}
+.animate-wiggle {
+  animation: wiggle 0.4s ease-in-out;
+}
+</style>

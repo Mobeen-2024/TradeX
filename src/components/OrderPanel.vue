@@ -42,12 +42,12 @@ const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing St
 const orderType = ref<typeof orderTypes[number]>('Limit');
 
 const orderTypeDetails = {
-  'Limit': { desc: 'Buy or Sell at a specific price or better', icon: CornerDownRight },
-  'Market': { desc: 'Buy or Sell at the best available market price', icon: TrendingDown },
-  'Stop-Limit': { desc: 'Triggers a Limit order when Stop price is reached.', icon: GitCommit },
-  'Stop Market': { desc: 'Triggers a Market order when Stop price is reached.', icon: Activity },
-  'Trailing Stop': { desc: 'Places an order when the price reaches the predefined point', icon: Activity },
-  'OCO': { desc: 'Places two orders at once. When either is triggered, the other is canceled.', icon: Waypoints }
+  'Limit': { desc: 'Buy or Sell at a specific price', icon: CornerDownRight },
+  'Market': { desc: 'Buy or Sell at best market price', icon: TrendingDown },
+  'Stop-Limit': { desc: 'Triggers Limit order when Stop hits', icon: GitCommit },
+  'Stop Market': { desc: 'Triggers Market order when Stop hits', icon: Activity },
+  'Trailing Stop': { desc: 'Follows price to lock in profits', icon: Activity },
+  'OCO': { desc: 'One Cancels the Other', icon: Waypoints }
 };
 
 watch(currentPrice, (newPrice, oldPrice) => {
@@ -111,18 +111,18 @@ const borrowValue = computed(() => {
 
 const maxAmount = computed(() => {
   const mult = marginEnabled.value ? leverage.value : 1;
-  const currentPrice = orderType.value === 'Market' ? lastOrderPrice.value : orderPrice.value;
+  const currentPriceForCalc = orderType.value === 'Market' ? lastOrderPrice.value : orderPrice.value;
   const usdtBase = marginEnabled.value ? availableMargin.value : availableUsdt.value;
   if (orderSide.value === 'Buy') {
-    return currentPrice > 0 ? ((usdtBase * mult) / currentPrice) : 0;
+    return currentPriceForCalc > 0 ? ((usdtBase * mult) / currentPriceForCalc) : 0;
   }
   return availableBtc.value * mult;
 });
 
 const totalCostNumber = computed(() => {
   if (!orderAmount.value || isNaN(orderAmount.value)) return 0;
-  const currentPrice = (orderType.value === 'Market' || orderType.value === 'Trailing Stop') ? lastOrderPrice.value : orderPrice.value;
-  return currentPrice * orderAmount.value;
+  const currentPriceForCalc = (orderType.value === 'Market' || orderType.value === 'Trailing Stop') ? lastOrderPrice.value : orderPrice.value;
+  return currentPriceForCalc * orderAmount.value;
 });
 
 const totalCost = computed(() => {
@@ -144,29 +144,29 @@ const slError = computed(() => {
 const orderPriceError = computed(() => {
   if (['Limit', 'Stop-Limit', 'OCO'].includes(orderType.value)) {
      if (orderPrice.value === null || orderPrice.value <= 0) return 'Price must be greater than 0';
-     if (orderPrice.value > 10000000) return 'Price exceeds maximum limit';
+     if (orderPrice.value > 10000000) return 'Price exceeds max limit';
   }
-  if (['Stop-Limit', 'OCO'].includes(orderType.value)) {
-     if (stopPrice.value === null || stopPrice.value <= 0) return 'Stop Price must be greater than 0';
-     if (stopPrice.value > 10000000) return 'Stop Price exceeds maximum limit';
+  if (['Stop-Limit', 'Stop Market', 'OCO'].includes(orderType.value)) {
+     if (stopPrice.value === null || stopPrice.value <= 0) return 'Stop Price > 0';
+     if (stopPrice.value > 10000000) return 'Stop Price exceeds limit';
   }
   if (orderType.value === 'OCO') {
-     if (limitPrice.value === null || limitPrice.value <= 0) return 'Limit Price must be greater than 0';
-     if (limitPrice.value > 10000000) return 'Limit Price exceeds maximum limit';
+     if (limitPrice.value === null || limitPrice.value <= 0) return 'Limit Price > 0';
+     if (limitPrice.value > 10000000) return 'Limit Price exceeds limit';
   }
   if (orderType.value === 'Trailing Stop') {
-     if (callbackRate.value === null || callbackRate.value < 0.1 || callbackRate.value > 5) return 'Callback must be 0.1% - 5.0%';
-     if (activationPrice.value !== null && (activationPrice.value <= 0 || activationPrice.value > 10000000)) return 'Activation Price must be valid';
+     if (callbackRate.value === null || callbackRate.value < 0.1 || callbackRate.value > 5) return 'Callback 0.1% - 5.0%';
+     if (activationPrice.value !== null && (activationPrice.value <= 0 || activationPrice.value > 10000000)) return 'Activation Price invalid';
   }
   return null;
 });
 
 const orderAmountError = computed(() => {
   if (orderAmount.value === null) return null;
-  if (orderAmount.value <= 0) return 'Amount must be greater than 0';
-  if (orderAmount.value > 10000) return 'Amount exceeds maximum limit'; // Reasonable limit for BTC amount
+  if (orderAmount.value <= 0) return 'Amount > 0';
+  if (orderAmount.value > 10000) return 'Amount exceeds limit';
   if (orderAmount.value > maxAmount.value) {
-    return orderSide.value === 'Buy' ? 'Exceeds max buy amount/margin' : 'Exceeds available balance';
+    return orderSide.value === 'Buy' ? 'Exceeds buying power' : 'Exceeds balance';
   }
   return null;
 });
@@ -359,55 +359,72 @@ watch(tpSl, (val) => {
 </script>
 
 <template>
-  <div class="flex flex-row gap-1 sm:gap-2 h-[460px] lg:h-full w-full">
+  <div class="flex flex-col lg:flex-row gap-4 h-full w-full font-sans relative">
+    
     <!-- Left: Order Book / Trades Panel -->
-    <OrderBookPanel class="w-[45%] max-w-[260px] shrink-0" />
+    <div class="hidden lg:flex flex-col w-[45%] max-w-[320px] shrink-0 h-full relative z-10 transition-all duration-300">
+        <OrderBookPanel class="h-full rounded-2xl" />
+    </div>
 
-    <!-- Right: Order Panel -->
-    <div class="bg-[#0b0e11]/60 backdrop-blur-2xl border border-white/5 rounded-[16px] p-1.5 sm:p-4 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass">
+    <!-- Right: Order Panel - Fully Glassmorphism -->
+    <div class="bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-[60px] border border-white/[0.08] shadow-[0_24px_64px_rgba(0,0,0,0.5)] rounded-[24px] p-5 lg:p-6 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass z-20 overflow-hidden transform-gpu" style="padding-left: 41px; padding-right: 65px; padding-top: 28px; padding-bottom: 11px; width: 196.11px; height: 530px; font-size: 35px; line-height: 18.29px; text-align: center; font-weight: normal;">
+      
+      <!-- Liquid Background Ambient Glow Inside Container -->
+      <div 
+        class="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] opacity-[0.08] blur-[80px] rounded-full pointer-events-none transition-all duration-1000 mix-blend-screen" 
+        :class="orderSide === 'Buy' ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'">
+      </div>
+
       <!-- Header -->
-      <div class="flex items-center justify-between mb-2 sm:mb-4 border-b border-[#1e2329] pb-2 sm:pb-3 transition-all duration-300">
-        <span class="text-white text-[17px] leading-[22.2857px] font-mono font-normal pl-[10px] text-left no-underline truncate">
-          {{ marginEnabled ? 'Margin' : 'Spot' }}
-        </span>
-        <div class="flex items-center justify-center gap-1 sm:gap-2 text-[16px] text-[#848e9c] w-[97.4219px] h-[24.8438px] text-center">
-          Margin
+      <div class="flex items-center justify-between mb-5 border-b border-white/[0.05] pb-4 transition-all duration-300 relative z-10" style="padding-bottom: 22px; margin-bottom: 2px; width: 272.11px; height: 36.27px; padding-top: 7px;">
+        
+        <div class="flex flex-col gap-1">
+          <span class="text-white text-[20px] font-bold tracking-tight text-left">
+            {{ marginEnabled ? 'Margin Trading' : 'Spot Trading' }}
+          </span>
+          <span class="text-[11px] text-[#848e9c] uppercase tracking-widest font-medium">Place your order</span>
+        </div>
+
+        <div class="flex items-center gap-3 bg-black/20 p-1.5 rounded-full border border-white/5 shadow-inner">
+          <span class="text-[11px] font-bold uppercase tracking-wider pl-2 text-[#848e9c]" :class="marginEnabled ? 'text-white' : ''">Margin</span>
           <button 
             @click="marginEnabled = !marginEnabled"
-            class="w-[30px] h-[15px] text-[35px] leading-[34.8571px] text-right rounded-full relative transition-colors duration-200 shrink-0"
-            :class="marginEnabled ? 'bg-[#F0B90B]' : 'bg-[#2b3139]'"
+            class="w-10 h-5 rounded-full relative transition-all duration-300 shrink-0 shadow-sm border border-white/10"
+            :class="marginEnabled ? 'bg-gradient-to-r from-[#F0B90B] to-[#FCD535]' : 'bg-[#2b3139] hover:bg-[#323942]'"
           >
             <div 
-              class="w-[11px] h-[11px] rounded-full bg-white absolute top-[2px] transition-all duration-200"
-              :class="marginEnabled ? 'left-[17px]' : 'left-[2px]'"
+              class="w-3.5 h-3.5 rounded-full bg-white absolute top-[2px] transition-all duration-300 shadow-[0_2px_4px_rgba(0,0,0,0.2)]"
+              :class="marginEnabled ? 'left-[22px]' : 'left-[3px]'"
             ></div>
           </button>
         </div>
       </div>
 
-      <!-- Buy / Sell Tabs -->
-      <div class="flex rounded-xl bg-[#0b0e11]/50 backdrop-blur-md border border-white/5 p-1 mb-2 sm:mb-4 gpu-glass">
+      <!-- Buy / Sell Segmented Control -->
+      <div class="flex p-1.5 rounded-2xl bg-black/20 backdrop-blur-md border border-white/5 mb-5 relative z-10 shadow-inner" style="height: 44.56px; font-size: 21px; padding-bottom: 6px; margin-bottom: 5px; border-radius: 24px; border-width: 0px;">
         <button 
           @click="orderSide = 'Buy'"
-          class="flex-1 py-1.5 sm:py-2 rounded-lg font-black text-xs uppercase tracking-wider transition-all duration-300 text-center"
-          :class="orderSide === 'Buy' ? 'bg-[#0ecb81] text-[#0b0e11] shadow-lg shadow-[#0ecb81]/20' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'"
+          class="flex-1 py-3 rounded-xl font-black text-[13px] uppercase tracking-widest transition-all duration-500 text-center relative overflow-hidden group"
+          :class="orderSide === 'Buy' ? 'text-white shadow-[0_8px_30px_rgba(14,203,129,0.3)] bg-gradient-to-r from-[#0ecb81]/80 to-[#2ebd85]/80 border border-[#0ecb81]/40' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5 border border-transparent'"
+          style="line-height: 7.57px; border-radius: 55px; border-width: 0px; font-size: 14px; text-align: center;"
         >
           Buy
         </button>
         <button 
           @click="orderSide = 'Sell'"
-          class="flex-1 py-1.5 sm:py-2 rounded-lg font-black text-xs uppercase tracking-wider transition-all duration-300 text-center"
-          :class="orderSide === 'Sell' ? 'bg-[#f6465d] text-white shadow-lg shadow-[#f6465d]/20' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5'"
+          class="flex-1 py-3 rounded-xl font-black text-[13px] uppercase tracking-widest transition-all duration-500 text-center relative overflow-hidden group"
+          :class="orderSide === 'Sell' ? 'text-white shadow-[0_8px_30px_rgba(246,70,93,0.3)] bg-gradient-to-r from-[#f6465d]/80 to-[#eb3b51]/80 border border-[#f6465d]/40' : 'text-[#848e9c] hover:text-[#EAECEF] hover:bg-white/5 border border-transparent'"
+          style="text-align: center; border-width: 0px; padding-top: 8px;"
         >
           Sell
         </button>
       </div>
 
       <!-- Leverage Slider (Margin Only) -->
-      <div v-if="marginEnabled" class="flex flex-col gap-2 mb-4 px-1">
-        <div class="flex justify-between items-center text-[10px] text-[#848e9c] font-bold uppercase tracking-wider">
-          <span>Leverage</span>
-          <span class="text-[#F0B90B]">{{ leverage }}x</span>
+      <div v-if="marginEnabled" class="flex flex-col gap-2.5 mb-6 px-1 relative z-10 bg-white/[0.02] p-4 rounded-2xl border border-white/5">
+        <div class="flex justify-between items-center text-[11px] text-[#848e9c] font-bold uppercase tracking-widest">
+          <span>Leverage Cross</span>
+          <span class="text-[#F0B90B] bg-[#F0B90B]/10 px-2 py-0.5 rounded shadow-sm">{{ leverage }}x</span>
         </div>
         <input 
           type="range" 
@@ -415,9 +432,9 @@ watch(tpSl, (val) => {
           min="1" 
           max="100" 
           step="1"
-          class="w-full h-1.5 bg-[#1e2329] rounded-lg appearance-none cursor-pointer accent-[#F0B90B]"
+          class="w-full h-1.5 bg-[#1e2329] rounded-lg appearance-none cursor-pointer hover:bg-white/10 transition-colors accent-[#F0B90B]"
         />
-        <div class="flex justify-between text-[8px] text-[#474d57] px-0.5">
+        <div class="flex justify-between text-[9px] text-[#474d57] font-medium tracking-wider px-0.5">
           <span>1x</span>
           <span>25x</span>
           <span>50x</span>
@@ -426,457 +443,400 @@ watch(tpSl, (val) => {
         </div>
       </div>
 
-      <!-- Order Type -->
-      <div class="flex items-center justify-between mb-2 sm:mb-4 relative">
-        <div 
-          @click="showOrderTypeDropdown = !showOrderTypeDropdown"
-          class="cursor-pointer text-[#EAECEF] font-semibold text-xs flex items-center border-b border-dashed border-[#848e9c] pb-0.5 hover:text-[#F0B90B]"
-        >
-          {{ orderType }} <ChevronDown class="w-3 h-3 ml-0.5" />
-        </div>
+      <!-- Type Select & Params -->
+      <div class="flex flex-col gap-4 relative z-10 flex-1 min-h-[0]" style="font-size: 11px; line-height: 14.28px; text-align: justify;">
         
-        <!-- Desktop Dropdown -->
-        <div v-if="showOrderTypeDropdown" class="hidden sm:block absolute top-full left-0 mt-1 w-32 bg-[#2b3139] border border-[#474d57] rounded shadow-lg z-50 py-1">
-          <div 
-            v-for="type in orderTypes" 
-            :key="type"
-            @click="orderType = type as any; showOrderTypeDropdown = false"
-            class="px-3 py-1.5 text-xs hover:bg-[#1e2329] cursor-pointer transition-colors"
-            :class="orderType === type ? 'text-[#F0B90B]' : 'text-[#EAECEF]'"
-          >
-            {{ type }}
-          </div>
-        </div>
-
-        <!-- Mobile Bottom Sheet -->
-        <Teleport to="body">
-          <div v-if="showOrderTypeDropdown" class="fixed inset-0 z-[100] flex sm:hidden flex-col justify-end pointer-events-auto">
-            <!-- Backdrop -->
-            <div 
-              class="absolute inset-0 bg-black/60 backdrop-blur-[2px] transition-opacity" 
-              @click="showOrderTypeDropdown = false"
-            ></div>
-            
-            <!-- Bottom Sheet -->
-            <div class="relative bg-white dark:bg-[#1e2329] rounded-t-[20px] w-full max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-full duration-300 shadow-[0_-8px_30px_rgba(0,0,0,0.12)]">
-              <!-- Handle -->
-              <div class="w-full flex justify-center pt-3 pb-2">
-                <div class="w-10 h-1 bg-[#eaecef] dark:bg-[#2b3139] rounded-full"></div>
-              </div>
-              
-              <!-- Header -->
-              <div class="px-5 py-2 flex items-center text-[#1e2329] dark:text-[#EAECEF]">
-                <div class="flex items-center gap-1 font-bold text-[18px]">
-                  Order Type 
-                  <Info class="w-4 h-4 text-[#848e9c] hover:text-inherit cursor-pointer" />
-                </div>
-              </div>
-              
-              <!-- Options List -->
-              <div class="flex flex-col overflow-y-auto pb-8 pt-2">
-                <div 
-                  v-for="type in orderTypes" 
-                  :key="type"
-                  @click="orderType = type as any; showOrderTypeDropdown = false"
-                  class="px-5 py-3.5 flex items-start gap-4 cursor-pointer hover:bg-neutral-100 dark:hover:bg-[#2b3139]/50 transition-colors relative"
-                >
-                  <!-- Icon -->
-                  <div class="mt-0.5 shrink-0">
-                    <component :is="orderTypeDetails[type].icon" class="w-[18px] h-[18px] text-[#1e2329] dark:text-[#EAECEF]" stroke-width="1.5" />
-                  </div>
-                  
-                  <!-- Text -->
-                  <div class="flex flex-col pr-8">
-                    <div class="text-[15px] font-semibold text-[#1e2329] dark:text-[#EAECEF]">{{ type }}</div>
-                    <div class="text-[13px] text-[#707a8a] dark:text-[#848e9c] leading-snug mt-0.5 pr-2">
-                      {{ orderTypeDetails[type].desc }}
-                    </div>
-                  </div>
-                  
-                  <!-- Checkmark (absolute to right) -->
-                  <div v-if="orderType === type" class="absolute right-5 top-1/2 -translate-y-1/2">
-                    <Check class="w-[22px] h-[22px] text-[#1e2329] dark:text-[#EAECEF]" stroke-width="2.5" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Teleport>
-      </div>
-
-      <!-- Calculator Toggle -->
-      <div class="flex rounded bg-[#1e2329] p-0.5 mb-3">
-        <button 
-          @click="isRiskMode = false"
-          class="flex-1 py-1 rounded text-[10px] font-bold transition-all uppercase tracking-tight"
-          :class="!isRiskMode ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]'"
-        >
-          Standard
-        </button>
-        <button 
-          @click="isRiskMode = true"
-          class="flex-1 py-1 rounded text-[10px] font-bold transition-all uppercase tracking-tight flex items-center justify-center gap-1"
-          :class="isRiskMode ? 'bg-[#2b3139] text-[#F0B90B] shadow-sm' : 'text-[#848e9c] hover:text-[#EAECEF]'"
-        >
-          <Shield class="w-3 h-3" />
-          Risk-Based
-        </button>
-      </div>
-
-      <!-- Inputs -->
-      <div class="flex flex-col gap-3 min-h-[120px]">
-        
-        <!-- Risk-Based Sizing Inputs -->
-        <template v-if="isRiskMode">
-           <div class="flex flex-col gap-2 p-3 rounded-lg bg-[#F0B90B]/5 border border-[#F0B90B]/10">
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] font-bold text-[#F0B90B] uppercase">Risk Per Trade</span>
-                <div class="flex rounded bg-[#161a1e] p-0.5">
-                    <button @click="riskInputMode = 'percent'" :class="cn('px-2 py-0.5 text-[8px] font-bold rounded', riskInputMode === 'percent' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c]')">%</button>
-                    <button @click="riskInputMode = 'absolute'" :class="cn('px-2 py-0.5 text-[8px] font-bold rounded', riskInputMode === 'absolute' ? 'bg-[#F0B90B] text-[#0b0e11]' : 'text-[#848e9c]')">$</button>
-                </div>
-              </div>
-
-              <div v-if="riskInputMode === 'percent'" class="flex items-center gap-2 bg-[#0b0e11] rounded px-3 py-1.5 border border-[#2b3139] focus-within:border-[#F0B90B]">
-                <input type="number" min="0" max="100" v-model="riskPercentOfBalance" step="0.1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
-                <span class="text-[10px] text-[#848e9c] font-bold">% Balance</span>
-              </div>
-              <div v-else class="flex items-center gap-2 bg-[#0b0e11] rounded px-3 py-1.5 border border-[#2b3139] focus-within:border-[#F0B90B]">
-                <input type="number" min="0" v-model="riskAmountAbsolute" step="1" class="w-full bg-transparent outline-none text-xs font-mono text-[#EAECEF]" />
-                <span class="text-[10px] text-[#848e9c] font-bold">USDT</span>
-              </div>
-
-              <div class="flex flex-col gap-1 mt-1">
-                <span class="text-[10px] font-bold text-[#848e9c] uppercase">Stop Loss Price</span>
-                <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[36px] px-2 bg-[#0b0e11] border', slError ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-                    <input type="number" step="0.1" v-model="slPrice" placeholder="Exit Price" class="flex-1 bg-transparent outline-none text-[#EAECEF] font-mono text-xs text-center" />
-                </div>
-                <div class="flex items-center justify-between px-1">
-                    <span class="text-[8px] text-[#848e9c] italic">Tip: Drag line on chart</span>
-                    <div class="flex gap-1">
-                        <button v-for="pct in [1, 2, 5, 10]" :key="pct" @click="setSlPercent(pct)" class="text-[8px] font-bold px-2 py-0.5 bg-[#2b3139] text-[#848e9c] rounded hover:text-white transition-colors">{{ pct }}%</button>
-                    </div>
-                </div>
-              </div>
-
-              <!-- Calculation Result -->
-              <div class="mt-2 pt-2 border-t border-[#F0B90B]/10 flex flex-col gap-1.5">
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-[#848e9c]">Position Size</span>
-                    <span class="text-xs font-mono font-bold text-[#EAECEF]">{{ calculatedRiskSize }} BTC</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-[10px] text-[#848e9c]">Required Margin</span>
-                    <span :class="cn('text-xs font-mono font-bold', requiredRiskMargin > availableUsdt ? 'text-[#f6465d]' : 'text-[#0ecb81]')">{{ requiredRiskMargin.toFixed(2) }} USDT</span>
-                </div>
-              </div>
-           </div>
-        </template>
-
-        <!-- Setup Inputs based on Type -->
-        <template v-if="!isRiskMode">
-        
-        <!-- Stop Price (for Stop-Limit and OCO) -->
-        <div v-if="orderType === 'Stop-Limit' || orderType === 'Stop Market' || orderType === 'OCO'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Stop Price') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="stopPrice = Math.max(0, parseFloat(((stopPrice || 0) - 0.1).toFixed(2)))" />
-            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
-              <div v-show="stopPrice !== null && stopPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Stop (USDT)</div>
-              <input type="number" step="0.01" min="0" v-model="stopPrice" placeholder="Stop (USDT)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', stopPrice !== null && stopPrice > 0 ? 'mt-2.5' : '')" />
-            </div>
-            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="stopPrice = parseFloat(((stopPrice || 0) + 0.1).toFixed(2))" />
-          </div>
-        </div>
-        
-        <!-- Limit Price (for OCO) -->
-        <div v-if="orderType === 'OCO'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Limit Price') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="limitPrice = Math.max(0, parseFloat(((limitPrice || 0) - 0.1).toFixed(2)))" />
-            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
-              <div v-show="limitPrice !== null && limitPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Limit (USDT)</div>
-              <input type="number" step="0.01" min="0" v-model="limitPrice" placeholder="Limit (USDT)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', limitPrice !== null && limitPrice > 0 ? 'mt-2.5' : '')" />
-            </div>
-            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="limitPrice = parseFloat(((limitPrice || 0) + 0.1).toFixed(2))" />
-          </div>
-        </div>
-
-        <!-- Callback Rate (for Trailing Stop) -->
-        <div v-if="orderType === 'Trailing Stop'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Callback') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="callbackRate = Math.max(0.1, parseFloat(((callbackRate || 1) - 0.1).toFixed(1)))" />
-            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
-              <div v-show="callbackRate !== null && callbackRate > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Callback Rate (%)</div>
-              <input type="number" step="0.1" min="0.1" max="5.0" v-model="callbackRate" placeholder="Callback Rate (%)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', callbackRate !== null && callbackRate > 0 ? 'mt-2.5' : '')" />
-            </div>
-            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="callbackRate = Math.min(5.0, parseFloat(((callbackRate || 1) + 0.1).toFixed(1)))" />
-          </div>
-        </div>
-        
-        <!-- Activation Price (for Trailing Stop) -->
-        <div v-if="orderType === 'Trailing Stop'" class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.includes('Activation') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="activationPrice = Math.max(0, parseFloat(((activationPrice || 0) - 0.1).toFixed(2)))" />
-            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
-              <div v-show="activationPrice !== null && activationPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Activation (USDT)</div>
-              <input type="number" step="0.01" min="0" v-model="activationPrice" placeholder="Activation Price" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', activationPrice !== null && activationPrice > 0 ? 'mt-2.5' : '')" />
-            </div>
-            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="activationPrice = parseFloat(((activationPrice || 0) + 0.1).toFixed(2))" />
-          </div>
-        </div>
-
-        <!-- Price Input (for Limit, Stop-Limit, OCO) -->
-        <div v-if="['Limit', 'Stop-Limit', 'OCO'].includes(orderType)" class="flex gap-2">
-          <div class="flex-1 flex flex-col gap-1">
-            <div :class="cn('flex items-center transition-colors rounded-lg h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderPriceError && orderPriceError.startsWith('Price') ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-              <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderPrice = Math.max(0, parseFloat(((orderPrice || 0) - 0.1).toFixed(2)))" />
-              <div class="flex-1 flex flex-col justify-center items-center h-full relative">
-                <div v-show="orderPrice !== null && orderPrice > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Limit (USDT)</div>
-                <input type="number" step="0.01" min="0" v-model="orderPrice" placeholder="Limit (USDT)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', orderPrice !== null && orderPrice > 0 ? 'mt-2.5' : '')" />
-              </div>
-              <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderPrice = parseFloat(((orderPrice || 0) + 0.1).toFixed(2))" />
-            </div>
-            <span v-if="orderPriceError" class="text-[#f6465d] text-[10px]">{{ orderPriceError }}</span>
-          </div>
-          <button @click="orderPrice = orderSide === 'Buy' ? currentPrice : currentPrice + 0.5" class="h-[40px] px-3 sm:px-4 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] text-[#EAECEF] rounded-lg font-semibold text-xs transition-colors shrink-0">BBO</button>
-        </div>
-
-        <!-- Amount Input -->
-        <div class="flex flex-col gap-1">
-          <div :class="cn('flex items-center transition-colors rounded-lg w-full h-[40px] px-2 sm:px-3 bg-[#1e2329] hover:bg-[#2b3139] border', orderAmountError ? 'border-[#f6465d]' : 'border-[#2b3139] focus-within:border-[#F0B90B]')">
-            <Minus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderAmount = Math.max(0, parseFloat(((orderAmount || 0) - 1).toFixed(4)))" />
-            <div class="flex-1 flex flex-col justify-center items-center h-full relative">
-              <div v-show="orderAmount !== null && orderAmount > 0" class="text-[9px] text-[#848e9c] leading-none absolute top-1">Amount (BTC)</div>
-              <input type="number" v-model="orderAmount" placeholder="Amount (BTC)" :class="cn('text-center bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full px-2 placeholder-[#474d57]', orderAmount !== null && orderAmount > 0 ? 'mt-2.5' : '')" />
-            </div>
-            <Plus class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#848e9c] cursor-pointer hover:text-white shrink-0" @click="orderAmount = parseFloat(((orderAmount || 0) + 1).toFixed(4))" />
-          </div>
-          <span v-if="orderAmountError" class="text-[#f6465d] text-[10px] ml-1">{{ orderAmountError }}</span>
-        </div>
-
-        <!-- Market Price Field (Read Only) -->
-        <div v-if="orderType === 'Market'" class="flex gap-2">
-          <div class="flex-1 flex items-center justify-center bg-[#1e2329] text-[#848e9c] opacity-80 cursor-not-allowed rounded-lg h-[40px] px-2 sm:px-3 border border-[#2b3139] text-xs font-mono">
-            Market Price (USDT)
-          </div>
-          <div class="h-[40px] px-3 sm:px-4 bg-[#1e2329]/50 border border-[#2b3139] text-[#EAECEF]/50 rounded-lg font-semibold text-xs shrink-0 cursor-not-allowed opacity-50 flex items-center justify-center">BBO</div>
-        </div>
-
-        </template>
-
-        <!-- Total -->
-        <div class="flex items-center bg-[#1e2329] hover:bg-[#2b3139] transition-colors rounded-lg w-full h-[40px] px-1.5 sm:px-3 border border-transparent focus-within:ring-1 focus-within:ring-[#F0B90B]">
-          <div class="text-[10px] sm:text-[12px] text-[#848e9c] shrink-0">Total</div>
-          <input type="number" :value="totalCost" readonly placeholder="0.00" class="flex-1 text-center ml-1 sm:ml-2 bg-transparent outline-none text-[#EAECEF] font-mono text-xs sm:text-[14px] w-full min-w-0 placeholder:text-[#474d57]" />
-          <div class="text-[#EAECEF] font-medium text-[10px] sm:text-[12px] ml-1.5 sm:ml-3 shrink-0">USDT</div>
-        </div>
-      </div>
-      
-      <!-- Percentage Slider -->
-      <div class="w-full relative h-[20px] flex items-center justify-between mt-1 sm:mt-2 mb-2 sm:mb-4 px-1">
-         <!-- Track -->
-         <div class="absolute left-1 right-1 top-1/2 -translate-y-1/2 h-1 bg-[#2b3139] rounded">
-           <div class="h-full bg-[#2ebd85] rounded pointer-events-none transition-all" :style="`width: ${percentage}%`" v-if="orderSide === 'Buy'"></div>
-           <div class="h-full bg-[#f6465d] rounded pointer-events-none transition-all" :style="`width: ${percentage}%`" v-else></div>
-         </div>
-         
-         <!-- Marks -->
-         <div class="relative w-3 h-3 bg-[#1e2329] border-2 rounded rotate-45 cursor-pointer hover:scale-125 transition-transform z-10" :class="percentage >= 0 ? (orderSide === 'Buy' ? 'border-[#2ebd85] bg-[#2ebd85]' : 'border-[#f6465d] bg-[#f6465d]') : 'border-[#474d57]'" @click="setPercentage(0)"></div>
-         <div class="relative w-3 h-3 bg-[#1e2329] border-2 rounded rotate-45 cursor-pointer hover:scale-125 transition-transform z-10" :class="percentage >= 25 ? (orderSide === 'Buy' ? 'border-[#2ebd85]' : 'border-[#f6465d]') : 'border-[#474d57]'" @click="setPercentage(25)"></div>
-         <div class="relative w-3 h-3 bg-[#1e2329] border-2 rounded rotate-45 cursor-pointer hover:scale-125 transition-transform z-10" :class="percentage >= 50 ? (orderSide === 'Buy' ? 'border-[#2ebd85]' : 'border-[#f6465d]') : 'border-[#474d57]'" @click="setPercentage(50)"></div>
-         <div class="relative w-3 h-3 bg-[#1e2329] border-2 rounded rotate-45 cursor-pointer hover:scale-125 transition-transform z-10" :class="percentage >= 75 ? (orderSide === 'Buy' ? 'border-[#2ebd85]' : 'border-[#f6465d]') : 'border-[#474d57]'" @click="setPercentage(75)"></div>
-         <div class="relative w-3 h-3 bg-[#1e2329] border-2 rounded rotate-45 cursor-pointer hover:scale-125 transition-transform z-10" :class="percentage >= 100 ? (orderSide === 'Buy' ? 'border-[#2ebd85]' : 'border-[#f6465d]') : 'border-[#474d57]'" @click="setPercentage(100)"></div>
-      </div>
-      
-      <!-- TP/SL and Iceberg -->
-      <div class="flex flex-col gap-2 mb-2 sm:mb-4">
-         <div class="flex items-center justify-between group">
-             <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" v-model="tpSl" class="hidden" @change="handleTpSlToggle" />
-                <div class="w-4 h-4 rounded-sm border flex items-center justify-center transition-colors" :class="tpSl ? 'bg-[#F0B90B] border-[#F0B90B]' : 'border-[#848e9c] group-hover:border-[#EAECEF] bg-transparent'">
-                  <svg v-if="tpSl" viewBox="0 0 14 14" class="w-3 h-3 fill-[#181a20]"><path d="M5.533 10.68L2 7.147l1.067-1.067 2.466 2.453L10.933 3.14l1.067 1.067-6.467 6.473z"/></svg>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span class="text-[#848e9c] hover:text-[#EAECEF] text-xs font-semibold transition-colors">TP/SL</span>
-                  <span v-if="tpSl && !tpError && !slError" class="text-[10px] text-[#2ebd85] font-medium hidden sm:inline-block">Active</span>
-                </div>
-             </label>
-             <button v-if="tpSl" class="text-[#848e9c] hover:text-white" @click="isTpSlOpen = true"><Edit2 class="w-3 h-3"/></button>
-         </div>
-
-         <!-- Institutional Settings Toggle -->
-         <div class="flex items-center justify-between group mt-1">
-             <label class="flex items-center gap-2 cursor-pointer">
-               <input type="checkbox" v-model="isInstitutionalMode" class="hidden" />
-               <div class="w-4 h-4 rounded-sm border flex items-center justify-center transition-colors" :class="isInstitutionalMode ? 'bg-[#F0B90B] border-[#F0B90B]' : 'border-[#848e9c] group-hover:border-[#EAECEF] bg-transparent'">
-                 <Shield v-if="isInstitutionalMode" class="w-3 h-3 text-[#181a20]" />
-               </div>
-               <span class="text-[#848e9c] hover:text-[#EAECEF] text-xs font-semibold transition-colors">Institutional Mode</span>
-             </label>
-             <button v-if="isInstitutionalMode" class="text-[#848e9c] hover:text-white" @click="showInstitutionalSettings = !showInstitutionalSettings">
-               <Settings class="w-3 h-3" :class="showInstitutionalSettings ? 'animate-spin-slow' : ''" />
+        <!-- Strategy / Type Select -->
+        <div class="flex justify-between items-center mb-2">
+           <!-- Order Type Dropdown Trigger -->
+           <div class="relative">
+             <button 
+               @click="showOrderTypeDropdown = !showOrderTypeDropdown"
+               class="flex items-center gap-1.5 text-white font-bold text-sm bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-xl transition-all shadow-sm focus:ring-2 focus:ring-[#F0B90B]/50 outline-none"
+               style="text-align: center; line-height: 15px; font-size: 10px;"
+             >
+               {{ orderType }}
+               <ChevronDown class="w-4 h-4 text-[#848e9c]" />
              </button>
-         </div>
-
-         <!-- Institutional Settings Panel -->
-         <div v-if="isInstitutionalMode && showInstitutionalSettings" class="p-3 bg-[#1e2329] border border-[#F0B90B]/20 rounded-xl space-y-4 animate-in slide-in-from-top-2 duration-300" style="margin-bottom: 8px;">
-           <!-- Account Selection -->
-           <div class="space-y-2">
-             <span class="text-[10px] font-bold text-[#848e9c] uppercase tracking-widest">Multi-Account Selection</span>
-             <div class="flex flex-wrap gap-2">
-               <div 
-                 v-for="acc in vaultAccounts" 
-                 :key="acc.id"
-                 @click="selectedAccountIds.includes(acc.id) ? selectedAccountIds = selectedAccountIds.filter(id => id !== acc.id) : selectedAccountIds.push(acc.id)"
-                 :class="cn(
-                   'px-2 py-1 rounded-md border text-[10px] font-bold cursor-pointer transition-all',
-                   selectedAccountIds.includes(acc.id) ? 'bg-[#F0B90B]/10 border-[#F0B90B] text-[#F0B90B]' : 'bg-black/20 border-white/5 text-[#474d57]'
-                 )"
-               >
-                 {{ acc.name }}
+             
+             <!-- Desktop Dropdown -->
+             <transition
+                enter-active-class="transition duration-200 ease-out"
+                enter-from-class="transform scale-95 opacity-0"
+                enter-to-class="transform scale-100 opacity-100"
+                leave-active-class="transition duration-150 ease-in"
+                leave-from-class="transform scale-100 opacity-100"
+                leave-to-class="transform scale-95 opacity-0"
+             >
+               <div v-if="showOrderTypeDropdown" class="flex flex-col absolute top-full left-0 mt-2 w-64 bg-[#181a20]/95 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                 <div 
+                   v-for="type in orderTypes" 
+                   :key="type"
+                   @click="orderType = type as any; showOrderTypeDropdown = false"
+                   class="px-4 py-3 text-sm hover:bg-white/5 cursor-pointer transition-colors flex items-center gap-3 border-b border-white/5 last:border-0"
+                   :class="orderType === type ? 'text-[#F0B90B] bg-white/[0.02]' : 'text-[#EAECEF]'"
+                 >
+                   <component :is="orderTypeDetails[type].icon" class="w-4 h-4 opacity-70" />
+                   <div class="flex flex-col">
+                      <span class="font-bold">{{ type }}</span>
+                      <span class="text-[10px] text-[#848e9c] leading-tight mt-0.5">{{ orderTypeDetails[type].desc }}</span>
+                   </div>
+                 </div>
                </div>
-             </div>
+             </transition>
            </div>
-
-           <!-- SOR Strategy -->
-           <div class="space-y-2">
-             <span class="text-[10px] font-bold text-[#848e9c] uppercase tracking-widest">Routing Strategy</span>
-             <div class="flex p-1 bg-black/20 rounded-lg border border-white/5">
-               <button 
-                 v-for="s in ['market', 'iceberg', 'twap']" 
-                 :key="s"
-                 @click="sorStrategy = s as any"
-                 :class="cn(
-                   'flex-1 py-1 text-[10px] font-bold rounded transition-all capitalize',
-                   sorStrategy === s ? 'bg-white/10 text-white' : 'text-[#474d57]'
-                 )"
-               >
-                 {{ s }}
-               </button>
-             </div>
+           
+           <!-- Setup Toggle Grid -->
+           <div class="flex bg-black/20 p-1 rounded-xl border border-white/5" style="width: 172.02px; height: 41.55px; padding-bottom: 2px; margin-bottom: 0px; padding-left: 0px; padding-right: 0px; padding-top: 2px; border-radius: 4px; font-size: 10px; line-height: 15.28px; text-align: center;">
+             <button 
+                @click="isRiskMode = false"
+                class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
+                :class="!isRiskMode ? 'bg-[#F0B90B] text-black shadow-md' : 'text-[#848e9c] hover:text-white'"
+                style="border-radius: 5px; font-size: 10px; line-height: 10.28px; text-align: justify; height: 32.56px; width: 80.41px; padding-left: 12px; margin-left: 15px; margin-right: 1px;"
+             >Standard</button>
+             <button 
+                @click="isRiskMode = true"
+                class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5"
+                :class="isRiskMode ? 'bg-gradient-to-br from-[#0ecb81] to-[#2ebd85] text-white shadow-md' : 'text-[#848e9c] hover:text-white'"
+                style="width: 72.61px; height: 33.56px; margin-left: 4px; margin-right: -4px; text-align: center; font-size: 8px; border-radius: 8px;"
+             ><Shield class="w-3 h-3" /> Risk Setup</button>
            </div>
-
-           <!-- Strategy Params -->
-           <div v-if="sorStrategy === 'iceberg'" class="space-y-2">
-             <div class="flex justify-between items-center">
-               <span class="text-[10px] font-bold text-[#848e9c]">Slices</span>
-               <span class="text-[10px] font-bold text-[#F0B90B]">{{ icebergSlices }} slices</span>
-             </div>
-             <input type="range" v-model.number="icebergSlices" min="2" max="50" step="1" class="w-full accent-[#F0B90B] h-1" />
-           </div>
-
-           <div v-if="sorStrategy === 'twap'" class="space-y-2">
-             <div class="flex justify-between items-center">
-               <span class="text-[10px] font-bold text-[#848e9c]">Duration</span>
-               <span class="text-[10px] font-bold text-[#F0B90B]">{{ twapDuration }} min</span>
-             </div>
-             <input type="range" v-model.number="twapDuration" min="1" max="60" step="1" class="w-full accent-[#F0B90B] h-1" />
-           </div>
-         </div>
-      </div>
-
-      <!-- Balances -->
-      <div class="flex flex-col gap-1 sm:gap-2 mt-auto">
-        <div class="flex justify-between text-[10px] sm:text-xs items-center">
-           <span class="text-[#848e9c] font-medium flex items-center gap-1 hover:text-white cursor-pointer">Avbl <Edit2 class="w-2.5 h-2.5 text-[#F0B90B]" /></span>
-           <span class="text-[#EAECEF] font-mono font-bold text-[9px] sm:text-xs">{{ orderSide === 'Buy' ? availableUsdt.toFixed(2) + ' USDT' : availableBtc.toFixed(4) + ' BTC' }}</span>
         </div>
-        <div v-if="marginEnabled" class="flex justify-between text-[10px] sm:text-xs items-center">
-           <span class="text-[#848e9c] font-medium">Available Margin</span>
-           <span class="text-[#EAECEF] font-mono font-bold text-[9px] sm:text-xs">{{ availableMargin.toFixed(2) }} USDT</span>
-        </div>
-        <div class="flex justify-between text-[10px] sm:text-xs items-center">
-           <span class="text-[#848e9c] font-medium">Borrow</span>
-           <span class="text-[#EAECEF] font-mono font-bold text-[9px] sm:text-xs">{{ borrowValue.toFixed(2) }} USDT</span>
-        </div>
-      </div>
 
-      <!-- Action Button -->
-      <button 
-        @click="executeTrade"
-        :disabled="!isFormValid"
-        class="w-full py-2.5 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm tracking-[0.1em] uppercase transition-all duration-300 transform active:scale-[0.97] disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed shadow-lg overflow-hidden group relative mt-4"
-        :class="orderSide === 'Buy' ? 'bg-gradient-to-r from-[#0ecb81] to-[#0ecb81]/80 text-[#0b0e11] shadow-[#0ecb81]/20' : 'bg-gradient-to-r from-[#f6465d] to-[#f6465d]/80 text-white shadow-[#f6465d]/20'"
-      >
-        <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        <span class="relative z-10 flex items-center justify-center gap-2">
-          {{ orderSide === 'Buy' ? 'Open Long' : 'Open Short' }}
-          <ArrowUp v-if="orderSide === 'Buy'" class="w-4 h-4" />
-          <ArrowDown v-else class="w-4 h-4" />
-        </span>
-      </button>
+        <!-- Scrollable Inputs Area -->
+        <div class="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-3.5 pb-4">
+            
+            <!-- Risk Setup Inputs -->
+            <div v-if="isRiskMode" class="flex flex-col gap-4 p-4 rounded-2xl bg-[#0ecb81]/[0.03] border border-[#0ecb81]/10">
+                <div class="flex flex-col gap-2">
+                   <div class="flex items-center justify-between">
+                     <span class="text-[11px] font-bold text-[#0ecb81] uppercase tracking-widest flex items-center gap-1.5"><Activity class="w-3.5 h-3.5"/> Risk Per Trade</span>
+                     <div class="flex rounded-lg bg-black/20 border border-white/5 p-0.5">
+                         <button @click="riskInputMode = 'percent'" :class="cn('px-2.5 py-1 text-[9px] font-bold rounded-md uppercase', riskInputMode === 'percent' ? 'bg-[#0ecb81] text-white shadow-sm' : 'text-[#848e9c] hover:text-white')">% Bal</button>
+                         <button @click="riskInputMode = 'absolute'" :class="cn('px-2.5 py-1 text-[9px] font-bold rounded-md uppercase', riskInputMode === 'absolute' ? 'bg-[#0ecb81] text-white shadow-sm' : 'text-[#848e9c] hover:text-white')">Abs $</button>
+                     </div>
+                   </div>
 
-      <!-- TP/SL Popup Overlay -->
-      <div v-if="isTpSlOpen" class="absolute inset-0 z-50 bg-[#0b0e11]/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div class="bg-[#1e2329] border border-[#2b3139] rounded-lg shadow-2xl w-full p-4 flex flex-col gap-4">
-              <div class="flex justify-between items-center text-[#EAECEF] font-semibold text-sm">
-                  <span>TP/SL Settings</span>
-                  <button @click="isTpSlOpen = false" class="text-[#848e9c] hover:text-white"><X class="w-4 h-4" /></button>
+                   <div v-if="riskInputMode === 'percent'" class="flex items-center bg-black/30 rounded-xl px-4 py-3 border focus-within:border-[#0ecb81] transition-colors" :class="riskPercentOfBalance <= 0 || riskPercentOfBalance > 100 ? 'border-[#f6465d]' : 'border-white/5'">
+                     <input type="number" :min="0" :step="0.1" :max="100" v-model="riskPercentOfBalance" class="w-full bg-transparent outline-none font-mono text-base text-white" />
+                     <span class="text-[11px] text-[#848e9c] font-bold">%</span>
+                   </div>
+                   <div v-else class="flex items-center bg-black/30 rounded-xl px-4 py-3 border focus-within:border-[#0ecb81] transition-colors" :class="riskAmountAbsolute <= 0 ? 'border-[#f6465d]' : 'border-white/5'">
+                     <input type="number" :min="0" :step="1" v-model="riskAmountAbsolute" class="w-full bg-transparent outline-none font-mono text-base text-white" />
+                     <span class="text-[11px] text-[#848e9c] font-bold">USDT</span>
+                   </div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                   <span class="text-[10px] font-bold text-[#848e9c] uppercase tracking-widest pl-1">Stop Loss Price</span>
+                   <div class="flex items-center bg-black/30 rounded-xl px-4 py-3 border focus-within:border-[#F0B90B] transition-colors" :class="slError ? 'border-[#f6465d]' : 'border-white/5'">
+                       <input type="number" step="0.1" v-model="slPrice" placeholder="Enter Exit Price" class="flex-1 bg-transparent outline-none font-mono text-base text-white text-center" />
+                   </div>
+                   <div class="flex items-center justify-between px-1">
+                       <span class="text-[9px] text-[#474d57] italic">Drag line on chart to set</span>
+                       <div class="flex gap-1.5">
+                           <button v-for="pct in [1, 2, 5, 10]" :key="pct" @click="setSlPercent(pct)" class="text-[10px] font-bold px-2 py-1 bg-white/5 border border-white/5 hover:border-white/20 text-[#848e9c] rounded-lg hover:text-white hover:bg-white/10 transition-all">{{ pct }}%</button>
+                       </div>
+                   </div>
+                </div>
+
+                <!-- Live Calc -->
+                <div class="pt-4 border-t border-white/10 flex flex-col gap-2.5">
+                   <div class="flex justify-between items-center bg-white/[0.02] px-3 py-2 rounded-lg">
+                       <span class="text-[11px] text-[#848e9c] font-medium">Position Size</span>
+                       <span class="text-sm font-mono font-bold text-white">{{ calculatedRiskSize }} <span class="text-[10px] text-[#848e9c] ml-1">BTC</span></span>
+                   </div>
+                   <div class="flex justify-between items-center bg-white/[0.02] px-3 py-2 rounded-lg border border-transparent transition-colors" :class="requiredRiskMargin > availableUsdt ? 'border-[#f6465d]/50 bg-[#f6465d]/10' : ''">
+                       <span class="text-[11px] text-[#848e9c] font-medium">Req Margin</span>
+                       <span class="text-sm font-mono font-bold" :class="requiredRiskMargin > availableUsdt ? 'text-[#f6465d]' : 'text-[#0ecb81]'">{{ requiredRiskMargin.toFixed(2) }} <span class="text-[10px] text-[#848e9c] ml-1">USDT</span></span>
+                   </div>
+                </div>
+            </div>
+
+            <!-- Standard Inputs setup -->
+            <template v-else>
+               
+               <!-- Dynamic Pre-Price Inputs -->
+               <div v-if="['Stop-Limit', 'Stop Market', 'OCO'].includes(orderType)" class="flex flex-col gap-1.5 group">
+                  <div class="flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[#F0B90B]/30" :class="orderPriceError && orderPriceError.includes('Stop Price') ? 'border-[#f6465d]' : 'border-white/10'">
+                     <Minus class="w-4 h-4 text-[#848e9c] cursor-pointer hover:text-white" @click="stopPrice = Math.max(0, parseFloat(((stopPrice || 0) - 0.1).toFixed(2)))" />
+                     <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
+                        <span class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest">Stop trigger</span>
+                        <input type="number" v-model="stopPrice" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-base text-white placeholder-[#474d57]" />
+                     </div>
+                     <Plus class="w-4 h-4 text-[#848e9c] cursor-pointer hover:text-white" @click="stopPrice = parseFloat(((stopPrice || 0) + 0.1).toFixed(2))" />
+                  </div>
+               </div>
+
+               <div v-if="orderType === 'OCO'" class="flex flex-col gap-1.5 group">
+                  <div class="flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[#F0B90B]/30" :class="orderPriceError && orderPriceError.includes('Limit Price') ? 'border-[#f6465d]' : 'border-white/10'">
+                     <Minus class="w-4 h-4 text-[#848e9c] cursor-pointer hover:text-white" @click="limitPrice = Math.max(0, parseFloat(((limitPrice || 0) - 0.1).toFixed(2)))" />
+                     <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
+                        <span class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest">Limit order</span>
+                        <input type="number" v-model="limitPrice" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-base text-white placeholder-[#474d57]" />
+                     </div>
+                     <Plus class="w-4 h-4 text-[#848e9c] cursor-pointer hover:text-white" @click="limitPrice = parseFloat(((limitPrice || 0) + 0.1).toFixed(2))" />
+                  </div>
+               </div>
+
+               <!-- Trailing Stop Specs -->
+               <div v-if="orderType === 'Trailing Stop'" class="grid grid-cols-2 gap-3">
+                  <div class="flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all" :class="orderPriceError && orderPriceError.includes('Activation') ? 'border-[#f6465d]' : 'border-white/10'">
+                       <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
+                          <span class="text-[9px] text-[#848e9c] font-medium uppercase tracking-widest text-center">Activation</span>
+                          <input type="number" v-model="activationPrice" placeholder="Market" class="w-full text-center bg-transparent outline-none font-mono text-sm text-white placeholder-[#474d57]" />
+                       </div>
+                  </div>
+                  <div class="flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all" :class="orderPriceError && orderPriceError.includes('Callback') ? 'border-[#f6465d]' : 'border-white/10'">
+                       <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
+                          <span class="text-[9px] text-[#848e9c] font-medium uppercase tracking-widest text-center">Callback Rate (%)</span>
+                          <input type="number" min="0.1" max="5.0" step="0.1" v-model="callbackRate" placeholder="1.0" class="w-full text-center bg-transparent outline-none font-mono text-sm text-white placeholder-[#474d57]" />
+                       </div>
+                  </div>
+               </div>
+               
+               <!-- Price -->
+               <div v-if="['Limit', 'Stop-Limit', 'OCO'].includes(orderType)" class="flex items-center gap-2 group">
+                  <div class="flex-1 flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[#F0B90B]/30" :class="orderPriceError && orderPriceError.startsWith('Price') ? 'border-[#f6465d]' : 'border-white/10'">
+                     <Minus class="w-4 h-4 text-[#848e9c] hover:text-[#F0B90B] transition-colors cursor-pointer" @click="orderPrice = Math.max(0, parseFloat(((orderPrice || 0) - 0.1).toFixed(2)))" />
+                     <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
+                        <span class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest text-center">Price (USDT)</span>
+                        <input type="number" v-model="orderPrice" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-base text-white placeholder-[#474d57]" />
+                     </div>
+                     <Plus class="w-4 h-4 text-[#848e9c] hover:text-[#F0B90B] transition-colors cursor-pointer" @click="orderPrice = parseFloat(((orderPrice || 0) + 0.1).toFixed(2))" />
+                  </div>
+               </div>
+
+               <!-- Market Price Fake Field -->
+               <div v-if="orderType === 'Market'" class="flex items-center bg-[#1e2329]/50 border border-white/5 rounded-xl px-4 py-4 cursor-not-allowed">
+                  <span class="flex-1 text-center text-[#848e9c] font-mono text-sm italic">Execute at Best Market Price</span>
+               </div>
+
+               <!-- Amount -->
+               <div class="flex flex-col mt-2">
+                 <div class="flex items-center gap-2 group">
+                    <div class="flex-1 flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[#F0B90B]/30" :class="orderAmountError ? 'border-[#f6465d]' : 'border-white/10'">
+                       <Minus class="w-4 h-4 text-[#848e9c] hover:text-white cursor-pointer" @click="orderAmount = Math.max(0, parseFloat(((orderAmount || 0) - 0.001).toFixed(4)))" />
+                       <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
+                          <span class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest text-center">Amount (BTC)</span>
+                          <input type="number" v-model="orderAmount" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-base text-white placeholder-[#474d57]" />
+                       </div>
+                       <Plus class="w-4 h-4 text-[#848e9c] hover:text-white cursor-pointer" @click="orderAmount = parseFloat(((orderAmount || 0) + 0.001).toFixed(4))" />
+                    </div>
+                 </div>
+                 <div v-if="orderAmountError" class="text-[#f6465d] text-[10px] font-bold mt-1 pl-1 text-center">{{ orderAmountError }}</div>
+               </div>
+
+               <!-- Optional Total -->
+               <div class="flex items-center justify-between text-[#848e9c] bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 shadow-inner" style="padding-top: 10px; padding-left: 17px;">
+                 <span class="text-[11px] font-bold uppercase tracking-widest">Total</span>
+                 <span class="font-mono text-[14px] text-white">{{ totalCost }} <span class="text-[10px] text-[#848e9c]">USDT</span></span>
+               </div>
+
+            </template>
+            <!-- /Standard Inputs ends -->
+            
+            <!-- Quick Percentage Slider -->
+            <div class="group relative px-2 pt-6 pb-2">
+              <div class="absolute inset-0 bg-white/[0.02] rounded-xl group-hover:bg-white/[0.04] transition-colors -z-10"></div>
+              <div class="w-full h-1.5 bg-[#1e2329] rounded-full relative">
+                 <div class="absolute left-0 top-0 bottom-0 rounded-full transition-all duration-300" :class="orderSide === 'Buy' ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'" :style="`width: ${percentage}%`"></div>
+                 
+                 <div 
+                   v-for="p in [0, 25, 50, 75, 100]" :key="p"
+                   @click="setPercentage(p)"
+                   class="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-[3px] bg-[#1e2329] cursor-pointer hover:scale-125 transition-transform z-10 shadow-sm"
+                   :class="percentage >= p ? (orderSide === 'Buy' ? 'border-[#0ecb81]' : 'border-[#f6465d]') : 'border-[#474d57] hover:border-white'"
+                   :style="`left: ${p === 100 ? 'calc(100% - 16px)' : p + '%'}`"
+                 ></div>
               </div>
-              
-              <div class="flex flex-col gap-2">
-                  <div class="flex justify-between items-center"><span class="text-xs text-[#848e9c]">Take Profit</span></div>
-                  <div class="flex gap-2">
-                      <div class="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded flex items-center px-2 hover:border-[#474d57] focus-within:border-[#F0B90B] !focus-within:hover:border-[#F0B90B] transition-colors duration-200 relative">
-                        <input type="number" step="0.1" v-model="tpPrice" @input="updateTpFromPrice" class="w-full bg-transparent py-1.5 text-xs text-[#EAECEF] outline-none" placeholder="Price"/>
-                      </div>
-                      <div class="w-12 bg-[#0b0e11] border border-[#2b3139] rounded flex items-center px-1 hover:border-[#474d57] focus-within:border-[#F0B90B] !focus-within:hover:border-[#F0B90B] transition-colors duration-200">
-                        <input type="number" step="0.1" v-model="tpPercent" @input="updateTpFromPercent" class="w-full bg-transparent py-1.5 text-xs text-[#EAECEF] outline-none text-right" placeholder="%"/>
-                        <span class="text-[#848e9c] text-[10px] ml-0.5">%</span>
-                      </div>
-                  </div>
-                  <div class="flex justify-between gap-1 mt-0.5">
-                      <button v-for="pct in [1, 2, 3, 4, 5]" :key="pct" @click="setTpPercent(pct)" class="flex-1 bg-[#2b3139] hover:bg-[#474d57] hover:shadow-md text-[#848e9c] hover:text-[#EAECEF] rounded py-1 text-[10px] transition-all duration-200 hover:-translate-y-0.5">{{ pct }}%</button>
-                  </div>
-                  <span v-if="tpError" class="text-[#f6465d] text-[10px] mt-0.5 leading-tight">Must be {{ orderSide === 'Buy' ? 'greater' : 'less' }} than order price</span>
-              </div>
+            </div>
 
-              <div class="flex flex-col gap-2">
-                  <div class="flex justify-between items-center"><span class="text-xs text-[#848e9c]">Stop Loss</span></div>
-                  <div class="flex gap-2">
-                      <div class="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded flex items-center px-2 hover:border-[#474d57] focus-within:border-[#F0B90B] !focus-within:hover:border-[#F0B90B] transition-colors duration-200 relative">
-                        <input type="number" step="0.1" v-model="slPrice" @input="updateSlFromPrice" class="w-full bg-transparent py-1.5 text-xs text-[#EAECEF] outline-none" placeholder="Price"/>
-                      </div>
-                      <div class="w-12 bg-[#0b0e11] border border-[#2b3139] rounded flex items-center px-1 hover:border-[#474d57] focus-within:border-[#F0B90B] !focus-within:hover:border-[#F0B90B] transition-colors duration-200">
-                        <input type="number" step="0.1" v-model="slPercent" @input="updateSlFromPercent" class="w-full bg-transparent py-1.5 text-xs text-[#EAECEF] outline-none text-right" placeholder="%"/>
-                        <span class="text-[#848e9c] text-[10px] ml-0.5">%</span>
-                      </div>
-                  </div>
-                   <div class="flex justify-between gap-1 mt-0.5">
-                      <button v-for="pct in [1, 2, 3, 4, 5]" :key="pct" @click="setSlPercent(pct)" class="flex-1 bg-[#2b3139] hover:bg-[#474d57] hover:shadow-md text-[#848e9c] hover:text-[#EAECEF] rounded py-1 text-[10px] transition-all duration-200 hover:-translate-y-0.5">{{ pct }}%</button>
-                  </div>
-                  <span v-if="slError" class="text-[#f6465d] text-[10px] mt-0.5 leading-tight">Must be {{ orderSide === 'Buy' ? 'less' : 'greater' }} than order price</span>
-              </div>
+            <!-- Extra Tools: TP/SL and Institutional -->
+            <div class="flex flex-col gap-2 mt-2 p-3 bg-white/[0.02] border border-white/5 rounded-2xl">
+               <!-- TP/SL Toggle line -->
+               <div class="flex items-center justify-between">
+                  <label class="flex items-center gap-3 cursor-pointer group/tpsl">
+                     <div class="relative w-8 h-4 bg-black/40 rounded-full border border-white/10 transition-colors" :class="tpSl ? 'bg-[#F0B90B]/20 border-[#F0B90B]/50' : ''">
+                        <input type="checkbox" v-model="tpSl" class="hidden" @change="handleTpSlToggle" />
+                        <div class="absolute top-[1px] w-3 h-3 bg-[#848e9c] rounded-full transition-all shadow-sm" :class="tpSl ? 'left-[14px] bg-[#F0B90B]' : 'left-[1px]'"></div>
+                     </div>
+                     <span class="text-[11px] font-bold text-[#848e9c] group-hover/tpsl:text-white transition-colors" :class="tpSl ? 'text-[#F0B90B]' : ''">Take Profit / Stop Loss</span>
+                  </label>
+                  <button v-if="tpSl" @click="isTpSlOpen = true" class="text-[#F0B90B] bg-[#F0B90B]/10 hover:bg-[#F0B90B]/20 px-2 py-1 rounded text-[10px] font-bold uppercase transition-colors flex items-center"><Edit2 class="w-3 h-3 mr-1" /> Edit</button>
+               </div>
 
-              <!-- Risk Management Section -->
-              <div class="mt-2 pt-4 border-t border-[#2b3139] flex flex-col gap-3">
-                  <div class="flex items-center gap-2">
-                      <div class="w-8 h-8 rounded-lg bg-[#F0B90B]/10 flex items-center justify-center text-[#F0B90B]">
-                        <Shield class="w-4 h-4" />
-                      </div>
-                      <span class="text-xs font-bold text-[#EAECEF] uppercase tracking-wider">Risk Management</span>
-                  </div>
-                  <div class="flex items-center gap-3">
-                      <div class="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded flex items-center px-3 hover:border-[#474d57] focus-within:border-[#F0B90B] transition-colors duration-200">
-                        <span class="text-[#848e9c] text-[10px] mr-2">RISK</span>
-                        <input type="number" v-model="riskUsdt" class="w-full bg-transparent py-2 text-xs text-[#EAECEF] outline-none font-mono" placeholder="Risk (USDT)"/>
-                        <span class="text-[#848e9c] text-[10px] ml-2">USDT</span>
-                      </div>
-                      <button 
-                        @click="updateAmountFromRisk"
-                        class="bg-[#F0B90B] hover:bg-[#FCD535] text-[#181a20] px-4 py-2 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-lg shadow-[#F0B90B]/10"
+               <!-- Institutional Mode Toggle line -->
+               <div class="flex items-center justify-between mt-2">
+                  <label class="flex items-center gap-3 cursor-pointer group/inst">
+                     <div class="relative w-8 h-4 bg-black/40 rounded-full border border-white/10 transition-colors" :class="isInstitutionalMode ? 'bg-[#627EEA]/20 border-[#627EEA]/50' : ''">
+                        <input type="checkbox" v-model="isInstitutionalMode" class="hidden" />
+                        <div class="absolute top-[1px] w-3 h-3 bg-[#848e9c] rounded-full transition-all shadow-sm" :class="isInstitutionalMode ? 'left-[14px] bg-[#627EEA]' : 'left-[1px]'"></div>
+                     </div>
+                     <span class="text-[11px] font-bold text-[#848e9c] group-hover/inst:text-white transition-colors flex items-center gap-1.5" :class="isInstitutionalMode ? 'text-[#627EEA]' : ''">
+                        PRO Routing <Shield class="w-3 h-3"/>
+                     </span>
+                  </label>
+                  <button v-if="isInstitutionalMode" @click="showInstitutionalSettings = !showInstitutionalSettings" class="text-[#627EEA] bg-[#627EEA]/10 hover:bg-[#627EEA]/20 px-2 py-1 rounded text-[10px] font-bold uppercase transition-colors"><Settings class="w-3 h-3" :class="showInstitutionalSettings ? 'animate-spin-slow' : ''"/></button>
+               </div>
+
+               <!-- Institutional details slide down -->
+               <div v-if="isInstitutionalMode && showInstitutionalSettings" class="mt-4 pt-4 border-t border-white/5 flex flex-col gap-4 animate-in slide-in-from-top-2">
+                 <div class="flex flex-col gap-2">
+                   <span class="text-[10px] font-bold text-[#627EEA] uppercase tracking-widest">Multi-Account Distribution</span>
+                   <div class="flex flex-wrap gap-2">
+                      <div 
+                         v-for="acc in vaultAccounts" :key="acc.id"
+                         @click="selectedAccountIds.includes(acc.id) ? selectedAccountIds = selectedAccountIds.filter(id => id !== acc.id) : selectedAccountIds.push(acc.id)"
+                         class="px-3 py-1.5 rounded-lg border text-[10px] font-bold cursor-pointer transition-all uppercase tracking-wide flex items-center gap-1"
+                         :class="selectedAccountIds.includes(acc.id) ? 'bg-[#627EEA]/10 border-[#627EEA] text-[#627EEA]' : 'bg-black/20 border-white/10 text-[#848e9c] hover:bg-white/5 hover:text-white'"
                       >
-                        Auto-Size
-                      </button>
-                  </div>
-                  <p class="text-[9px] text-[#848e9c] leading-relaxed italic">
-                    * Calculates position size so you only lose ${{ riskUsdt || 0 }} if the Stop Loss is hit.
-                  </p>
-              </div>
+                         <Check class="w-3 h-3" v-if="selectedAccountIds.includes(acc.id)"/>
+                         {{ acc.name }}
+                      </div>
+                   </div>
+                 </div>
+                 
+                 <div class="flex flex-col gap-2">
+                   <span class="text-[10px] font-bold text-[#627EEA] uppercase tracking-widest">SOR Algorithm</span>
+                   <div class="flex bg-black/20 p-1 rounded-xl border border-white/10">
+                      <button 
+                         v-for="s in ['market', 'iceberg', 'twap']" :key="s"
+                         @click="sorStrategy = s as any"
+                         class="flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase"
+                         :class="sorStrategy === s ? 'bg-[#627EEA] text-white shadow-md' : 'text-[#848e9c] hover:text-white'"
+                      >{{ s }}</button>
+                   </div>
+                 </div>
+                 
+                 <!-- Dynamic params -->
+                 <div v-if="sorStrategy === 'iceberg'" class="flex flex-col gap-2 p-3 bg-white/5 rounded-xl border border-white/10">
+                    <div class="flex justify-between items-center text-[10px] font-bold text-white uppercase tracking-widest">
+                       Iceberg Slices <span class="bg-[#627EEA]/20 text-[#627EEA] px-2 py-0.5 rounded">{{ icebergSlices }}</span>
+                    </div>
+                    <input type="range" v-model.number="icebergSlices" min="2" max="50" class="w-full accent-[#627EEA]" />
+                 </div>
 
-              <button @click="isTpSlOpen = false" class="w-full bg-[#F0B90B] hover:bg-[#F0B90B]/90 text-black font-semibold rounded py-2 text-xs mt-1 transition-colors">Confirm</button>
-          </div>
+                 <div v-if="sorStrategy === 'twap'" class="flex flex-col gap-2 p-3 bg-white/5 rounded-xl border border-white/10">
+                    <div class="flex justify-between items-center text-[10px] font-bold text-white uppercase tracking-widest">
+                       TWAP Duration <span class="bg-[#627EEA]/20 text-[#627EEA] px-2 py-0.5 rounded">{{ twapDuration }}m</span>
+                    </div>
+                    <input type="range" v-model.number="twapDuration" min="1" max="60" class="w-full accent-[#627EEA]" />
+                 </div>
+
+               </div>
+            </div>
+
+        </div> <!-- /End Scrollable -->
+
       </div>
+
+      <!-- Footer Info & Button -->
+      <div class="mt-auto pt-4 border-t border-white/5 flex flex-col gap-3 relative z-10 bg-gradient-to-t from-black/20 to-transparent" style="padding-top: 34px; font-size: 16px; height: 117.42px; line-height: 3.28px; text-align: justify;">
+         <div class="flex justify-between items-center text-xs font-medium px-2">
+             <span class="text-[#848e9c]">Avbl Balance</span>
+             <span class="text-white font-mono">{{ orderSide === 'Buy' ? availableUsdt.toFixed(2) + ' USDT' : availableBtc.toFixed(4) + ' BTC' }}</span>
+         </div>
+         <div v-if="marginEnabled" class="flex justify-between items-center text-xs font-medium px-2">
+             <span class="text-[#848e9c]">Margin Avbl</span>
+             <span class="text-white font-mono">{{ availableMargin.toFixed(2) }} USDT</span>
+         </div>
+
+         <button 
+            @click="executeTrade"
+            :disabled="!isFormValid || isPending"
+            class="w-full py-4 rounded-xl font-black text-[15px] tracking-[0.15em] uppercase transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed shadow-[0_10px_30px_rgba(0,0,0,0.3)] hover:shadow-lg relative overflow-hidden group border border-white/10"
+            :class="orderSide === 'Buy' ? 'bg-gradient-to-br from-[#0ecb81] to-[#2ebd85] text-[#0b0e11] hover:scale-[1.01]' : 'bg-gradient-to-br from-[#f6465d] to-[#eb3b51] text-white hover:scale-[1.01]'"
+         >
+            <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-50 group-hover:opacity-0 transition-opacity"></div>
+            <div class="absolute top-0 left-0 w-full h-1/2 bg-white/20 blur-md pointer-events-none group-hover:bg-white/30 transition-colors"></div>
+            <span class="relative z-10 flex items-center justify-center gap-2 drop-shadow-md">
+               <span v-if="isPending" class="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full"></span>
+               {{ orderSide === 'Buy' ? 'Execute Long' : 'Execute Short' }} 
+               <ArrowUp v-if="orderSide === 'Buy' && !isPending" class="w-5 h-5 mx-1" />
+               <ArrowDown v-if="orderSide === 'Sell' && !isPending" class="w-5 h-5 mx-1" />
+            </span>
+         </button>
+      </div>
+
     </div>
+
+    <!-- Advanced TP/SL Overlay -->
+    <Teleport to="body">
+       <div v-if="isTpSlOpen" class="fixed inset-0 z-[100] bg-[#030712]/90 backdrop-blur-xl flex items-center justify-center p-4 sm:p-0 animate-in fade-in duration-300">
+           <div class="bg-gradient-to-br from-white/[0.08] to-white/[0.02] border border-white/10 rounded-[32px] shadow-[0_32px_80px_rgba(0,0,0,0.8)] w-full max-w-[420px] p-6 lg:p-8 flex flex-col gap-6 transform transition-all relative overflow-hidden">
+             
+             <!-- Glow -->
+             <div class="absolute -top-16 -right-16 w-48 h-48 bg-[#F0B90B] opacity-[0.15] blur-[60px] rounded-full pointer-events-none"></div>
+
+             <div class="flex justify-between items-center relative z-10">
+                 <h3 class="text-white text-xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-white/70">Advanced Protection</h3>
+                 <button @click="isTpSlOpen = false" class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-center text-[#848e9c] hover:text-white transition-all transform hover:scale-105"><X class="w-4 h-4" /></button>
+             </div>
+
+             <!-- TP -->
+             <div class="flex flex-col gap-3 relative z-10">
+                 <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-[#0ecb81] shadow-[0_0_12px_#0ecb81]"></div> <span class="text-[13px] font-bold text-white uppercase tracking-widest">Take Profit</span></div>
+                 <div class="flex gap-3">
+                     <div class="flex-1 bg-black/40 border border-white/5 hover:border-white/10 focus-within:border-[#0ecb81]/50 rounded-xl px-4 py-3 transition-colors flex flex-col">
+                         <span class="text-[10px] text-[#848e9c] uppercase font-bold tracking-wider mb-1">Trigger Price</span>
+                         <input type="number" v-model="tpPrice" @input="updateTpFromPrice" class="w-full bg-transparent font-mono text-base text-white outline-none placeholder-[#474d57]" placeholder="0.00" />
+                     </div>
+                     <div class="w-28 bg-black/40 border border-white/5 hover:border-white/10 focus-within:border-[#0ecb81]/50 rounded-xl px-3 py-3 transition-colors flex flex-col">
+                         <span class="text-[10px] text-[#848e9c] uppercase font-bold tracking-wider mb-1">ROI %</span>
+                         <div class="flex items-center mt-auto">
+                            <input type="number" v-model="tpPercent" @input="updateTpFromPercent" class="w-full bg-transparent font-mono text-base text-white outline-none text-right placeholder-[#474d57]" placeholder="0" />
+                            <span class="text-white font-bold ml-1">%</span>
+                         </div>
+                     </div>
+                 </div>
+                 <div class="flex justify-between gap-2.5 mt-1">
+                     <button v-for="pct in [1, 2, 5, 10, 25]" :key="pct" @click="setTpPercent(pct)" class="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[10px] font-bold text-[#848e9c] hover:text-white transition-all transform hover:-translate-y-0.5">{{ pct }}%</button>
+                 </div>
+                 <span v-if="tpError" class="text-[11px] text-[#f6465d] font-bold px-1 mt-1 flex items-center gap-1"><Info class="w-3 h-3"/> Price must be {{ orderSide === 'Buy' ? 'greater' : 'less' }} than entry</span>
+             </div>
+
+             <!-- SL -->
+             <div class="flex flex-col gap-3 pb-5 border-b border-white/5 relative z-10">
+                 <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-[#f6465d] shadow-[0_0_12px_#f6465d]"></div> <span class="text-[13px] font-bold text-white uppercase tracking-widest">Stop Loss</span></div>
+                 <div class="flex gap-3">
+                     <div class="flex-1 bg-black/40 border border-white/5 hover:border-white/10 focus-within:border-[#f6465d]/50 rounded-xl px-4 py-3 transition-colors flex flex-col">
+                         <span class="text-[10px] text-[#848e9c] uppercase font-bold tracking-wider mb-1">Trigger Price</span>
+                         <input type="number" v-model="slPrice" @input="updateSlFromPrice" class="w-full bg-transparent font-mono text-base text-white outline-none placeholder-[#474d57]" placeholder="0.00" />
+                     </div>
+                     <div class="w-28 bg-black/40 border border-white/5 hover:border-white/10 focus-within:border-[#f6465d]/50 rounded-xl px-3 py-3 transition-colors flex flex-col">
+                         <span class="text-[10px] text-[#848e9c] uppercase font-bold tracking-wider mb-1">Loss %</span>
+                         <div class="flex items-center mt-auto">
+                            <input type="number" v-model="slPercent" @input="updateSlFromPercent" class="w-full bg-transparent font-mono text-base text-white outline-none text-right placeholder-[#474d57]" placeholder="0" />
+                            <span class="text-white font-bold ml-1">%</span>
+                         </div>
+                     </div>
+                 </div>
+                 <div class="flex justify-between gap-2.5 mt-1">
+                     <button v-for="pct in [1, 2, 5, 10, 25]" :key="pct" @click="setSlPercent(pct)" class="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-[10px] font-bold text-[#848e9c] hover:text-white transition-all transform hover:-translate-y-0.5">{{ pct }}%</button>
+                 </div>
+                 <span v-if="slError" class="text-[11px] text-[#f6465d] font-bold px-1 mt-1 flex items-center gap-1"><Info class="w-3 h-3"/> Price must be {{ orderSide === 'Buy' ? 'less' : 'greater' }} than entry</span>
+             </div>
+
+             <!-- Auto Risk Area -->
+             <div class="flex flex-col gap-4 pt-1 relative z-10">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-[#F0B90B] uppercase tracking-widest flex items-center gap-2"><Shield class="w-4 h-4"/> Risk Target Sizing</span>
+                    <button class="bg-gradient-to-r from-[#F0B90B] to-[#FCD535] text-black px-4 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-lg transform active:scale-95 transition-all text-shadow-sm hover:shadow-[#F0B90B]/30" @click="updateAmountFromRisk">Auto Size Risk</button>
+                </div>
+                <div class="flex items-center bg-black/40 border border-white/5 focus-within:border-[#F0B90B]/50 rounded-xl px-4 py-3 transition-colors">
+                    <span class="text-[11px] text-[#848e9c] uppercase font-bold mr-3 tracking-widest">Max Risk Loss</span>
+                    <input type="number" v-model="riskUsdt" class="w-full bg-transparent font-mono text-lg text-[#F0B90B] outline-none text-right font-bold" />
+                    <span class="text-[11px] text-white uppercase font-bold ml-2">USDT</span>
+                </div>
+             </div>
+
+             <div class="pt-4 flex gap-3 relative z-10 w-full">
+                <button @click="tpSl = false; isTpSlOpen = false" class="py-3 flex-1 bg-white/[0.05] hover:bg-white/[0.1] border border-white/5 rounded-xl font-bold text-white text-[13px] uppercase tracking-widest transition-all">Disable</button>
+                <button @click="isTpSlOpen = false" class="py-3 flex-[2] bg-gradient-to-r from-[#F0B90B] to-[#FCD535] hover:brightness-110 rounded-xl font-black text-black text-[13px] uppercase tracking-widest transition-all shadow-[0_8px_20px_rgba(240,185,11,0.25)] border border-white/10">Save Parameters</button>
+             </div>
+           </div>
+       </div>
+    </Teleport>
   </div>
 </template>
-
