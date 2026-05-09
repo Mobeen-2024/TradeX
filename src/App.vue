@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import gsap from 'gsap';
-import { cn } from './lib/utils';
-import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts';
+import { animate } from 'motion';
 
 import Sidebar from './components/Sidebar.vue';
 import TopHeader from './components/TopHeader.vue';
@@ -24,6 +23,8 @@ import { initSystemStore } from './store/systemStore';
 import { quickTradeMode } from './store/tradeStore';
 import { useLiquidStore } from './store/liquidStore';
 import { initSocket } from './services/socketService';
+import { cn } from './lib/utils';
+import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts';
 import { Zap } from 'lucide-vue-next';
 
 const activeItem = ref('Market');
@@ -61,14 +62,8 @@ onMounted(() => {
     };
     window.addEventListener('mousemove', handleMouseMove);
 
-    // GSAP animation for the main layout entry
-    gsap.from('#main-layout', { 
-        opacity: 0, 
-        scale: 0.98, 
-        duration: 0.8, 
-        ease: 'power3.out',
-        delay: 0.2
-    });
+    // Motion One animation for the main layout entry
+    animate('#main-layout', { opacity: [0, 1], scale: [0.98, 1] }, { duration: 0.6, easing: 'ease-out' });
 });
 </script>
 
@@ -103,7 +98,7 @@ onMounted(() => {
     </div>
 
     <!-- Main Content Container with z-index to overlay background -->
-    <div class="flex h-full w-full z-10 flex-col md:flex-row pb-[60px] md:pb-0">
+    <div class="flex h-full w-full z-10 flex-col md:flex-row">
       <Sidebar class="order-2 md:order-none shrink-0" :active-item="activeItem" @update:active-item="activeItem = $event" />
       <div class="flex flex-col flex-1 min-w-0 min-h-0 order-1 md:order-none">
       <TopHeader v-if="activeItem !== 'Trade'" :title="activeItem" @open-settings="settingsPanel?.open()" />
@@ -137,7 +132,7 @@ onMounted(() => {
     <!-- Mobile Quick-Trade FAB -->
     <button 
       @click="quickTradeMode = true"
-      class="sm:hidden fixed right-6 bottom-[80px] z-[150] w-14 h-14 bg-[#F0B90B] rounded-full shadow-2xl flex items-center justify-center text-[#0b0e11] active:scale-95 transition-transform shadow-[#F0B90B]/20"
+      class="sm:hidden fixed right-6 bottom-24 z-[150] w-14 h-14 bg-[#F0B90B] rounded-full shadow-2xl flex items-center justify-center text-[#0b0e11] active:scale-95 transition-transform"
     >
       <Zap class="w-7 h-7 fill-current" />
     </button>
