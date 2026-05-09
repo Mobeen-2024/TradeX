@@ -5,9 +5,9 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 import OrderBookPanel from './OrderBookPanel.vue';
 import { vaultAccounts, fetchVaultAccounts } from '../store/accountStore';
-import { useOrderExecution } from '../composables/useOrderExecution';
+import { useTradeLogic } from '../composables/useTradeLogic';
 
-const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
+const { isPending, availableMargin, executeTrade: runTrade } = useTradeLogic();
 
 const orderPrice = ref(75000.00);
 const lastOrderPrice = ref(75000.00);
