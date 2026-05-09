@@ -2,12 +2,13 @@
 import { ChevronDown, Plus, Minus, ArrowUp, ArrowDown, Info, Edit2, X, Check, TrendingDown, CornerDownRight, Activity, Waypoints, GitCommit, Shield, Settings } from 'lucide-vue-next';
 import { cn } from '../lib/utils';
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { onClickOutside } from '@vueuse/core';
 import { placeOrder, activePositions, currentPrice, previousPrice, orderBook, selectedPrice, availableUsdt, availableBtc, sharedSlPrice, isRiskModeActive } from '../store/tradeStore';
 import OrderBookPanel from './OrderBookPanel.vue';
 import { vaultAccounts, fetchVaultAccounts } from '../store/accountStore';
-import { useTradeLogic } from '../composables/useTradeLogic';
+import { useOrderExecution } from '../composables/useOrderExecution';
 
-const { isPending, availableMargin, executeTrade: runTrade } = useTradeLogic();
+const { isPending, availableMargin, executeTrade: runTrade } = useOrderExecution();
 
 const orderPrice = ref(75000.00);
 const lastOrderPrice = ref(75000.00);
@@ -37,6 +38,11 @@ const percentage = ref(0);
 const marginEnabled = ref(false);
 const leverage = ref(10);
 const showOrderTypeDropdown = ref(false);
+
+const orderTypeDropdownRef = ref<HTMLElement | null>(null);
+onClickOutside(orderTypeDropdownRef, () => {
+    showOrderTypeDropdown.value = false;
+});
 
 const orderTypes = ['Limit', 'Market', 'Stop-Limit', 'Stop Market', 'Trailing Stop', 'OCO'] as const;
 const orderType = ref<typeof orderTypes[number]>('Limit');
@@ -367,7 +373,7 @@ watch(tpSl, (val) => {
     </div>
 
     <!-- Right: Order Panel - Fully Glassmorphism -->
-    <div class="bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-[60px] border border-white/[0.08] shadow-[0_24px_64px_rgba(0,0,0,0.5)] rounded-[24px] p-5 lg:p-6 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass z-20 overflow-hidden transform-gpu" style="padding-left: 41px; padding-right: 65px; padding-top: 28px; padding-bottom: 11px; width: 196.11px; height: 530px; font-size: 35px; line-height: 18.29px; text-align: center; font-weight: normal;">
+    <div class="bg-gradient-to-br from-white/[0.04] to-transparent backdrop-blur-[60px] border border-white/[0.08] shadow-[0_24px_64px_rgba(0,0,0,0.5)] rounded-[24px] p-5 lg:p-6 flex flex-col flex-1 shrink text-[#EAECEF] relative overflow-y-auto no-scrollbar gpu-glass z-20 overflow-hidden transform-gpu" style="padding-left: 41px; padding-right: 65px; padding-top: 28px; padding-bottom: 11px; width: 164.11px; height: 530px; font-size: 35px; line-height: 18.29px; text-align: center; font-weight: normal;">
       
       <!-- Liquid Background Ambient Glow Inside Container -->
       <div 
@@ -449,7 +455,7 @@ watch(tpSl, (val) => {
         <!-- Strategy / Type Select -->
         <div class="flex justify-between items-center mb-2">
            <!-- Order Type Dropdown Trigger -->
-           <div class="relative">
+           <div class="relative" ref="orderTypeDropdownRef">
              <button 
                @click="showOrderTypeDropdown = !showOrderTypeDropdown"
                class="flex items-center gap-1.5 text-white font-bold text-sm bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-xl transition-all shadow-sm focus:ring-2 focus:ring-[#F0B90B]/50 outline-none"
