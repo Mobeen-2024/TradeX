@@ -599,14 +599,27 @@ watch(tpSl, (val) => {
                </div>
                
                <!-- Price -->
-               <div v-if="['Limit', 'Stop-Limit', 'OCO'].includes(orderType)" class="flex items-center gap-2 group">
-                  <div class="flex-1 flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[#F0B90B]/30" :class="orderPriceError && orderPriceError.startsWith('Price') ? 'border-[#f6465d]' : 'border-white/10'">
-                     <Minus class="w-4 h-4 text-[#848e9c] hover:text-[#F0B90B] transition-colors cursor-pointer" @click="orderPrice = Math.max(0, parseFloat(((orderPrice || 0) - 0.1).toFixed(2)))" />
-                     <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
-                        <span class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest text-center">Price (USDT)</span>
-                        <input type="number" v-model="orderPrice" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-base text-white placeholder-[#474d57]" />
+               <div v-if="['Limit', 'Stop-Limit', 'OCO'].includes(orderType)" class="flex flex-col gap-1.5 group">
+                  <div 
+                    class="flex items-center bg-white/[0.02] hover:bg-white/[0.05] border rounded-2xl p-1 transition-all duration-300 focus-within:border-[#F0B90B]/50 focus-within:bg-white/[0.08] focus-within:shadow-[0_0_20px_rgba(240,185,11,0.05)]"
+                    :class="orderPriceError && orderPriceError.startsWith('Price') ? 'border-[#f6465d]/50 bg-[#f6465d]/5' : 'border-white/10'"
+                  >
+                     <button 
+                        @click="orderPrice = Math.max(0, parseFloat(((orderPrice || 0) - 0.1).toFixed(2)))"
+                        class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-[#848e9c] hover:text-white transition-all active:scale-90"
+                     >
+                        <Minus class="w-4 h-4" />
+                     </button>
+                     <div class="flex-1 flex flex-col justify-center items-center py-1">
+                        <span class="text-[9px] text-[#848e9c] font-black uppercase tracking-[0.2em] mb-0.5">Price (USDT)</span>
+                        <input type="number" v-model="orderPrice" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-lg text-white font-bold placeholder-[#474d57]" />
                      </div>
-                     <Plus class="w-4 h-4 text-[#848e9c] hover:text-[#F0B90B] transition-colors cursor-pointer" @click="orderPrice = parseFloat(((orderPrice || 0) + 0.1).toFixed(2))" />
+                     <button 
+                        @click="orderPrice = parseFloat(((orderPrice || 0) + 0.1).toFixed(2))"
+                        class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-[#848e9c] hover:text-white transition-all active:scale-90"
+                     >
+                        <Plus class="w-4 h-4" />
+                     </button>
                   </div>
                </div>
 
@@ -616,18 +629,31 @@ watch(tpSl, (val) => {
                </div>
 
                <!-- Amount -->
-               <div class="flex flex-col mt-2">
-                 <div class="flex items-center gap-2 group">
-                    <div class="flex-1 flex items-center bg-black/20 hover:bg-black/30 border rounded-xl px-3 py-2 transition-all focus-within:ring-2 focus-within:ring-[#F0B90B]/30" :class="orderAmountError ? 'border-[#f6465d]' : 'border-white/10'">
-                       <Minus class="w-4 h-4 text-[#848e9c] hover:text-white cursor-pointer" @click="orderAmount = Math.max(0, parseFloat(((orderAmount || 0) - 0.001).toFixed(4)))" />
-                       <div class="flex-1 flex flex-col justify-center items-center relative gap-0.5">
-                          <span class="text-[10px] text-[#848e9c] font-medium uppercase tracking-widest text-center">Amount (BTC)</span>
-                          <input type="number" v-model="orderAmount" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-base text-white placeholder-[#474d57]" />
-                       </div>
-                       <Plus class="w-4 h-4 text-[#848e9c] hover:text-white cursor-pointer" @click="orderAmount = parseFloat(((orderAmount || 0) + 0.001).toFixed(4))" />
-                    </div>
-                 </div>
-                 <div v-if="orderAmountError" class="text-[#f6465d] text-[10px] font-bold mt-1 pl-1 text-center">{{ orderAmountError }}</div>
+               <div class="flex flex-col group">
+                  <div 
+                    class="flex items-center bg-white/[0.02] hover:bg-white/[0.05] border rounded-2xl p-1 transition-all duration-300 focus-within:border-[#F0B90B]/50 focus-within:bg-white/[0.08] focus-within:shadow-[0_0_20px_rgba(240,185,11,0.05)]"
+                    :class="orderAmountError ? 'border-[#f6465d]/50 bg-[#f6465d]/5' : 'border-white/10'"
+                  >
+                     <button 
+                        @click="orderAmount = Math.max(0, parseFloat(((orderAmount || 0) - 0.001).toFixed(4)))"
+                        class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-[#848e9c] hover:text-white transition-all active:scale-90"
+                     >
+                        <Minus class="w-4 h-4" />
+                     </button>
+                     <div class="flex-1 flex flex-col justify-center items-center py-1">
+                        <span class="text-[9px] text-[#848e9c] font-black uppercase tracking-[0.2em] mb-0.5">Amount (BTC)</span>
+                        <input type="number" v-model="orderAmount" placeholder="0.00" class="w-full text-center bg-transparent outline-none font-mono text-lg text-white font-bold placeholder-[#474d57]" />
+                     </div>
+                     <button 
+                        @click="orderAmount = parseFloat(((orderAmount || 0) + 0.001).toFixed(4))"
+                        class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-[#848e9c] hover:text-white transition-all active:scale-90"
+                     >
+                        <Plus class="w-4 h-4" />
+                     </button>
+                  </div>
+                  <div v-if="orderAmountError" class="text-[#f6465d] text-[10px] font-black mt-1.5 pl-4 uppercase tracking-wider flex items-center gap-1">
+                    <AlertTriangle class="w-3 h-3" /> {{ orderAmountError }}
+                  </div>
                </div>
 
                <!-- Optional Total -->

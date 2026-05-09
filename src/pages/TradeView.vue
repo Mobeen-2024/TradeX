@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { currentPrice, activePositions, openOrders } from '../store/tradeStore';
-import ActivePositions from '../components/ActivePositions.vue';
+import { currentPrice, activePositions, openOrders, marketData } from '../store/tradeStore';
+import PositionsTable from '../components/PositionsTable.vue';
 import OrderPanel from '../components/OrderPanel.vue';
 import TradingChartWidget from '../components/TradingChartWidget.vue';
+import OpenOrdersTable from '../components/OpenOrdersTable.vue';
 import { cn } from '../lib/utils';
 import { Bitcoin, Activity, TrendingUp, TrendingDown, Info, ShieldAlert, BarChart2, Clock, CheckCircle2, AlertTriangle, Settings, Maximize2, Zap, X } from 'lucide-vue-next';
 import { wsManager } from '../lib/wsManager';
@@ -14,19 +15,23 @@ const isLoading = ref(true);
 // Dynamic 24h stats logic
 const stats24h = computed(() => {
   const price = currentPrice.value;
+  const storeData = marketData.value;
+  
   // Use price to drive variations in high/low for a more alive feel
   const volatilityFactor = (Math.sin(Date.now() / 5000) * 0.001); 
-  const baseHigh = price * (1.02 + volatilityFactor);
-  const baseLow = price * (0.97 - volatilityFactor);
-  const changePerc = +1.99 + (volatilityFactor * 100);
+  
+  const high = parseFloat(storeData.high24h) || (price * (1.02 + volatilityFactor));
+  const low = parseFloat(storeData.low24h) || (price * (0.97 - volatilityFactor));
+  const volBtc = parseFloat(storeData.volBtc24h) || (14523.45 + (price * 0.001));
+  
+  const changeMatch = storeData.change24h.match(/([+-]?\d+\.?\d*)%/);
+  const changePerc = changeMatch ? parseFloat(changeMatch[1]) : (+1.99 + (volatilityFactor * 100));
   
   return {
-    high: baseHigh,
-    low: baseLow,
-    volume: 14523.45 + (price * 0.001),
-    volumeUsdt: 14523.45 * price,
-    changePerc: parseFloat(changePerc.toFixed(2)),
-    changeAbs: price * (changePerc / 100)
+    high,
+    low,
+    volume: volBtc,
+    changePerc: parseFloat(changePerc.toFixed(2))
   };
 });
 
@@ -237,51 +242,12 @@ const activeBottomTab = ref<'positions' | 'orders' | 'history'>('positions');
               mode="out-in"
             >
               <div :key="activeBottomTab" class="w-full h-full p-4">
-                <div v-if="activeBottomTab === 'positions'" class="h-full overflow-y-auto no-scrollbar">
-                  <ActivePositions class="w-full !border-0 !bg-transparent !shadow-none !rounded-none" />
+                <div v-if="activeBottomTab === 'positions'" class="h-full">
+                  <PositionsTable />
                 </div>
 
-                <div v-else-if="activeBottomTab === 'orders'" class="h-full flex flex-col items-center justify-center text-center">
-                   <template v-if="openOrders.length === 0">
-                     <div class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-5 border border-white/10 shadow-inner group-hover:scale-110 transition-transform duration-500">
-                        <Clock class="w-8 h-8 text-[#474d57] group-hover:text-white transition-colors" />
-                     </div>
-                     <h3 class="text-white text-lg font-black mb-1 uppercase tracking-wider">No Active Orders</h3>
-                     <p class="text-[#848e9c] text-sm max-w-[300px] font-medium leading-relaxed">Your order book is currently empty. Start trading to see your pending orders here.</p>
-                   </template>
-                   <template v-else>
-                      <!-- Simple table list for orders -->
-                      <div class="w-full overflow-x-auto">
-                        <table class="w-full text-left border-separate border-spacing-y-2">
-                          <thead>
-                            <tr class="text-[10px] text-[#848e9c] font-black uppercase tracking-[0.2em]">
-                              <th class="px-4 pb-2">Pair</th>
-                              <th class="px-4 pb-2">Type</th>
-                              <th class="px-4 pb-2">Side</th>
-                              <th class="px-4 pb-2 text-right">Price</th>
-                              <th class="px-4 pb-2 text-right">Amount</th>
-                              <th class="px-4 pb-2 text-right">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr v-for="order in openOrders" :key="order.id" class="bg-white/5 hover:bg-white/10 transition-colors rounded-xl overflow-hidden group/row">
-                              <td class="px-4 py-3 text-sm font-bold text-white rounded-l-xl">BTC/USDT</td>
-                              <td class="px-4 py-3 text-[11px] text-[#848e9c] font-bold uppercase">{{ order.type }}</td>
-                              <td class="px-4 py-3">
-                                <span :class="cn('px-2 py-0.5 rounded text-[10px] font-black uppercase', order.side === 'Buy' ? 'bg-[#0ecb81]/20 text-[#0ecb81]' : 'bg-[#f6465d]/20 text-[#f6465d]')">{{ order.side }}</span>
-                              </td>
-                              <td class="px-4 py-3 text-right font-mono text-sm font-bold text-white">{{ formatNum(order.price) }}</td>
-                              <td class="px-4 py-3 text-right font-mono text-sm font-bold text-white">{{ order.amount }}</td>
-                              <td class="px-4 py-3 text-right rounded-r-xl">
-                                <button class="text-[#f6465d] hover:bg-[#f6465d]/10 p-1.5 rounded-lg transition-colors">
-                                  <X class="w-4 h-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                   </template>
+                <div v-else-if="activeBottomTab === 'orders'" class="h-full">
+                   <OpenOrdersTable />
                 </div>
 
                 <div v-else-if="activeBottomTab === 'history'" class="h-full flex items-center justify-center text-[#474d57] text-sm italic font-medium">
