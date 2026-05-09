@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import {
   Bot,
   X,
@@ -57,7 +57,9 @@ const layers = [
   { id: 'risk', name: 'Risk Intel', desc: 'Capital Guard', icon: ShieldAlert, color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
 ];
 
-onMounted(() => {
+let loadTimeout: any;
+
+onMounted(async () => {
   if (props.strategyId && props.strategyId !== "new") {
     const existing = activeStrategies.value.find(
       (s) => s.id === props.strategyId,
@@ -65,13 +67,18 @@ onMounted(() => {
     if (existing) {
       currentName.value = existing.name;
       if (existing.nodes && existing.edges) {
-        // Need a slight delay to ensure WorkflowEditor is mounted and vue-flow is ready
-        setTimeout(() => {
+        // High-priority fix: Use nextTick + safe timeout to ensure VueFlow is initialized
+        await nextTick();
+        loadTimeout = setTimeout(() => {
           workflowRef.value?.loadStrategy(existing.nodes, existing.edges);
-        }, 100);
+        }, 50);
       }
     }
   }
+});
+
+onUnmounted(() => {
+  if (loadTimeout) clearTimeout(loadTimeout);
 });
 
 const saveStrategy = async (): Promise<string | null> => {
@@ -85,7 +92,8 @@ const saveStrategy = async (): Promise<string | null> => {
       let finalId = props.strategyId;
 
       if (props.strategyId === "new") {
-        finalId = "agent_" + Math.random().toString(36).substring(7);
+        // Low-priority fix: Use secure random UUID
+        finalId = "agent_" + crypto.randomUUID().split('-')[0];
         addStrategy({
           id: finalId,
           name: currentName.value,

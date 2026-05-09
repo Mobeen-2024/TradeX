@@ -128,7 +128,7 @@ export const riskSettings = ref({
 
 export const logRuntimeEvent = (strategyId: string, level: ExecutionLog['level'], message: string, nodeId?: string, data?: any) => {
   const log: ExecutionLog = {
-    id: Math.random().toString(36).substring(7),
+    id: crypto.randomUUID().split('-')[0],
     strategyId,
     timestamp: Date.now(),
     level,
@@ -150,7 +150,7 @@ const runAiOrchestrator = (strategy: Strategy) => {
     const existing = aiAdvisories.value.find(a => a.strategyId === strategy.id && a.type === 'RISK_ALERT');
     if (!existing) {
       const advisory: AiAdvisory = {
-        id: `adv_${Math.random().toString(36).substring(7)}`,
+        id: `adv_${crypto.randomUUID().split('-')[0]}`,
         strategyId: strategy.id,
         type: 'RISK_ALERT',
         severity: 'high',
@@ -162,13 +162,13 @@ const runAiOrchestrator = (strategy: Strategy) => {
       };
       aiAdvisories.value.unshift(advisory);
       eventBus.publish('ai:analysis-complete', { type: 'advisory', advisory }, strategy.id);
-      
-      // Autonomous Intervention
-      if (strategy.errorCount > 15) {
-         strategy.status = 'paused';
-         logRuntimeEvent(strategy.id, 'ERROR', 'AI ORCHESTRATOR: Strategy auto-paused due to critical failure rate.');
-         addNotification({ type: 'error', title: 'Autonomous Intervention', message: `${strategy.name} auto-paused for safety.` });
-      }
+    }
+
+    // Autonomous Intervention - Moved outside the 'existing' check to ensure it always evaluates
+    if (strategy.errorCount > 15) {
+       strategy.status = 'paused';
+       logRuntimeEvent(strategy.id, 'ERROR', 'AI ORCHESTRATOR: Strategy auto-paused due to critical failure rate.');
+       addNotification({ type: 'error', title: 'Autonomous Intervention', message: `${strategy.name} auto-paused for safety.` });
     }
   }
 
@@ -222,7 +222,7 @@ export const dispatchSignal = async (rawSignal: any) => {
   eventBus.publish('ai:analysis-complete', { asset: rawSignal.asset, confidence: rawSignal.confidence }, strategyId);
 
   const signal = {
-    id: rawSignal.id || `sig_${Math.random().toString(36).substring(7)}`,
+    id: rawSignal.id || `sig_${crypto.randomUUID().split('-')[0]}`,
     asset: rawSignal.asset || 'BTCUSDT',
     direction: (rawSignal.direction || 'long').toLowerCase() as 'long' | 'short',
     confidence: rawSignal.confidence || 0,
@@ -241,8 +241,15 @@ export const dispatchSignal = async (rawSignal: any) => {
   eventBus.publish('signal:created', signal, strategyId);
 
   try {
-    const quantity = (availableUsdt.value * 0.05) / signal.entry;
-    const result = await placeOrder({
+    // High-priority fix: Balance validation
+    const positionPercent = riskSettings.value.defaultPositionPercent / 100;
+    if (availableUsdt.value <= 0 || (availableUsdt.value * positionPercent) < 1) {
+       logRuntimeEvent(strategyId, 'ERROR', 'Execution Rejected: Insufficient available USDT balance.');
+       return false;
+    }
+
+    const quantity = (availableUsdt.value * positionPercent) / signal.entry;
+    const result: any = await placeOrder({
       pair: signal.asset.replace('/', ''),
       side: signal.direction === 'long' ? 'Buy' : 'Sell' as const,
       type: 'MARKET',
@@ -253,7 +260,8 @@ export const dispatchSignal = async (rawSignal: any) => {
       stopLossPrice: signal.stopLoss,
     });
 
-    if (result) {
+    // Critical Fix: Explicit success check (placeOrder returns {success: false} on error)
+    if (result && result.success !== false) {
       if (strategy) {
         strategy.signalsProcessed++;
         logRuntimeEvent(strategyId, 'EXEC', `Autonomous trade successful on ${signal.asset}`);
@@ -276,14 +284,17 @@ export const triggerMacro = async (macroId: string) => {
   try {
     switch (macroId) {
       case '3':
-        for (const pos of activePositions.value) await closePosition(pos.id);
+        // High-priority fix: Parallel execution
+        await Promise.all(activePositions.value.map(pos => closePosition(pos.id)));
         portfolioMetrics.value.isLocked = true;
         portfolioMetrics.value.lockExpiry = Date.now() + riskSettings.value.lockDurationMs;
         eventBus.publish('macro:executed', { macroId, result: 'Panic Close Success' }, 'system');
         break;
       case '2':
         const profitable = activePositions.value.filter(p => (p.pnl || 0) > 0);
-        for (const pos of profitable) await closePosition(pos.id);
+        // High-priority fix: Parallel execution + Note on partial close logic
+        // Note: Actual 25% scale out requires backend support for quantity parameter in closePosition
+        await Promise.all(profitable.map(pos => closePosition(pos.id))); 
         eventBus.publish('macro:executed', { macroId, result: 'Scale Out Success' }, 'system');
         break;
     }
@@ -312,6 +323,12 @@ if (typeof window !== 'undefined') {
     const drawdown = ((portfolioMetrics.value.initialEquity - totalEquity) / portfolioMetrics.value.initialEquity) * 100;
     portfolioMetrics.value.drawdown = parseFloat(drawdown.toFixed(2));
     
+    // High-priority fix: Portfolio lock expiry check
+    if (portfolioMetrics.value.isLocked && Date.now() > portfolioMetrics.value.lockExpiry) {
+       portfolioMetrics.value.isLocked = false;
+       logRuntimeEvent('system', 'INFO', 'Portfolio auto-lock expired. System resumed.');
+    }
+
     if (drawdown >= riskSettings.value.globalDrawdownLimit && !portfolioMetrics.value.isLocked) {
       eventBus.publish('risk:triggered', { reason: 'Portfolio Drawdown Limit Exceeded', drawdown }, 'system');
       triggerMacro('3');

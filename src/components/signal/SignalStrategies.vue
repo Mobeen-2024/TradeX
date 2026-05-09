@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import {
   Bot,
   Play,
@@ -34,13 +34,22 @@ type ExecutionState = "idle" | "toggling" | "success" | "failed";
 const executionStates = ref<Record<string, ExecutionState>>({});
 const activeFilter = ref<"ALL" | "RUNNING" | "PAUSED">("ALL");
 
+const timeouts = new Map<string, any>();
+let mountTimeout: any;
+
 onMounted(() => {
-  setTimeout(() => {
+  mountTimeout = setTimeout(() => {
     strategies.value.forEach(
       (s) => (executionStates.value[s.id] = "idle"),
     );
     isLoading.value = false;
   }, 800);
+});
+
+onUnmounted(() => {
+  if (mountTimeout) clearTimeout(mountTimeout);
+  timeouts.forEach(t => clearTimeout(t));
+  timeouts.clear();
 });
 
 const filteredStrategies = computed(() => {
@@ -77,7 +86,11 @@ const toggleStrategy = async (strategy: Strategy) => {
   } catch (err) {
     executionStates.value[strategy.id] = "failed";
   } finally {
-    setTimeout(() => { executionStates.value[strategy.id] = "idle"; }, 1500);
+    const tid = setTimeout(() => { 
+      executionStates.value[strategy.id] = "idle"; 
+      timeouts.delete(strategy.id);
+    }, 1500);
+    timeouts.set(strategy.id, tid);
   }
 };
 

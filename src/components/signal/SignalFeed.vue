@@ -11,10 +11,19 @@ const activeFilter = ref<'ALL'|'HIGH_CONVICTION'|'BUY'|'SELL'>('ALL');
 // Action States
 const executeState = ref<Record<string, 'idle'|'executing'|'success'|'error'>>({});
 
+let scanningTimeout: any;
+const timeouts = new Map<string, any>();
+
 onMounted(() => {
-  setTimeout(() => {
+  scanningTimeout = setTimeout(() => {
     isScanning.value = false;
   }, 1500); 
+});
+
+onUnmounted(() => {
+  if (scanningTimeout) clearTimeout(scanningTimeout);
+  timeouts.forEach(t => clearTimeout(t));
+  timeouts.clear();
 });
 
 const filteredSignals = computed(() => {
@@ -41,7 +50,11 @@ const handleExecute = async (signal: any) => {
   executeState.value[signal.id] = success ? 'success' : 'error';
   
   if (!success) {
-    setTimeout(() => { executeState.value[signal.id] = 'idle'; }, 3000);
+    const tid = setTimeout(() => { 
+      executeState.value[signal.id] = 'idle'; 
+      timeouts.delete(signal.id);
+    }, 3000);
+    timeouts.set(signal.id, tid);
   }
 };
 
@@ -249,6 +262,10 @@ const getConfidenceColor = (conf: number) => {
 .list-leave-active {
   transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
+.list-leave-active {
+  position: absolute;
+  width: 100%;
+}
 .list-enter-from {
   opacity: 0;
   transform: translateX(-30px) scale(0.95);
@@ -256,5 +273,8 @@ const getConfidenceColor = (conf: number) => {
 .list-leave-to {
   opacity: 0;
   transform: translateX(30px);
+}
+.list-move {
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>

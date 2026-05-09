@@ -71,7 +71,7 @@ watch(availableBtc, (val) => localStorage.setItem('tradex_available_btc', val.to
 export const createAlert = (price: number) => {
     const side = price > currentPrice.value ? 'above' : 'below';
     alerts.value.push({
-        id: Math.random().toString(36).substring(7),
+        id: crypto.randomUUID().split('-')[0],
         price,
         side,
         triggered: false
@@ -327,8 +327,11 @@ if (typeof window !== 'undefined') {
 
 // Monitor alerts
 watch(currentPrice, (newPrice) => {
-    alerts.value.forEach(alert => {
-        if (alert.triggered) return;
+    // Medium-priority fix: Only evaluate untriggered alerts
+    const activeAlerts = alerts.value.filter(a => !a.triggered);
+    if (activeAlerts.length === 0) return;
+
+    activeAlerts.forEach(alert => {
         const hit = alert.side === 'above' ? newPrice >= alert.price : newPrice <= alert.price;
         if (hit) {
             alert.triggered = true;
