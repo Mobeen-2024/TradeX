@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { addNotification } from './alertStore';
-import { placeOrder, activePositions, closePosition } from './tradeStore';
+import { placeOrder, activePositions, closePosition, availableUsdt } from './tradeStore';
 import { wsManager } from '../lib/wsManager';
 
 // --- Core Types ---
@@ -40,9 +40,24 @@ export interface ExecutionLog {
   data?: any;
 }
 
-// --- Reactive State (The Runtime Data Layer) ---
+// Institutional Signal Type
+export interface AiSignal {
+  id: string;
+  asset: string;
+  direction: 'long' | 'short';
+  confidence: number;
+  riskScore: 'low' | 'medium' | 'high';
+  entry: number;
+  stopLoss: number;
+  takeProfit: number;
+  aiReasoning: string[];
+  marketRegime?: string;
+  volatilityScore?: number;
+  timestamp: number;
+}
 
-// 1. Strategy Definitions
+// --- Reactive State ---
+
 export const strategies = ref<Strategy[]>([
   { 
     id: '1', name: 'Momentum Scalper', type: 'Scalp Engine', status: 'running', 
@@ -64,26 +79,73 @@ export const strategies = ref<Strategy[]>([
   },
 ]);
 
-// 2. Active Executions (Instances currently live in the engine)
 export const activeExecutions = ref<Record<string, { startTime: number; lastTick: number }>>({});
-
-// 3. Execution Logs (Institutional Audit Trail)
 export const executionLogs = ref<ExecutionLog[]>([]);
-
-// 4. Signal Queue (Buffer for incoming AI/Market signals)
-export const signalQueue = ref<any[]>([]);
-
-// 5. Node Execution Map (For Vue Flow Visualization)
+export const signalQueue = ref<AiSignal[]>([]);
 export const nodeExecutionMap = ref<Record<string, Record<string, NodeExecutionState>>>({});
 
-// 6. Runtime Metrics (Institutional Performance tracking)
-export const runtimeMetrics = ref<Record<string, { latency: number[]; errors: number; uptime: number }>>({});
+// Pipeline Thresholds
+export const riskSettings = ref({
+  minConfidence: 75,
+  maxRiskScore: 'medium',
+  defaultPositionPercent: 5, // 5% of available
+  maxLeverage: 10
+});
 
-// --- Engine Actions (The Runtime Logic Layer) ---
+// --- Pipeline Logic Layers ---
 
 /**
- * Logs a runtime event to the audit trail
+ * Layer 1: Signal Parser
+ * Normalizes incoming data from various AI models
  */
+const parseSignal = (rawSignal: any): AiSignal => {
+  return {
+    id: rawSignal.id || `sig_${Math.random().toString(36).substring(7)}`,
+    asset: rawSignal.asset || rawSignal.symbol || 'BTCUSDT',
+    direction: (rawSignal.direction || rawSignal.type || 'long').toLowerCase() as 'long' | 'short',
+    confidence: rawSignal.confidence || 0,
+    riskScore: rawSignal.riskScore || 'medium',
+    entry: typeof rawSignal.entry === 'string' ? parseFloat(rawSignal.entry.replace(/[^0-9.]/g, '')) : rawSignal.entry,
+    stopLoss: typeof rawSignal.stopLoss === 'string' ? parseFloat(rawSignal.stopLoss.replace(/[^0-9.]/g, '')) : rawSignal.stopLoss,
+    takeProfit: typeof rawSignal.takeProfit === 'string' ? parseFloat(rawSignal.takeProfit.replace(/[^0-9.]/g, '')) : rawSignal.takeProfit,
+    aiReasoning: rawSignal.aiReasoning || rawSignal.reasoning || [],
+    marketRegime: rawSignal.marketRegime || 'Trend',
+    volatilityScore: rawSignal.volatilityScore || 50,
+    timestamp: Date.now()
+  };
+};
+
+/**
+ * Layer 2: Risk Engine
+ * Evaluates execution safety
+ */
+const runRiskEngine = (signal: AiSignal): { safe: boolean; reason?: string } => {
+  if (signal.confidence < riskSettings.value.minConfidence) {
+    return { safe: false, reason: `Low confidence (${signal.confidence}%)` };
+  }
+  
+  if (signal.riskScore === 'high' && riskSettings.value.maxRiskScore !== 'high') {
+    return { safe: false, reason: 'Risk score too high for current profile' };
+  }
+
+  return { safe: true };
+};
+
+/**
+ * Layer 3: Position Sizing
+ * Dynamically scales position based on confidence
+ */
+const calculatePositionSize = (signal: AiSignal): number => {
+  const basePercent = riskSettings.value.defaultPositionPercent;
+  const confidenceMultiplier = signal.confidence / 100;
+  const usdtAmount = availableUsdt.value * (basePercent / 100) * confidenceMultiplier;
+  
+  // Return quantity (simplified BTC assumption for demo)
+  return parseFloat((usdtAmount / signal.entry).toFixed(4));
+};
+
+// --- Engine Actions ---
+
 export const logRuntimeEvent = (strategyId: string, level: ExecutionLog['level'], message: string, nodeId?: string, data?: any) => {
   const log: ExecutionLog = {
     id: Math.random().toString(36).substring(7),
@@ -98,14 +160,8 @@ export const logRuntimeEvent = (strategyId: string, level: ExecutionLog['level']
   if (executionLogs.value.length > 500) executionLogs.value.pop();
 };
 
-/**
- * Updates the state of a specific node in a strategy graph
- */
 export const updateNodeExecution = (strategyId: string, nodeId: string, updates: Partial<NodeExecutionState>) => {
-  if (!nodeExecutionMap.value[strategyId]) {
-    nodeExecutionMap.value[strategyId] = {};
-  }
-  
+  if (!nodeExecutionMap.value[strategyId]) nodeExecutionMap.value[strategyId] = {};
   nodeExecutionMap.value[strategyId][nodeId] = {
     ...(nodeExecutionMap.value[strategyId][nodeId] || { status: 'idle', latency: 0, output: {}, lastExecution: 0 }),
     ...updates,
@@ -114,96 +170,94 @@ export const updateNodeExecution = (strategyId: string, nodeId: string, updates:
 };
 
 /**
- * Start Strategy Runtime
+ * PHASE 2: Institutional Signal Pipeline
  */
+export const dispatchSignal = async (rawSignal: any) => {
+  // 1. Parse
+  const signal = parseSignal(rawSignal);
+  signalQueue.value.push(signal);
+  logRuntimeEvent('system', 'INFO', `Signal parsed: ${signal.direction.toUpperCase()} ${signal.asset} @ ${signal.entry}`);
+
+  // 2. Risk Validation (Confidence Layer)
+  const riskCheck = runRiskEngine(signal);
+  if (!riskCheck.safe) {
+    logRuntimeEvent('system', 'WARN', `Execution blocked: ${riskCheck.reason}`, undefined, signal);
+    addNotification({
+      type: 'warning',
+      title: 'Signal Blocked',
+      message: `Risk Engine rejected ${signal.asset}: ${riskCheck.reason}`
+    });
+    return false;
+  }
+
+  // 3. Sizing
+  const quantity = calculatePositionSize(signal);
+  logRuntimeEvent('system', 'INFO', `Sizing calculated: ${quantity} unit(s) based on ${signal.confidence}% confidence`);
+
+  // 4. Execution
+  try {
+    const orderData = {
+      pair: signal.asset.replace('/', ''),
+      side: signal.direction === 'long' ? 'Buy' : 'Sell' as const,
+      type: 'MARKET',
+      quantity,
+      leverage: `${riskSettings.value.maxLeverage}x`,
+      cost: quantity * signal.entry,
+      takeProfitPrice: signal.takeProfit,
+      stopLossPrice: signal.stopLoss,
+    };
+
+    const result = await placeOrder(orderData);
+    if (result) {
+      logRuntimeEvent('system', 'EXEC', `Institutional Pipeline: Position Created for ${signal.asset}`, undefined, { signalId: signal.id, quantity });
+      addNotification({
+        type: 'success',
+        title: 'Signal Executed',
+        message: `Pipeline confirmed: ${signal.direction.toUpperCase()} ${signal.asset} position live.`
+      });
+      return true;
+    }
+  } catch (err) {
+    logRuntimeEvent('system', 'ERROR', `Pipeline Execution failed: ${(err as Error).message}`);
+  }
+  return false;
+};
+
 export const startStrategy = async (id: string) => {
   const strategy = strategies.value.find(s => s.id === id);
   if (!strategy) return;
-
   strategy.status = 'running';
   activeExecutions.value[id] = { startTime: Date.now(), lastTick: Date.now() };
-  
   logRuntimeEvent(id, 'INFO', `Strategy engine ${strategy.name} initiated.`);
-  
-  addNotification({
-    type: 'success',
-    title: 'Engine Started',
-    message: `${strategy.name} is now live.`
-  });
 };
 
-/**
- * Pause Strategy Runtime
- */
 export const pauseStrategy = (id: string) => {
   const strategy = strategies.value.find(s => s.id === id);
   if (strategy) {
     strategy.status = 'paused';
     delete activeExecutions.value[id];
-    logRuntimeEvent(id, 'WARN', `Strategy engine ${strategy.name} suspended.`);
   }
 };
 
-/**
- * Signal Dispatch Engine
- */
-export const dispatchSignal = async (signal: any) => {
-  signalQueue.value.push(signal);
-  logRuntimeEvent('system', 'INFO', `Incoming signal queued for ${signal.asset}`);
-
-  try {
-    const orderData = {
-      pair: signal.asset.replace('/', ''),
-      side: signal.type === 'BUY' || signal.type === 'ACCUMULATE' ? 'Buy' : 'Sell' as const,
-      type: 'MARKET',
-      quantity: 0.1,
-      leverage: '10x',
-      cost: 100,
-      takeProfitPrice: parseFloat(signal.priceTarget?.replace('$', '').replace(',', '')) || undefined,
-      stopLossPrice: parseFloat(signal.stopLoss?.replace('$', '').replace(',', '')) || undefined,
-    };
-
-    const result = await placeOrder(orderData);
-    if (result) {
-      logRuntimeEvent('system', 'EXEC', `Signal executed on ${signal.asset}`, undefined, result);
-      return true;
-    }
-  } catch (err) {
-    logRuntimeEvent('system', 'ERROR', `Signal execution failed: ${(err as Error).message}`);
-  }
-  return false;
-};
-
-/**
- * Macro Orchestration Engine
- */
 export const triggerMacro = async (macroId: string) => {
   logRuntimeEvent('system', 'WARN', `Macro Protocol ${macroId} triggered.`);
-  
   try {
     switch (macroId) {
-      case '3': // Panic Close
-        for (const pos of activePositions.value) {
-          await closePosition(pos.id);
-          logRuntimeEvent('system', 'EXEC', `Emergency close: ${pos.pair} (${pos.id})`);
-        }
+      case '3':
+        for (const pos of activePositions.value) await closePosition(pos.id);
         break;
-      case '2': // Scale Out
+      case '2':
         const profitable = activePositions.value.filter(p => (p.pnl || 0) > 0);
-        for (const pos of profitable) {
-          await closePosition(pos.id);
-          logRuntimeEvent('system', 'EXEC', `Profit secured: ${pos.pair}`);
-        }
+        for (const pos of profitable) await closePosition(pos.id);
         break;
     }
     return true;
   } catch (err) {
-    logRuntimeEvent('system', 'ERROR', `Macro execution failed: ${(err as Error).message}`);
     return false;
   }
 };
 
-// --- Legacy Compatibility Exports ---
+// Compatibility
 export const activeStrategies = strategies;
 export const addStrategy = (strategy: Strategy) => strategies.value.unshift(strategy);
 export const updateStrategy = (id: string, updates: Partial<Strategy>) => {
@@ -218,43 +272,15 @@ export const toggleStrategyState = async (id: string) => {
 };
 export const executeSignal = dispatchSignal;
 
-// --- Runtime Heartbeat ---
+// Heartbeat
 if (typeof window !== 'undefined') {
   setInterval(() => {
     strategies.value.forEach(s => {
       if (s.status === 'running') {
-        // Dynamic Performance Simulation
         s.roi = parseFloat((s.roi + (Math.random() - 0.5) * 0.05).toFixed(2));
         s.pnlUsdt = parseFloat((s.pnlUsdt + (Math.random() - 0.5) * 0.1).toFixed(2));
         s.lastPing = `${Math.floor(Math.random() * 15 + 2)}ms`;
-        
-        // Node state simulation (for demo/visualization)
-        if (s.nodes && s.nodes.length > 0) {
-          const randomNode = s.nodes[Math.floor(Math.random() * s.nodes.length)];
-          updateNodeExecution(s.id, randomNode.id, {
-            status: Math.random() > 0.1 ? 'success' : 'failed',
-            latency: Math.floor(Math.random() * 50 + 10),
-            output: { timestamp: Date.now() }
-          });
-        }
       }
     });
   }, 2000);
-  
-  // Real-time WS Sync
-  wsManager.subscribe('strategy@update', (data: any) => {
-    if (data.id && data.metrics) {
-      updateStrategy(data.id, data.metrics);
-    }
-  });
-
-  wsManager.subscribe('strategy@node_state', (data: any) => {
-    if (data.strategyId && data.nodeId) {
-      updateNodeExecution(data.strategyId, data.nodeId, {
-        status: data.status,
-        latency: data.latency,
-        output: data.output
-      });
-    }
-  });
 }
