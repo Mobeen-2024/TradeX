@@ -62,11 +62,11 @@ onMounted(() => {
     };
     window.addEventListener('mousemove', handleMouseMove);
 
-    // Motion One animation for the main layout entry
-    animate('#main-layout', { opacity: [0, 1], scale: [0.98, 1] }, { duration: 0.6, ease: 'ease-out' });
+    // @ts-ignore
+    animate('#main-layout', { opacity: [0, 1], scale: [0.98, 1] }, { duration: 0.6, ease: 'easeOut' });
 });
 </script>
-
+e
 <template>
   <div id="main-layout" class="flex h-[100dvh] w-full bg-[#0b0e11] overflow-hidden text-[#EAECEF] text-sm flex-col md:flex-row relative">
     
