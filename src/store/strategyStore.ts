@@ -2,6 +2,7 @@ import { ref, computed, watch } from 'vue';
 import { addNotification } from './alertStore';
 import { placeOrder, activePositions, closePosition, availableUsdt, openOrders, cancelOrder } from './tradeStore';
 import { wsManager } from '../lib/wsManager';
+import { eventBus } from '../lib/eventBus';
 
 // --- Core Types ---
 export type StrategyStatus = 'running' | 'paused' | 'waiting' | 'error' | 'idle';
@@ -170,12 +171,28 @@ export const updateNodeExecution = (strategyId: string, nodeId: string, updates:
 /**
  * Pipeline Execution with Health Tracking
  */
+export const toggleStrategyState = async (id: string) => {
+  const strategy = strategies.value.find(s => s.id === id);
+  if (!strategy) return;
+  const isStarting = strategy.status !== 'running';
+  strategy.status = isStarting ? 'running' : 'paused';
+  if (isStarting) {
+    strategy.lastHeartbeat = Date.now();
+    eventBus.publish('strategy:started', strategy, id);
+  } else {
+    eventBus.publish('strategy:paused', strategy, id);
+  }
+};
+
 export const dispatchSignal = async (rawSignal: any) => {
   if (portfolioMetrics.value.isLocked) return false;
 
   // Find associated strategy if any
   const strategyId = rawSignal.strategyId || 'system';
   const strategy = strategies.value.find(s => s.id === strategyId);
+
+  // Layer 0: AI Analysis Complete
+  eventBus.publish('ai:analysis-complete', { asset: rawSignal.asset, confidence: rawSignal.confidence }, strategyId);
 
   // Parse & Validate
   const signal = {
@@ -191,8 +208,11 @@ export const dispatchSignal = async (rawSignal: any) => {
 
   if (signal.confidence < riskSettings.value.minConfidence) {
     logRuntimeEvent(strategyId, 'WARN', `Signal Rejected: Low Confidence (${signal.confidence}%)`);
+    eventBus.publish('risk:triggered', { reason: 'Low Confidence', confidence: signal.confidence }, strategyId);
     return false;
   }
+
+  eventBus.publish('signal:created', signal, strategyId);
 
   try {
     const quantity = (availableUsdt.value * 0.05) / signal.entry;
@@ -212,6 +232,7 @@ export const dispatchSignal = async (rawSignal: any) => {
         strategy.signalsProcessed++;
         logRuntimeEvent(strategyId, 'EXEC', `Autonomous trade successful on ${signal.asset}`);
       }
+      eventBus.publish('position:opened', { asset: signal.asset, direction: signal.direction, quantity }, strategyId);
       return true;
     }
     
@@ -223,7 +244,6 @@ export const dispatchSignal = async (rawSignal: any) => {
     return false;
   }
 };
-
 export const triggerMacro = async (macroId: string) => {
   logRuntimeEvent('system', 'WARN', `Macro ${macroId} invoked.`);
   try {
@@ -232,10 +252,12 @@ export const triggerMacro = async (macroId: string) => {
         for (const pos of activePositions.value) await closePosition(pos.id);
         portfolioMetrics.value.isLocked = true;
         portfolioMetrics.value.lockExpiry = Date.now() + riskSettings.value.lockDurationMs;
+        eventBus.publish('macro:executed', { macroId, result: 'Panic Close Success' }, 'system');
         break;
       case '2':
         const profitable = activePositions.value.filter(p => (p.pnl || 0) > 0);
         for (const pos of profitable) await closePosition(pos.id);
+        eventBus.publish('macro:executed', { macroId, result: 'Scale Out Success' }, 'system');
         break;
     }
     return true;
@@ -269,6 +291,7 @@ if (typeof window !== 'undefined') {
     portfolioMetrics.value.drawdown = parseFloat(drawdown.toFixed(2));
     
     if (drawdown >= riskSettings.value.globalDrawdownLimit && !portfolioMetrics.value.isLocked) {
+      eventBus.publish('risk:triggered', { reason: 'Portfolio Drawdown Limit Exceeded', drawdown }, 'system');
       triggerMacro('3');
     }
   }, 3000);
@@ -280,11 +303,5 @@ export const addStrategy = (strategy: Strategy) => strategies.value.unshift(stra
 export const updateStrategy = (id: string, updates: Partial<Strategy>) => {
   const i = strategies.value.findIndex(s => s.id === id);
   if (i !== -1) strategies.value[i] = { ...strategies.value[i], ...updates };
-};
-export const toggleStrategyState = async (id: string) => {
-  const strategy = strategies.value.find(s => s.id === id);
-  if (!strategy) return;
-  strategy.status = strategy.status === 'running' ? 'paused' : 'running';
-  if (strategy.status === 'running') strategy.lastHeartbeat = Date.now();
 };
 export const executeSignal = dispatchSignal;
