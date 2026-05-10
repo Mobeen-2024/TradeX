@@ -24,6 +24,7 @@ import { initSystemStore } from './store/systemStore';
 import { quickTradeMode } from './store/tradeStore';
 import { useLiquidStore } from './store/liquidStore';
 import { initSocket } from './services/socketService';
+import { initWebSocket } from './services/websocketService';
 import { cn } from './lib/utils';
 import { useKeyboardShortcuts } from './composables/useKeyboardShortcuts';
 import { Zap } from 'lucide-vue-next';
@@ -47,6 +48,7 @@ onMounted(() => {
     initAIStore();
     initSystemStore();
     initSocket();
+    initWebSocket();
     
     // Liquid Pinia Store Usage
     const liquidStore = useLiquidStore();

@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import RuntimeGraph from '../components/RuntimeGraph.vue';
+import { ref, onMounted, computed } from 'vue';
+import RuntimeGraph from '../components/runtime/RuntimeGraph.vue';
 import { Cpu, Activity, Shield, Zap, AlertTriangle } from 'lucide-vue-next';
 import { useLiquidStore } from '../store/liquidStore';
+import { useRuntimeStore } from '../stores/runtimeStore';
 
 const liquidStore = useLiquidStore();
+const runtimeStore = useRuntimeStore();
 
 const systemStats = ref([
     { label: 'Uptime', value: '142h 12m', icon: Activity, color: 'text-[#0ECB81]' },
-    { label: 'Active Pods', value: '12', icon: Cpu, color: 'text-[#F0B90B]' },
+    { label: 'Active Pods', value: computed(() => Object.keys(runtimeStore.nodes).length.toString()), icon: Cpu, color: 'text-[#F0B90B]' },
     { label: 'Risk Shield', value: 'Active', icon: Shield, color: 'text-[#627EEA]' },
-    { label: 'Throughput', value: '8.4k/s', icon: Zap, color: 'text-orange-400' }
+    { label: 'Throughput', value: computed(() => `${runtimeStore.metrics.signals.active} req/s`), icon: Zap, color: 'text-orange-400' }
 ]);
 
 onMounted(() => {
