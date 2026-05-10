@@ -1,5 +1,7 @@
 // src/lib/redis.ts
 import Redis from 'ioredis';
+import { runtimeCapabilities } from './runtimeCapabilities.ts';
+
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 
@@ -227,12 +229,18 @@ export function createRedisClient(options: Record<string, any> = {}): any {
     if (!warned) {
       warned = true;
       useMock = true;
+      runtimeCapabilities.redisPersistence = false;
+      runtimeCapabilities.durableQueues = false;
     }
   });
 
   realClient.on('connect', () => {
     useMock = false;
     warned = false;
+    runtimeCapabilities.redisPersistence = true;
+    // Note: durableQueues might still be false until a separate health check
+    // or let it follow redis status for simplicity here.
+    runtimeCapabilities.durableQueues = true;
   });
 
   /**

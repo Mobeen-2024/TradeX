@@ -1,7 +1,7 @@
 import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
-import { isRedisMock } from './redis.ts';
 import { EventEmitter } from 'events';
+import { runtimeCapabilities } from './runtimeCapabilities.ts';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
@@ -33,17 +33,20 @@ export let isDurable = false;
 
 /**
  * Initialize the Queue Layer
+ * 
+ * Negotiates between Durable (BullMQ) and Ephemeral (Local) modes
+ * based on platform capability discovery.
  */
 export function initQueueManager() {
-  if (isRedisMock()) {
-    console.log('[QueueManager] ⚡ Redis unavailable. Enabling Ephemeral Local Queue Mode.');
+  if (!runtimeCapabilities.durableQueues) {
+    console.warn('[QueueManager] ⚡ Running in Ephemeral Local Queue Mode (DurableQueues: false).');
     isDurable = false;
     signalQueue = new LocalQueue('signals');
     executionQueue = new LocalQueue('executions');
     auditQueue = new LocalQueue('audit');
   } else {
     try {
-      console.log('[QueueManager] 🛠️  Redis detected. Initializing Durable BullMQ clusters.');
+      console.log('[QueueManager] 🛠️  Durable Capability Confirmed. Initializing BullMQ clusters.');
       connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
       
       connection.on('error', (err: any) => {
@@ -56,7 +59,7 @@ export function initQueueManager() {
       auditQueue = new Queue('audit', { connection });
       isDurable = true;
     } catch (e) {
-      console.warn('[QueueManager] Failed to init BullMQ, falling back to Local Mode:', (e as any).message);
+      console.warn('[QueueManager] Failed to init BullMQ despite capability, falling back to Local Mode:', (e as any).message);
       isDurable = false;
       signalQueue = new LocalQueue('signals');
       executionQueue = new LocalQueue('executions');

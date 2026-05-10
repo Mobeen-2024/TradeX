@@ -37,6 +37,7 @@ import './src/workers/portfolioArchiver.ts'; // Start portfolio snapshots
 import './src/workers/runtimeSnapshotWorker.ts'; // Start runtime checkpointing
 import { initQueueWorkers } from './src/workers/queueWorker.ts';
 import { runtimeOrchestrator } from './src/lib/supervisor/runtimeOrchestrator.ts'; // Start Runtime Supervisor
+import { runtimeCapabilities } from './src/lib/runtimeCapabilities.ts';
 import { z } from 'zod';
 
 async function start() {
@@ -60,6 +61,8 @@ async function start() {
   // ── Start Queue Layer (Durable or Local) ──────────────────
   initQueueManager();
   initQueueWorkers();
+
+  console.log(`[System] Runtime Capabilities:`, runtimeCapabilities);
 
   // ── Start Projection Engine (Deterministic Event Sourcing) ────
   import('./src/lib/events/projectors/positionProjector.ts').then(({ positionProjector }) => {
