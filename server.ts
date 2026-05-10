@@ -21,7 +21,7 @@ import { credentialVault } from './src/lib/credentialVault.ts';
 import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.ts';
 import { smartOrderRouter } from './src/lib/smartOrderRouter.ts';
 import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.ts';
-import { queueManager } from './src/lib/queueManager.ts';
+import { queueManager, initQueueManager } from './src/lib/queueManager.ts';
 import { startAIAnalytics } from './src/lib/aiAnalytics.ts';
 import { circuitBreakers } from './src/lib/circuitBreaker.ts';
 import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSchema } from './src/lib/schemas.ts';
@@ -35,7 +35,7 @@ import { eventBus } from './src/lib/events/eventBus.ts';
 // import './src/workers/eventArchiver.ts'; // Replaced by durable BullMQ audit worker
 import './src/workers/portfolioArchiver.ts'; // Start portfolio snapshots
 import './src/workers/runtimeSnapshotWorker.ts'; // Start runtime checkpointing
-import './src/workers/queueWorker.ts'; // Start persistent queues
+import { initQueueWorkers } from './src/workers/queueWorker.ts';
 import { runtimeOrchestrator } from './src/lib/supervisor/runtimeOrchestrator.ts'; // Start Runtime Supervisor
 import { z } from 'zod';
 
@@ -56,6 +56,10 @@ async function start() {
   await initQdrant();
   await bootManager.hydrateRuntime();
   persistenceService.start();
+
+  // ── Start Queue Layer (Durable or Local) ──────────────────
+  initQueueManager();
+  initQueueWorkers();
 
   // ── Start Projection Engine (Deterministic Event Sourcing) ────
   import('./src/lib/events/projectors/positionProjector.ts').then(({ positionProjector }) => {

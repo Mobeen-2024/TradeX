@@ -4,33 +4,15 @@ import { smartOrderRouter } from '../lib/smartOrderRouter.ts';
 import { runRiskChecks } from '../lib/riskEngine.ts';
 import { eventBus } from '../lib/events/eventBus.ts';
 import IORedis from 'ioredis';
+import { signalQueue, executionQueue, auditQueue, isDurable } from '../lib/queueManager.ts';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
-
-connection.on('error', (err: any) => {
-  const isProd = process.env.NODE_ENV === 'production';
-  if (err.code === 'ECONNREFUSED') {
-    if (isProd) {
-      console.error('[QueueWorker] FATAL: Durable worker connection failed in production. Stopping to prevent execution amnesia.');
-      process.exit(1);
-    }
-    return;
-  }
-  console.error('[QueueWorker] Redis Connection Error:', err.message);
-});
 
 /**
- * Institutional Queue Workers
- * 
- * These workers consume the BullMQ persistent queues to ensure that
- * no trade, signal, or audit event is ever lost during a crash.
+ * Worker Logic
  */
-
-// ── 1. Execution Worker: Durable Trade Routing ─────────────────────
-export const executionWorker = new Worker('executions', async (job: Job) => {
+async function processExecution(job: any) {
   const { order, accountIds, sorConfig } = job.data;
-  
   try {
     eventBus.emitEvent('execution.route', 'queue_worker', 'INFO', { 
       jobId: job.id, 
@@ -39,32 +21,21 @@ export const executionWorker = new Worker('executions', async (job: Job) => {
       qty: order.quantity 
     }, order.strategyId);
 
-    // Last-mile risk verification
     const riskResult = await runRiskChecks(order);
     if (!riskResult.approved) {
       console.warn(`[QueueWorker] 🛡️ Risk block on ${job.id}: ${riskResult.reason}`);
       return { success: false, reason: riskResult.reason };
     }
 
-    // Execute via SOR
     const result = await smartOrderRouter.route(order, accountIds, sorConfig);
     return { success: true, result };
-
   } catch (err: any) {
     console.error(`[QueueWorker] ❌ Execution job ${job.id} failed:`, err.message);
-    throw err; // BullMQ will handle backoff and retry
+    throw err;
   }
-}, { 
-  connection,
-  concurrency: 5,
-  limiter: {
-    max: 10,
-    duration: 1000
-  }
-});
+}
 
-// ── 2. Audit Worker: Durable Event Ingestion ───────────────────────
-export const auditWorker = new Worker('audit', async (job: Job) => {
+async function processAudit(job: any) {
   const event = job.data;
   try {
     await (db as any).auditEvent.create({
@@ -81,26 +52,21 @@ export const auditWorker = new Worker('audit', async (job: Job) => {
     console.error(`[QueueWorker] ❌ Failed to persist audit log ${job.id}:`, err.message);
     throw err;
   }
-}, { connection, concurrency: 10 });
+}
 
-// ── 3. Signal Worker: Durable Strategy Triggers ────────────────────
-export const signalWorker = new Worker('signals', async (job: Job) => {
+async function processSignal(job: any) {
   const { type, data } = job.data;
   eventBus.emitEvent('signal.received', 'queue_worker', 'INFO', { 
     type, 
     data, 
     jobId: job.id 
   }, data?.strategyId);
-
-  // Logic to trigger specific AI Strategy Workflows or Workers would go here
-  // This ensures that even if the backend reboots during a volatility spike,
-  // the signal is still processed.
-}, { connection, concurrency: 5 });
+}
 
 /**
- * Lifecycle Handlers
+ * Lifecycle Handlers for BullMQ
  */
-const setupHandlers = (worker: Worker, name: string) => {
+const setupBullMQHandlers = (worker: Worker, name: string) => {
   worker.on('completed', (job) => console.debug(`[QueueWorker] ✅ ${name} job ${job.id} completed.`));
   worker.on('failed', (job, err) => console.error(`[QueueWorker] ⚠️ ${name} job ${job?.id} failed:`, err.message));
   worker.on('error', (err) => {
@@ -109,8 +75,42 @@ const setupHandlers = (worker: Worker, name: string) => {
   });
 };
 
-setupHandlers(executionWorker, 'Execution');
-setupHandlers(auditWorker, 'Audit');
-setupHandlers(signalWorker, 'Signal');
+/**
+ * Initialization function called by server boot
+ */
+export function initQueueWorkers() {
+  if (!isDurable) {
+    console.log('[QueueWorker] ⚡ Initializing Ephemeral Local Workers (Event Listeners).');
+    
+    executionQueue.on('job', processExecution);
+    auditQueue.on('job', processAudit);
+    signalQueue.on('job', processSignal);
 
-console.log('[QueueWorker] 🦾 Institutional persistence workers online.');
+    return;
+  }
+
+  console.log('[QueueWorker] 🦾 Initializing Durable BullMQ Workers.');
+  const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+  
+  const executionWorker = new Worker('executions', processExecution, { 
+    connection,
+    concurrency: 5,
+    limiter: { max: 10, duration: 1000 }
+  });
+
+  const auditWorker = new Worker('audit', processAudit, { 
+    connection, 
+    concurrency: 10 
+  });
+
+  const signalWorker = new Worker('signals', processSignal, { 
+    connection, 
+    concurrency: 5 
+  });
+
+  setupBullMQHandlers(executionWorker, 'Execution');
+  setupBullMQHandlers(auditWorker, 'Audit');
+  setupBullMQHandlers(signalWorker, 'Signal');
+}
+
+// initQueueWorkers(); // Manually initialized by server boot

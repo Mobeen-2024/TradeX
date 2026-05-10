@@ -9,6 +9,11 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const memoryStore: Record<string, any> = {};
 let useMock = false;
 
+export function isRedisMock() {
+  return useMock;
+}
+
+
 /**
  * Directly updates the local in-memory store.
  * Called when the main thread broadcasts a 'mock_sync' message to workers.
