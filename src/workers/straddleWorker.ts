@@ -23,6 +23,7 @@
 
 import { parentPort, workerData, isMainThread } from 'worker_threads';
 import { createRedisClient } from '../lib/redis.ts';
+import { blackboard } from '../lib/agents/blackboard.ts';
 
 if (isMainThread) {
   throw new Error('straddleWorker must be run as a worker_thread, not directly.');
@@ -50,6 +51,9 @@ interface StraddleLeg {
 }
 
 let config: StraddleConfig = workerData as StraddleConfig;
+// Keep track of original config for adaptive resets
+const baseConfig: StraddleConfig = { ...config };
+
 let running = true;
 let activeLeg: { long?: StraddleLeg; short?: StraddleLeg } = {};
 
@@ -59,6 +63,49 @@ const redis = createRedisClient();
 // Price history ring buffer (last 20 prices for vol computation)
 const priceHistory: number[] = [];
 const VOL_WINDOW = 20;
+
+/**
+ * Execution Bridge: Adaptive Intelligence
+ * 
+ * Synchronizes strategy parameters with the global Blackboard.
+ * Adjusts risk (SL/Size) dynamically based on agent-detected market regimes.
+ */
+async function syncWithBlackboard() {
+  try {
+    const beliefs = await blackboard.getBeliefs(config.symbol);
+    const volAgent = beliefs['Volatility'];
+
+    if (!volAgent) return;
+
+    const { status } = volAgent;
+    let slMultiplier = 1.0;
+    let tpMultiplier = 1.0;
+    let sizeMultiplier = 1.0;
+
+    if (status === 'SPIKE') {
+      slMultiplier = 2.0;    // Widen stops to survive whip-saws
+      tpMultiplier = 1.5;    // Target larger runs
+      sizeMultiplier = 0.5;  // Reduce size for safety
+    } else if (status === 'EXPANDING') {
+      slMultiplier = 1.5;
+      tpMultiplier = 1.2;
+      sizeMultiplier = 0.8;
+    }
+
+    const newSL = baseConfig.stopLossPct * slMultiplier;
+    const newTP = baseConfig.takeProfitPct * tpMultiplier;
+    const newSize = baseConfig.notionalUsdPerLeg * sizeMultiplier;
+
+    if (config.stopLossPct !== newSL || config.notionalUsdPerLeg !== newSize) {
+      log(`🧠 Adaptive Bridge: Market is ${status}. Adjusting parameters: SL=${newSL.toFixed(2)}%, TP=${newTP.toFixed(2)}%, Size=$${newSize.toFixed(0)}`);
+      config.stopLossPct = newSL;
+      config.takeProfitPct = newTP;
+      config.notionalUsdPerLeg = newSize;
+    }
+  } catch (e) {
+    // Blackboard sync failed — proceed with existing config
+  }
+}
 
 // ── Recovery Logic ─────────────────────────────────────────────────
 if ((workerData as any).__RECOVERY_STATE__) {
@@ -112,6 +159,9 @@ async function run() {
 
   while (running) {
     try {
+      // Sync with global intelligence before each check
+      await syncWithBlackboard();
+
       const globalState = await redis.hgetall('tradex:global_state');
       const price = parseFloat(globalState.price ?? '0');
 
