@@ -114,6 +114,21 @@ async function run() {
   log('Delta-Neutral worker stopped.');
 }
 
+// ── Heartbeat ──────────────────────────────────────────────────────
+setInterval(() => {
+  if (running) {
+    parentPort?.postMessage({
+      type: 'heartbeat',
+      data: {
+        cpu: process.cpuUsage().user / 1000000,
+        memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        nodeId: 'delta_neutral_primary'
+      }
+    });
+  }
+}, 1000);
+
+
 // ── Message Handler ────────────────────────────────────────────────
 parentPort?.on('message', (msg) => {
   if (msg.type === 'stop') {

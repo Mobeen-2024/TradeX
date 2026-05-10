@@ -161,6 +161,21 @@ async function run() {
   log('Straddle worker stopped.');
 }
 
+// ── Heartbeat ──────────────────────────────────────────────────────
+setInterval(() => {
+  if (running) {
+    parentPort?.postMessage({
+      type: 'heartbeat',
+      data: {
+        cpu: process.cpuUsage().user / 1000000,
+        memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        nodeId: 'straddle_primary'
+      }
+    });
+  }
+}, 1000);
+
+
 // ── Message Handler ────────────────────────────────────────────────
 parentPort?.on('message', (msg) => {
   if (msg.type === 'stop') {

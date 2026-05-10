@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 import { runRiskChecks } from './riskEngine.ts';
 import { smartOrderRouter } from './smartOrderRouter.ts';
 import { redis } from './redis.ts';
+import { heartbeatMonitor } from './supervisor/heartbeatMonitor.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -81,6 +82,15 @@ async function handleWorkerMessage(workerId: string, msg: any) {
     case 'log':
       console.log(`[Worker:${msg.worker}] ${msg.message}`);
       broadcast({ type: 'worker_log', workerId, worker: msg.worker, message: msg.message, ts: Date.now() });
+      break;
+    
+    case 'heartbeat':
+      const entry = registry.get(workerId);
+      heartbeatMonitor.checkIn(workerId, {
+        type: entry?.type,
+        status: entry?.status,
+        ...msg.data
+      });
       break;
 
     case 'hedge_order': {

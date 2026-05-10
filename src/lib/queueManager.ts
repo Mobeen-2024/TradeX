@@ -51,7 +51,15 @@ export const queueManager = {
       removeOnComplete: true,
       removeOnFail: 1000
     });
+  },
+
+  async getQueueMetrics() {
+    return {
+      signals: await signalQueue.getJobCounts('waiting', 'active', 'delayed'),
+      executions: await executionQueue.getJobCounts('waiting', 'active', 'delayed'),
+    };
   }
 };
+
 
 console.log('[QueueManager] 🛠️  Durable BullMQ clusters initialized.');

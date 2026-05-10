@@ -36,6 +36,7 @@ import { eventBus } from './src/lib/events/eventBus.ts';
 import './src/workers/portfolioArchiver.ts'; // Start portfolio snapshots
 import './src/workers/runtimeSnapshotWorker.ts'; // Start runtime checkpointing
 import './src/workers/queueWorker.ts'; // Start persistent queues
+import { runtimeOrchestrator } from './src/lib/supervisor/runtimeOrchestrator.ts'; // Start Runtime Supervisor
 import { z } from 'zod';
 
 async function start() {

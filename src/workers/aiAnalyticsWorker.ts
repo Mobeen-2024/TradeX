@@ -219,6 +219,21 @@ async function run() {
   parentPort?.postMessage({ type: 'stopped', worker: 'ai_analytics' });
 }
 
+// ── Heartbeat ──────────────────────────────────────────────────────
+setInterval(() => {
+  if (running) {
+    parentPort?.postMessage({
+      type: 'heartbeat',
+      data: {
+        cpu: process.cpuUsage().user / 1000000,
+        memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        nodeId: 'analytics_primary'
+      }
+    });
+  }
+}, 1000);
+
+
 parentPort?.on('message', (msg) => {
   if (msg.type === 'stop') running = false;
   if (msg.type === 'update_config') config = { ...config, ...msg.config };
