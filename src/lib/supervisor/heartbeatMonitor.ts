@@ -1,4 +1,4 @@
-import { redis } from '../redis.ts';
+import { redis, KEYS } from '../redis.ts';
 
 export interface Heartbeat {
   workerId: string;
@@ -10,7 +10,7 @@ export interface Heartbeat {
   nodeId?: string;
 }
 
-const HEARTBEAT_HASH = 'tradex:runtime:heartbeats';
+const HEARTBEAT_HASH = KEYS.workerHeartbeats;
 const STALE_THRESHOLD_MS = 3000;
 
 /**

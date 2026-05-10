@@ -74,7 +74,7 @@ class RuntimeOrchestrator {
   private async restartWorker(workerId: string, type: StrategyType) {
     try {
       // 1. Get last known config for this worker from Redis registry
-      const workersRaw = await redis.get('tradex:workers');
+      const workersRaw = await redis.get(KEYS.workerRegistry);
       if (!workersRaw) return;
       const workers = JSON.parse(workersRaw);
       const metadata = workers[workerId];

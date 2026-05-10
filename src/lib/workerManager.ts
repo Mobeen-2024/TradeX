@@ -15,7 +15,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { runRiskChecks } from './riskEngine.ts';
 import { smartOrderRouter } from './smartOrderRouter.ts';
-import { redis } from './redis.ts';
+import { redis, KEYS } from './redis.ts';
 import { heartbeatMonitor } from './supervisor/heartbeatMonitor.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -57,7 +57,7 @@ async function syncRegistryToRedis() {
         startedAt: entry.startedAt,
       };
     }
-    await redis.set('tradex:workers', JSON.stringify(summary));
+    await redis.set(KEYS.workerRegistry, JSON.stringify(summary));
   } catch (err) {
     console.warn('[WorkerMgr] Failed to sync registry to Redis (is Redis running?):', (err as Error).message);
   }

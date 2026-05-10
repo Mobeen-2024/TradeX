@@ -247,9 +247,8 @@ export const KEYS = {
   orderBook:       (sym: string) => `tradex:ob:${sym.toLowerCase()}`,
   globalState:     'tradex:global_state',
   rateLimit:       (key: string) => `tradex:rl:${key}`,
-  workers:         'tradex:workers',
-  activeTwaps:     'tradex:active_twaps',
-  parentOrders:    'tradex:parent_orders',
+  workerRegistry:   'tradex:workers',
+  workerHeartbeats: 'tradex:runtime:heartbeats',
   
   // Runtime Persistence Keys
   runtimeStrategy: (id: string) => `runtime:strategy:${id}`,
