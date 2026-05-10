@@ -23,7 +23,7 @@ function connect() {
   client = new net.Socket();
   client.connect(ILP_PORT, HOST, () => {
     connected = true;
-    console.log('[QuestDB] ILP connected');
+    console.log('[QuestDB] [INFO] ILP connected');
     flushQueue();
   });
 
@@ -34,7 +34,8 @@ function connect() {
       console.warn(`[QuestDB] Connection lost: ${msg}`);
     } else {
       if (!useMock) {
-        console.warn(`[QuestDB] Infrastructure not found. Falling back to Mock mode for execution logs.`);
+        console.warn('[QuestDB] [WARN] Infrastructure unavailable — Time-series logging degraded.');
+        console.log('[QuestDB] [INFO] Falling back to local Mock Mode for execution telemetry.');
         useMock = true;
       }
     }

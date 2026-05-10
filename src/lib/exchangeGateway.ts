@@ -58,7 +58,7 @@ export class ExchangeGateway extends EventEmitter {
     });
 
     this.ws.on('open', () => {
-      console.log('[Gateway] WSS open');
+      console.log('[Gateway] [INFO] WSS open');
       this.isAlive = true;
       this.reconnectDelay = 1_000; // reset backoff
       this.startHeartbeat();
@@ -114,7 +114,7 @@ export class ExchangeGateway extends EventEmitter {
 
   private scheduleReconnect() {
     if (this.terminated || this.reconnectTimer) return;
-    console.log(`[Gateway] Reconnecting in ${this.reconnectDelay}ms...`);
+    console.log(`[Gateway] [INFO] Reconnecting in ${this.reconnectDelay}ms...`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();

@@ -16,7 +16,7 @@ class RuntimeSnapshotWorker {
   }
 
   private async start() {
-    console.log('[RuntimeSnapshot] 💾 Checkpointing engine active (5s interval).');
+    console.log('[RuntimeSnapshot] [INFO] 💾 Checkpointing engine active (5s interval).');
     this.timer = setInterval(() => this.checkpoint(), CHECKPOINT_INTERVAL);
   }
 

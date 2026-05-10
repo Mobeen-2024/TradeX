@@ -59,13 +59,14 @@ export async function initQdrant() {
     const exists = collections.collections.some((c: any) => c.name === MEMORY_COLLECTION);
 
     if (!exists) {
-      console.log(`[Qdrant] Creating collection: ${MEMORY_COLLECTION}`);
+      console.log(`[Qdrant] [INFO] Creating collection: ${MEMORY_COLLECTION}`);
       await qdrant.createCollection(MEMORY_COLLECTION, {
         vectors: { size: 768, distance: 'Cosine' }
       });
     }
   } catch (e) {
-    console.warn('[Qdrant] Connection failed. Switching to Memory Mock Mode.');
+    console.warn('[Qdrant] [WARN] Connection failed — Vector memory degraded.');
+    console.log('[Qdrant] [INFO] Switching to local persistent Mock Memory.');
     useMock = true;
   }
 }

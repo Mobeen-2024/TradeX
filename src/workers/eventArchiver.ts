@@ -13,7 +13,7 @@ class EventArchiver {
   }
 
   private start() {
-    console.log('[EventArchiver] Background sink active.');
+    console.log('[EventArchiver] [INFO] Background sink active.');
     
     // Listen to the event bus
     eventBus.on('event', (event: any) => {
@@ -53,7 +53,7 @@ class EventArchiver {
       });
       
       if (eventsToSave.length > 0) {
-        console.log(`[EventArchiver] Archived ${eventsToSave.length} events to database.`);
+        console.log(`[EventArchiver] [INFO] Archived ${eventsToSave.length} events to database.`);
       }
     } catch (e) {
       console.error('[EventArchiver] Flush failed. Returning events to buffer.', e);

@@ -12,7 +12,7 @@ class PortfolioArchiver {
   }
 
   private async start() {
-    console.log('[PortfolioArchiver] Telemetry engine active.');
+    console.log('[PortfolioArchiver] [INFO] Telemetry engine active.');
     this.timer = setInterval(() => this.takeSnapshots(), SNAPSHOT_INTERVAL);
     
     // Take an initial snapshot on boot

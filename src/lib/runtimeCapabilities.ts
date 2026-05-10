@@ -14,4 +14,4 @@ export const runtimeCapabilities = {
 
 export type RuntimeCapabilities = typeof runtimeCapabilities;
 
-console.log('[Runtime] Capability Negotiation Engine Initialized.');
+console.log('[Runtime] [INFO] Capability Negotiation Engine Initialized.');

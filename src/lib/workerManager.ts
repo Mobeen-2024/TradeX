@@ -209,7 +209,7 @@ export const workerManager = {
     const workerId = `wkr_${type}_${Date.now()}`;
     const workerFile = resolveWorkerFile(type);
 
-    console.log(`[WorkerMgr] Spawning ${type} worker: ${workerId}`);
+    console.log(`[WorkerMgr] [INFO] Spawning ${type} worker: ${workerId}`);
 
     const worker = new Worker(workerFile, {
       workerData: { ...config, id: workerId, __RECOVERY_STATE__: initialState },
@@ -240,7 +240,7 @@ export const workerManager = {
     const entry = registry.get(workerId);
     if (!entry) throw new Error(`Worker ${workerId} not found.`);
     entry.worker.postMessage({ type: 'stop' });
-    console.log(`[WorkerMgr] Stop signal sent to ${workerId}`);
+    console.log(`[WorkerMgr] [INFO] Stop signal sent to ${workerId}`);
     
     eventBus.emitEvent('worker.stopped', 'worker_manager', 'INFO', { workerId, type: entry.type });
   },
