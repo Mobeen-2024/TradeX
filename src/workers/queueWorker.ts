@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { db } from '../lib/db.ts';
 import { smartOrderRouter } from '../lib/smartOrderRouter.ts';
 import { runRiskChecks } from '../lib/riskEngine.ts';
+import { eventBus } from '../lib/events/eventBus.ts';
 import IORedis from 'ioredis';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -19,7 +20,12 @@ export const executionWorker = new Worker('executions', async (job: Job) => {
   const { order, accountIds, sorConfig } = job.data;
   
   try {
-    console.log(`[QueueWorker] 🚀 Executing order ${job.id} | ${order.side} ${order.quantity} ${order.symbol}`);
+    eventBus.emitEvent('execution.route', 'queue_worker', 'INFO', { 
+      jobId: job.id, 
+      symbol: order.symbol, 
+      side: order.side, 
+      qty: order.quantity 
+    }, order.strategyId);
 
     // Last-mile risk verification
     const riskResult = await runRiskChecks(order);
@@ -68,8 +74,12 @@ export const auditWorker = new Worker('audit', async (job: Job) => {
 // ── 3. Signal Worker: Durable Strategy Triggers ────────────────────
 export const signalWorker = new Worker('signals', async (job: Job) => {
   const { type, data } = job.data;
-  console.log(`[QueueWorker] 📡 Received durable signal: ${type}`);
-  
+  eventBus.emitEvent('signal.received', 'queue_worker', 'INFO', { 
+    type, 
+    data, 
+    jobId: job.id 
+  }, data?.strategyId);
+
   // Logic to trigger specific AI Strategy Workflows or Workers would go here
   // This ensures that even if the backend reboots during a volatility spike,
   // the signal is still processed.

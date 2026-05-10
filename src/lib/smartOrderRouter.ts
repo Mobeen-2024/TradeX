@@ -62,7 +62,7 @@ async function recordParentOrder(parentId: string, order: RawOrder, config: SORC
     await redis.hset('tradex:parent_orders', parentId, JSON.stringify({
       ...order, config, parentId, createdAt: Date.now(), status: 'routing'
     }));
-    eventBus.log('order.routing', 'smart_router', 'INFO', { parentId, symbol: order.symbol, side: order.side, qty: order.quantity, strategy: config.strategy });
+    eventBus.emitEvent('execution.route', 'smart_router', 'INFO', { parentId, symbol: order.symbol, side: order.side, qty: order.quantity, strategy: config.strategy });
   } catch { /* Redis unavailable — skip persistence in dev */ }
 }
 
@@ -72,7 +72,7 @@ async function finalizeParentOrder(parentId: string, status: 'complete' | 'parti
     if (!raw) return;
     const order = JSON.parse(raw);
     await redis.hset('tradex:parent_orders', parentId, JSON.stringify({ ...order, status, completedAt: Date.now() }));
-    eventBus.log('order.finalized', 'smart_router', status === 'failed' ? 'ERROR' : 'INFO', { parentId, status });
+    eventBus.emitEvent(status === 'failed' ? 'execution.failed' : 'execution.filled', 'smart_router', status === 'failed' ? 'ERROR' : 'INFO', { parentId, status });
   } catch { /* Redis unavailable — skip persistence in dev */ }
 }
 
@@ -105,6 +105,17 @@ async function executeChildOrder(child: ChildOrder, price: number): Promise<stri
     // 4. Log the individual execution to QuestDB for audit trail
     const execId = `exec_${randomBytes(5).toString('hex')}`;
     writeExecutionLog(execId, child.symbol, child.side, price, child.quantity, 'filled');
+
+    // 5. Emit event for sourcing
+    eventBus.emitEvent('execution.filled', 'smart_router', 'INFO', { 
+      execId, 
+      childId: child.id, 
+      parentId: child.parentId, 
+      symbol: child.symbol, 
+      side: child.side, 
+      price, 
+      qty: child.quantity 
+    });
 
     return posId;
   });

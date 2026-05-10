@@ -3,8 +3,26 @@ import { EventEmitter } from 'events';
 
 export type EventSeverity = 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL';
 
+export type EventType = 
+  | 'system.boot' 
+  | 'system.halt'
+  | 'strategy.started' 
+  | 'strategy.stopped' 
+  | 'strategy.rebalanced'
+  | 'signal.received' 
+  | 'signal.dropped'
+  | 'risk.approved' 
+  | 'risk.rejected'
+  | 'execution.route' 
+  | 'execution.retry' 
+  | 'execution.filled' 
+  | 'execution.failed'
+  | 'ai.intent' 
+  | 'ai.warning' 
+  | 'ai.decision';
+
 export interface SystemEvent {
-  eventType: string;
+  eventType: EventType | string; // Allow string for flexibility but prefer EventType
   source: string;
   severity: EventSeverity;
   payload: any;
@@ -80,7 +98,7 @@ class EventBus extends EventEmitter {
   /**
    * Utility for easy publishing
    */
-  log(type: string, source: string, severity: EventSeverity, payload: any, strategyId?: string) {
+  emitEvent(type: EventType, source: string, severity: EventSeverity, payload: any, strategyId?: string) {
     return this.publish({ eventType: type, source, severity, payload, strategyId });
   }
 }
