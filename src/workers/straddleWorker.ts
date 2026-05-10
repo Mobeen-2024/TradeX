@@ -60,6 +60,31 @@ const redis = createRedisClient();
 const priceHistory: number[] = [];
 const VOL_WINDOW = 20;
 
+// ── Recovery Logic ─────────────────────────────────────────────────
+if ((workerData as any).__RECOVERY_STATE__) {
+  const recovery = (workerData as any).__RECOVERY_STATE__;
+  if (recovery.nodeStates) {
+    activeLeg = recovery.nodeStates.activeLeg ? JSON.parse(recovery.nodeStates.activeLeg) : {};
+    if (recovery.nodeStates.priceHistory) {
+      const history = JSON.parse(recovery.nodeStates.priceHistory);
+      priceHistory.push(...history);
+    }
+  }
+}
+
+async function persistState() {
+  try {
+    const workerId = (workerData as any).id || `wkr_straddle_${config.symbol}`; // fallback
+    await redis.hset(`tradex:runtime:nodes:${workerId}`, {
+      activeLeg: JSON.stringify(activeLeg),
+      priceHistory: JSON.stringify(priceHistory),
+      lastUpdated: Date.now().toString()
+    });
+  } catch (e) {
+    // Silent fail
+  }
+}
+
 function log(msg: string) {
   parentPort?.postMessage({ type: 'log', worker: 'straddle', message: msg });
 }
@@ -148,6 +173,9 @@ async function run() {
           log('Both straddle legs closed. Ready for next entry.');
           activeLeg = {};
         }
+
+        // ── Persist state for recovery ───────────
+        await persistState();
       }
     } catch (err) {
       log(`Error: ${(err as Error).message}`);

@@ -192,14 +192,14 @@ async function handleWorkerMessage(workerId: string, msg: any) {
 // ── Public API ────────────────────────────────────────────────────
 export const workerManager = {
 
-  async start(type: StrategyType, config: Record<string, any>): Promise<string> {
+  async start(type: StrategyType, config: Record<string, any>, initialState: any = null): Promise<string> {
     const workerId = `wkr_${type}_${Date.now()}`;
     const workerFile = resolveWorkerFile(type);
 
     console.log(`[WorkerMgr] Spawning ${type} worker: ${workerId}`);
 
     const worker = new Worker(workerFile, {
-      workerData: config,
+      workerData: { ...config, id: workerId, __RECOVERY_STATE__: initialState },
       env: { ...process.env, REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379' },
       execArgv: process.env.NODE_ENV !== 'production' ? ['--import', 'tsx'] : [],
     });

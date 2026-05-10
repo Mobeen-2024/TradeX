@@ -100,10 +100,12 @@ class RuntimeOrchestrator {
         // 3. Clear stale health state
         await heartbeatMonitor.clearHeartbeat(workerId);
 
-        // 4. Respawn with exact same config
-        // The workerManager will generate a new unique ID
-        console.log(`[Orchestrator] 🔄 Re-deploying strategy ${type}...`);
-        await workerManager.start(type, metadata.config);
+        // 4. Fetch last snapshot for state recovery
+        const snapshotRaw = await redis.hget(KEYS.runtimeSnapshots, workerId);
+        const snapshot = snapshotRaw ? JSON.parse(snapshotRaw) : null;
+
+        console.warn(`[Orchestrator] ♻️  Respawning zombie ${workerId} (${type}). Recovery state: ${snapshot ? 'AVAILABLE' : 'NONE'}`);
+        await workerManager.start(type, metadata.config, snapshot);
       }
     } catch (e) {
       console.error(`[Orchestrator] Failed to restart ${workerId}:`, e);
