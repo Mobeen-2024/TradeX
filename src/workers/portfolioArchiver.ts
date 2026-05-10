@@ -61,7 +61,7 @@ class PortfolioArchiver {
         });
 
         // Log to Event Bus for real-time UI/AI
-        eventBus.log('portfolio.snapshot', 'portfolio_archiver', 'INFO', {
+        eventBus.emitEvent('portfolio.snapshot', 'portfolio_archiver', 'INFO', {
           accountId,
           equity: currentEquity,
           drawdownPct,

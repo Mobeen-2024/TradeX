@@ -61,9 +61,42 @@ function computeNetDelta(positions: any[]): number {
 async function run() {
   log(`Delta-Neutral worker started for account=${config.accountId}, symbol=${config.symbol}, target_delta=${config.targetDelta}`);
 
+  // Base config for adaptive resets
+  const baseConfig = { ...config };
+
   while (running) {
     const startTime = Date.now();
     try {
+      // 1. Adaptive Intelligence: Sync with global Blackboard
+      try {
+        const { blackboard } = await import('../lib/agents/blackboard.ts');
+        const beliefs = await blackboard.getBeliefs(config.symbol);
+        const sentiment = beliefs['Sentiment'];
+        const vol = beliefs['Volatility'];
+
+        let newTargetDelta = baseConfig.targetDelta;
+        let newHedge = baseConfig.maxHedgeUsd;
+
+        // Shift Delta Bias based on Sentiment
+        if (sentiment && sentiment.confidence > 0.6) {
+          if (sentiment.label === 'BULLISH') newTargetDelta += 0.5; // Lean slightly long
+          else if (sentiment.label === 'BEARISH') newTargetDelta -= 0.5; // Lean slightly short
+        }
+
+        // Scale Hedge Size based on Volatility/Stress
+        if (vol && vol.marketStress > 0.7) {
+          newHedge = baseConfig.maxHedgeUsd * 0.5; // Reduce hedge size in high stress
+        }
+
+        if (config.targetDelta !== newTargetDelta || config.maxHedgeUsd !== newHedge) {
+          log(`🧠 Adaptive Bridge: Sentiment=${sentiment?.label || 'None'}, Stress=${vol?.marketStress?.toFixed(2) || 'None'}. Adjusting TargetDelta=${newTargetDelta}, MaxHedge=$${newHedge}`);
+          config.targetDelta = newTargetDelta;
+          config.maxHedgeUsd = newHedge;
+        }
+      } catch (e) {
+        // Ignore blackboard sync failures
+      }
+
       // Fetch positions from Redis
       const raw = await redis.hgetall('tradex:positions');
       const allPositions = Object.values(raw).map(v => JSON.parse(v as string));

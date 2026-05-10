@@ -77,6 +77,7 @@ async function syncWithBlackboard() {
   try {
     const beliefs = await blackboard.getBeliefs(config.symbol);
     const volAgent = beliefs['Volatility'];
+    const sentimentAgent = beliefs['Sentiment'];
 
     if (!volAgent) return;
 
@@ -94,18 +95,24 @@ async function syncWithBlackboard() {
     // 3. Stop-Loss Adaptation: Widen in stressful/volatile regimes
     let slMultiplier = 1.0 + (marketStress * 1.5); 
     
-    // 4. Regime-Specific Bias
+    // 4. Regime-Specific Bias (with Sentiment override)
     let newAsymmetry = baseConfig.asymmetry;
     if (regime === 'trending_breakout') {
       // Favor the trend direction
       newAsymmetry = trendStrength > 0 ? 1.5 : 0.66;
     }
+    
+    // Override with Sentiment Agent if available and confident
+    if (sentimentAgent && sentimentAgent.confidence > 0.6) {
+      if (sentimentAgent.label === 'BULLISH') newAsymmetry = 1.5;
+      else if (sentimentAgent.label === 'BEARISH') newAsymmetry = 0.66;
+    }
 
     const newSL = baseConfig.stopLossPct * slMultiplier;
     const newSize = baseConfig.notionalUsdPerLeg * sizeMultiplier;
 
-    if (config.stopLossPct !== newSL || config.notionalUsdPerLeg !== newSize || !isIntelligenceConfident) {
-      log(`🧠 Adaptive Bridge: Regime=${regime} (Conf: ${confidence}). Stress: ${marketStress}. Adjusting SL=${newSL.toFixed(2)}%, Size=$${newSize.toFixed(0)}, Tradeable=${isIntelligenceConfident}`);
+    if (config.stopLossPct !== newSL || config.notionalUsdPerLeg !== newSize || config.asymmetry !== newAsymmetry || !isIntelligenceConfident) {
+      log(`🧠 Adaptive Bridge: Regime=${regime} (Conf: ${confidence}), Sentiment=${sentimentAgent?.label || 'None'}. Stress: ${marketStress}. Adjusting SL=${newSL.toFixed(2)}%, Size=$${newSize.toFixed(0)}, Asymmetry=${newAsymmetry}, Tradeable=${isIntelligenceConfident}`);
       
       config.stopLossPct = newSL;
       config.notionalUsdPerLeg = newSize;
