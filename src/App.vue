@@ -17,6 +17,7 @@ import TradeView from './pages/TradeView.vue';
 import TransactionsView from './pages/TransactionsView.vue';
 import AnalyticsView from './pages/AnalyticsView.vue';
 import SignalView from './pages/SignalView.vue';
+import SupervisorView from './pages/SupervisorView.vue';
 
 import { initAIStore } from './store/aiStore';
 import { initSystemStore } from './store/systemStore';
@@ -121,6 +122,10 @@ e
 
       <div v-else-if="activeItem === 'Signal'" class="flex-1 overflow-hidden flex flex-col">
         <SignalView />
+      </div>
+
+      <div v-else-if="activeItem === 'Supervisor'" class="flex-1 overflow-hidden flex flex-col">
+        <SupervisorView />
       </div>
       
       <div v-else class="flex-1 flex items-center justify-center text-dash-text-muted">

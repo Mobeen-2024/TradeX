@@ -7,6 +7,7 @@ import {
   HeadphonesIcon, 
   Settings, 
   Signal,
+  Cpu,
   Trophy, 
   Wallet,
   Pin,
@@ -27,10 +28,11 @@ const navItems = [
   { icon: Briefcase, label: 'Trade' },
   { icon: Activity, label: 'Market' },
   { icon: Trophy, label: 'Tournaments', badge: 3 },
+  { icon: Signal, label: 'Signal' },
+  { icon: Cpu, label: 'Supervisor', isNew: true },
   { icon: BarChart2, label: 'Analytics' },
   { icon: Wallet, label: 'Transactions' },
   { icon: Crown, label: 'Leader Board', badge: 12 },
-  { icon: Signal, label: 'Signal' },
 ];
 
 const activeIndex = computed(() => navItems.findIndex(item => item.label === props.activeItem));

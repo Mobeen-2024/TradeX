@@ -59,6 +59,16 @@ class RuntimeOrchestrator {
           await workerManager.start('ai_analytics', { symbol: 'btcusdt' });
         }
       }
+
+      // ── 4. VISUALIZATION STREAM ──────────────────────────────
+      // Emit full health snapshot for the Runtime Graph
+      const health = await heartbeatMonitor.getHealthSnapshot();
+      workerManager.broadcast({
+        type: 'runtime_health_update',
+        health,
+        metrics,
+        timestamp: Date.now()
+      });
       
     } catch (e) {
       console.error('[Orchestrator] ❌ Reconciliation loop error:', e);

@@ -263,4 +263,8 @@ export const workerManager = {
       }
     }
   },
+
+  broadcast(payload: object): void {
+    broadcastFn?.(JSON.stringify(payload));
+  },
 };
