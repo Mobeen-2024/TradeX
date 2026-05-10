@@ -1,9 +1,7 @@
-import { Queue, QueueEvents } from 'bullmq';
-import IORedis from 'ioredis';
+import { Queue } from 'bullmq';
 import { EventEmitter } from 'events';
 import { runtimeCapabilities } from './runtimeCapabilities.ts';
-
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+import { redis } from './redis.ts';
 
 // Local Ephemeral Queue for offline development
 class LocalQueue extends EventEmitter {
@@ -11,8 +9,13 @@ class LocalQueue extends EventEmitter {
     super();
   }
   async add(jobName: string, data: any, options: any = {}) {
-    // console.log(`[QueueManager:Local] Job added to ${this.name}: ${jobName}`);
-    const job = { id: `local-${Math.random().toString(36).substr(2, 9)}`, name: jobName, data, opts: options };
+    const job = { 
+      id: `local-${Math.random().toString(36).substr(2, 9)}`, 
+      name: jobName, 
+      data, 
+      opts: options,
+      timestamp: Date.now()
+    };
     // Emit for local workers to consume
     setImmediate(() => this.emit('job', job));
     return job;
@@ -20,12 +23,8 @@ class LocalQueue extends EventEmitter {
   async getJobCounts() {
     return { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 };
   }
-  on(event: string, listener: (...args: any[]) => void): this {
-    return super.on(event, listener);
-  }
 }
 
-let connection: IORedis | null = null;
 export let signalQueue: any = null;
 export let executionQueue: any = null;
 export let auditQueue: any = null;
@@ -34,33 +33,35 @@ export let isDurable = false;
 /**
  * Initialize the Queue Layer
  * 
- * Negotiates between Durable (BullMQ) and Ephemeral (Local) modes
- * based on platform capability discovery.
+ * Bulletproof Gateway: BullMQ only starts if Redis is verified 'ready'.
+ * Otherwise, falls back to a non-blocking Ephemeral Memory Queue.
  */
 export function initQueueManager() {
-  if (!runtimeCapabilities.durableQueues) {
-    console.warn('[QueueManager] [WARN] Redis unavailable — Durable queues disabled.');
-    console.log('[QueueManager] [INFO] Falling back to Local Ephemeral Queue Runtime.');
+  // CRITICAL: Double-check both capability and raw connection status
+  const redisReady = runtimeCapabilities.durableQueues && (redis as any).status === 'ready';
+
+  if (!redisReady) {
+    console.warn(`[QueueManager] [WARN] Redis status: ${(redis as any).status || 'disconnected'} — Durable queues disabled.`);
+    console.log('[QueueManager] [INFO] Initializing Local Ephemeral Memory Queues.');
+    
     isDurable = false;
     signalQueue = new LocalQueue('signals');
     executionQueue = new LocalQueue('executions');
     auditQueue = new LocalQueue('audit');
   } else {
     try {
-      console.log('[QueueManager] [INFO] Durable Capability Confirmed. Initializing BullMQ clusters.');
-      connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+      console.log('[QueueManager] [INFO] 🚀 Redis Ready. Initializing BullMQ Cluster.');
       
-      connection.on('error', (err: any) => {
-        if (process.env.NODE_ENV !== 'production' && err.code === 'ECONNREFUSED') return;
-        console.error('[QueueManager] [ERROR] Redis Connection Error:', err.message);
-      });
+      // Reuse the existing validated connection to prevent redundant handshake spam
+      const connection = redis;
 
-      signalQueue = new Queue('signals', { connection });
-      executionQueue = new Queue('executions', { connection });
-      auditQueue = new Queue('audit', { connection });
+      signalQueue = new Queue('signals', { connection, defaultJobOptions: { removeOnComplete: true } });
+      executionQueue = new Queue('executions', { connection, defaultJobOptions: { removeOnComplete: true } });
+      auditQueue = new Queue('audit', { connection, defaultJobOptions: { removeOnComplete: true } });
+      
       isDurable = true;
     } catch (e) {
-      console.warn('[QueueManager] [WARN] Failed to init BullMQ despite capability, falling back to Local Mode:', (e as any).message);
+      console.error('[QueueManager] [ERROR] Failed to start BullMQ cluster:', (e as any).message);
       isDurable = false;
       signalQueue = new LocalQueue('signals');
       executionQueue = new LocalQueue('executions');

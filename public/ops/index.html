@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradeX Pro | Runtime Operations Center</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body class="dark-mode">
+    <div class="glass-overlay"></div>
+    
+    <header class="dashboard-header">
+        <div class="logo-section">
+            <div class="pulsing-core"></div>
+            <h1>Runtime Operations Center <span class="accent">Institutional</span></h1>
+        </div>
+        <div class="system-status-bar" id="systemStatusBar">
+            <div class="status-item" id="redisStatus"><span class="label">Redis</span><span class="indicator status-checking"></span></div>
+            <div class="status-item" id="qdrantStatus"><span class="label">Qdrant</span><span class="indicator status-checking"></span></div>
+            <div class="status-item" id="questDbStatus"><span class="label">QuestDB</span><span class="indicator status-checking"></span></div>
+            <div class="status-item" id="eventBusStatus"><span class="label">EventBus</span><span class="indicator status-checking"></span></div>
+        </div>
+        <div class="header-metrics">
+            <div class="h-metric">Mem Pressure: <span id="memPressure">0%</span></div>
+            <div class="h-metric">Events: <span id="evtThroughput">0/s</span></div>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <!-- Execution Latency & AI Performance -->
+        <section class="card latency-card">
+            <div class="card-header">
+                <h2>Execution & AI Performance</h2>
+                <div class="badge">Live Latency (ms)</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="latencyChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Supervision Tree -->
+        <section class="card tree-card">
+            <div class="card-header">
+                <h2>Supervision Tree</h2>
+                <div class="badge">Erlang/OTP Mode</div>
+            </div>
+            <div class="tree-container" id="treeContainer"></div>
+        </section>
+
+        <!-- Worker Fleet -->
+        <section class="card fleet-card">
+            <div class="card-header">
+                <h2>Worker Fleet Health</h2>
+                <span id="workerCount" class="badge">0 Active</span>
+            </div>
+            <div class="worker-grid" id="workerGrid"></div>
+        </section>
+
+        <!-- Blackboard & Cognition -->
+        <section class="card blackboard-card">
+            <div class="card-header">
+                <h2>Blackboard State (Cognition)</h2>
+            </div>
+            <div class="blackboard-grid" id="blackboardState">
+                <div class="bb-item"><span>Price:</span> <b id="bbPrice">0</b></div>
+                <div class="bb-item"><span>Positions:</span> <b id="bbPos">0</b></div>
+                <div class="bb-item"><span>Breakers:</span> <b id="bbBreakers">0</b></div>
+            </div>
+            <div class="restart-ledger" id="restartLedger">
+                <div class="ledger-title">Restart Log</div>
+            </div>
+        </section>
+
+        <!-- Audit Ledger -->
+        <section class="card ledger-card full-width">
+            <div class="card-header">
+                <h2>Orchestration Event Stream</h2>
+                <span class="live-tag">LIVE</span>
+            </div>
+            <div class="terminal-container" id="auditLedger"></div>
+        </section>
+    </main>
+
+    <footer class="dashboard-footer">
+        <div class="uptime">Uptime: <span id="systemUptime">00:00:00</span></div>
+        <div class="connection-status">WS: <span id="wsStatus">Connecting...</span></div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

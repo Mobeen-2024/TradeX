@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
 import middie from '@fastify/middie';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -52,6 +53,24 @@ async function start() {
 
   await fastify.register(fastifyWebsocket);
   await fastify.register(middie);
+
+  await fastify.register(fastifyStatic, {
+    root: path.join(process.cwd(), 'public'),
+    prefix: '/public/',
+  });
+
+  // ── Observability Dashboard Route ──────────────────────────
+  fastify.get('/ops', (request, reply) => {
+    reply.sendFile('ops/index.html');
+  });
+
+  fastify.get('/ops/style.css', (request, reply) => {
+    reply.sendFile('ops/style.css');
+  });
+
+  fastify.get('/ops/app.js', (request, reply) => {
+    reply.sendFile('ops/app.js');
+  });
 
   // ── Start Persistence & Hydration ──────────────────────────
   await initQdrant();

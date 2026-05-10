@@ -188,6 +188,8 @@ class MockRedis {
   pipeline() {
     const ops: Array<() => Promise<any>> = [];
     const pipe = {
+      set: (k: string, v: string) => { ops.push(() => this.set(k, v)); return pipe; },
+      del: (k: string) => { ops.push(() => this.del(k)); return pipe; },
       hset: (k: string, ...a: any[]) => { ops.push(() => this.hset(k, ...a)); return pipe; },
       hdel: (k: string, ...a: any[]) => { ops.push(() => this.hdel(k, ...a)); return pipe; },
       sadd: (k: string, ...a: any[]) => { ops.push(() => this.sadd(k, ...a)); return pipe; },

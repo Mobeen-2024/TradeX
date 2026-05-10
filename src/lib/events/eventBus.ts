@@ -38,20 +38,6 @@ import { eventStore } from './eventStore.ts';
 // ... (types kept same)
 
 class EventBus extends EventEmitter {
-  private useRedis = true;
-
-  constructor() {
-    super();
-    this.checkRedis();
-  }
-
-  private checkRedis() {
-    if ((redis as any).isMock || !redis.isOpen) {
-      this.useRedis = false;
-      console.log('[EventBus] [INFO] Redis not available. Running in Local Mode.');
-    }
-  }
-
   /**
    * Publish an event to the platform's audit trail and event ledger.
    */
@@ -65,10 +51,13 @@ class EventBus extends EventEmitter {
     // Emit locally for real-time subscribers (UI, etc.)
     this.emit('event', eventData);
 
+    // Dynamic Durability Check
+    const isRedisReady = (redis as any).status === 'ready';
+
     // ── DURABLE SINK ───────────────────────────────────────────
     // 1. Push to the Immutable Ledger (Event Sourcing Source of Truth)
     let ledgerId = '';
-    if (this.useRedis) {
+    if (isRedisReady) {
       try {
         ledgerId = await eventStore.append(event, causationId, correlationId);
       } catch (e) {

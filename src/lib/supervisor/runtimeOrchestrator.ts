@@ -1,8 +1,9 @@
 import { workerManager, StrategyType } from '../workerManager.ts';
 import { heartbeatMonitor } from './heartbeatMonitor.ts';
-import { redis, KEYS } from '../redis.ts';
+import { redis, KEYS, getGlobalState } from '../redis.ts';
 import { queueManager } from '../queueManager.ts';
 import { eventBus } from '../events/eventBus.ts';
+import { circuitBreakers } from '../circuitBreaker.ts';
 import { WorkerSupervisor } from './workerSupervisor.ts';
 
 const RECONCILIATION_INTERVAL = 5000; // 5 seconds
@@ -81,12 +82,6 @@ class RuntimeOrchestrator {
       }
 
       // ── 3. DYNAMIC SCALING ───────────────────────────────────────
-      // (Scaling logic preserved but simplified for tree orchestration)
-      const healthEntries = Object.values(health);
-      const avgCpuLoad = healthEntries.length > 0 
-        ? healthEntries.reduce((acc, h) => acc + h.cpu, 0) / healthEntries.length 
-        : 0;
-
       if (metrics.signals.waiting > SCALE_OUT_THRESHOLD) {
         console.warn(`[Orchestrator] [WARN] 📈 High queue pressure detected (${metrics.signals.waiting}). Scaling execution layer...`);
         const analyticsCount = actualWorkers.filter(w => w.type === 'ai_analytics').length;
@@ -95,12 +90,33 @@ class RuntimeOrchestrator {
         }
       }
 
-      // ── 4. VISUALIZATION STREAM ──────────────────────────────
+      // ── 4. OPS CENTER METRICS ───────────────────────────────────
+      const blackboard = await getGlobalState();
+      const restartCounts = {
+        ...this.marketSupervisor.getRestartCounts(),
+        ...this.executionSupervisor.getRestartCounts()
+      };
+      
+      const memoryUsage = process.memoryUsage();
+      const memoryPressure = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+
+      // ── 5. VISUALIZATION STREAM ──────────────────────────────
       workerManager.broadcast({
         type: 'runtime_health_update',
         health,
         metrics,
         timestamp: Date.now(),
+        ops: {
+          restartCounts,
+          memoryPressure,
+          blackboardSummary: {
+            price: blackboard.price || '0',
+            activePositions: (await redis.hlen(KEYS.positions)) || 0,
+            circuitBreakers: Object.keys(circuitBreakers).length
+          },
+          uptime: process.uptime(),
+          eventThroughput: 0 // Placeholder: To be implemented via EventBus tracking
+        },
         tree: {
           market: this.marketSupervisor.getChildren(),
           execution: this.executionSupervisor.getChildren()

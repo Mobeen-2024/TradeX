@@ -3,10 +3,8 @@ import { db } from '../lib/db.ts';
 import { smartOrderRouter } from '../lib/smartOrderRouter.ts';
 import { runRiskChecks } from '../lib/riskEngine.ts';
 import { eventBus } from '../lib/events/eventBus.ts';
-import IORedis from 'ioredis';
 import { signalQueue, executionQueue, auditQueue, isDurable } from '../lib/queueManager.ts';
-
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+import { redis } from '../lib/redis.ts';
 
 /**
  * Worker Logic
@@ -75,6 +73,7 @@ const setupBullMQHandlers = (worker: Worker, name: string) => {
   });
 };
 
+
 /**
  * Initialization function called by server boot
  */
@@ -82,15 +81,25 @@ export function initQueueWorkers() {
   if (!isDurable) {
     console.log('[QueueWorker] [INFO] Initializing Ephemeral Local Workers (Event Listeners).');
     
-    executionQueue.on('job', processExecution);
-    auditQueue.on('job', processAudit);
-    signalQueue.on('job', processSignal);
+    executionQueue.on('job', (job: any) => {
+      processExecution(job).catch(e => console.error(`[QueueWorker] [ERROR] Local execution failed:`, e.message));
+    });
+    
+    auditQueue.on('job', (job: any) => {
+      processAudit(job).catch(e => console.error(`[QueueWorker] [ERROR] Local audit failed:`, e.message));
+    });
+    
+    signalQueue.on('job', (job: any) => {
+      processSignal(job).catch(e => console.error(`[QueueWorker] [ERROR] Local signal failed:`, e.message));
+    });
 
     return;
   }
 
-  console.log('[QueueWorker] [INFO] Initializing Durable BullMQ Workers.');
-  const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+  console.log('[QueueWorker] [INFO] 🚀 Initializing Durable BullMQ Clusters.');
+  
+  // Reuse existing validated connection
+  const connection = redis;
   
   const executionWorker = new Worker('executions', processExecution, { 
     connection,

@@ -3,7 +3,8 @@ import { qdrant, MEMORY_COLLECTION } from '../qdrant.ts';
 import { getEmbedding } from '../embeddings.ts';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const apiKey = process.env.GEMINI_API_KEY;
+const genAI = (apiKey && apiKey !== 'undefined' && apiKey !== '') ? new GoogleGenerativeAI(apiKey) : null;
 
 /**
  * AI Memory Engine

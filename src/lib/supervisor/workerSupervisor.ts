@@ -24,6 +24,7 @@ export class WorkerSupervisor {
   private restartLimit: number;
   private restartWindowMs: number;
   private failureHistory: Map<string, number[]> = new Map(); // workerId -> timestamps of failures
+  private restartCounts: Map<string, number> = new Map(); // workerId -> total restarts
 
   constructor(config: SupervisorConfig) {
     this.name = config.name;
@@ -71,6 +72,10 @@ export class WorkerSupervisor {
 
     recentFailures.push(now);
     this.failureHistory.set(workerId, recentFailures);
+    
+    // Increment total restarts
+    const total = (this.restartCounts.get(workerId) || 0) + 1;
+    this.restartCounts.set(workerId, total);
 
     // Policy Execution
     switch (this.policy) {
@@ -112,5 +117,9 @@ export class WorkerSupervisor {
 
   public getChildren() {
     return Array.from(this.children);
+  }
+
+  public getRestartCounts() {
+    return Object.fromEntries(this.restartCounts);
   }
 }
