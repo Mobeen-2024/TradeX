@@ -20,7 +20,7 @@ import { heartbeatMonitor } from './supervisor/heartbeatMonitor.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export type StrategyType = 'delta_neutral' | 'straddle' | 'ai_analytics';
+export type StrategyType = 'delta_neutral' | 'straddle' | 'ai_analytics' | 'volatility_agent';
 
 interface WorkerEntry {
   id:       string;
@@ -71,6 +71,7 @@ function resolveWorkerFile(type: StrategyType): string {
     delta_neutral: path.join(__dirname, '..', 'workers', `deltaNeutralWorker.${ext}`),
     straddle:      path.join(__dirname, '..', 'workers', `straddleWorker.${ext}`),
     ai_analytics:  path.join(__dirname, '..', 'workers', `aiAnalyticsWorker.${ext}`),
+    volatility_agent: path.join(__dirname, '..', 'workers', 'agents', `volatilityAgent.${ext}`),
   };
   return workerMap[type];
 }

@@ -8,6 +8,14 @@ const connection = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 
+connection.on('error', (err) => {
+  if (err.code === 'ECONNREFUSED') {
+    // Suppress spam in dev, let workers handle the fallout
+    return;
+  }
+  console.error('[QueueManager] Redis Connection Error:', err.message);
+});
+
 /**
  * Institutional Queue Manager
  * 
