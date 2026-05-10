@@ -68,7 +68,11 @@ class PersistenceService {
       await redis.ltrim('tradex:runtime:logs', rawLogs.length, -1);
       
       console.log(`[Persistence] Drained ${rawLogs.length} logs to PostgreSQL.`);
-    } catch (e) {
+    } catch (e: any) {
+      // Suppress connection errors when running in offline/mock mode
+      if (e.message && e.message.includes('Connection is closed')) {
+        return;
+      }
       console.error('[Persistence] Log drain failed:', e);
     } finally {
       this.isProcessingLogs = false;
@@ -118,7 +122,8 @@ class PersistenceService {
       if (strategies.length > 0) {
         console.log(`[Persistence] Synced ${strategies.length} active strategies to PostgreSQL.`);
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e.message && e.message.includes('Connection is closed')) return;
       console.error('[Persistence] Strategy sync failed:', e);
     }
   }
@@ -173,7 +178,8 @@ class PersistenceService {
         }
       });
 
-    } catch (e) {
+    } catch (e: any) {
+      if (e.message && e.message.includes('Connection is closed')) return;
       console.error('[Persistence] Position sync failed:', e);
     }
   }
