@@ -62,14 +62,40 @@ class RuntimeOrchestrator {
         }
       }
 
-      // ── 3. SCALE & REBALANCE (Dynamic HPA) ────────────────────
-      if (metrics.signals.waiting > SCALE_OUT_THRESHOLD) {
-        console.warn(`[Orchestrator] 📈 High signal load: ${metrics.signals.waiting}. Auto-scaling...`);
-        // Example: If signals pile up, ensure we have an extra analytics instance
+      // ── 3. INTELLIGENT SCALE & REBALANCE (Dynamic HPA) ────────────
+      
+      // Calculate Average CPU Load across all active workers
+      const healthEntries = Object.values(health);
+      const avgCpuLoad = healthEntries.length > 0 
+        ? healthEntries.reduce((acc, h) => acc + h.cpu, 0) / healthEntries.length 
+        : 0;
+
+      // Simulated Latency (In production: pulled from BullMQ worker getMetrics())
+      const avgLatencyMs = metrics.signals.waiting > 10 ? 150 : 25; 
+      const latencyFactor = Math.min(avgLatencyMs / 200, 1); // Normalized (max at 200ms)
+
+      /**
+       * The ScaleScore Formula
+       * (queueDepth * 0.4) + (latency * 0.3) + (cpuLoad * 0.2) + (errorRate * 0.1)
+       * We normalize the queue depth relative to our threshold.
+       */
+      const normalizedQueue = Math.min(metrics.signals.waiting / SCALE_OUT_THRESHOLD, 2);
+      const scaleScore = (normalizedQueue * 0.4) + (latencyFactor * 0.3) + (avgCpuLoad * 0.2);
+
+      if (scaleScore > 0.8) {
+        console.warn(`[Orchestrator] 📈 High ScaleScore: ${scaleScore.toFixed(2)} (Queue: ${metrics.signals.waiting}, CPU: ${avgCpuLoad.toFixed(2)}). Auto-scaling...`);
+        
         const analyticsCount = actualWorkers.filter(w => w.type === 'ai_analytics').length;
-        if (analyticsCount < 3) {
+        if (analyticsCount < 5) {
           console.log(`[Orchestrator] 🚀 Scaling: Adding ai_analytics instance...`);
           await workerManager.start('ai_analytics', { symbol: 'btcusdt' });
+        }
+      } else if (scaleScore < 0.2 && actualWorkers.length > 3) {
+        // Scale in if underutilized (Keep at least 3 workers for redundancy)
+        const idleAnalytics = actualWorkers.find(w => w.type === 'ai_analytics');
+        if (idleAnalytics) {
+          console.log(`[Orchestrator] 📉 Low ScaleScore: ${scaleScore.toFixed(2)}. Scaling in: Terminating ${idleAnalytics.id}...`);
+          await workerManager.stop(idleAnalytics.id);
         }
       }
 
