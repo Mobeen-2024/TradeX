@@ -40,6 +40,15 @@ export const executionQueueEvents = new QueueEvents('executions', { connection }
 // ── 3. Audit Queue: High-volume persistence to PostgreSQL ──────────
 export const auditQueue = new Queue('audit', { connection });
 
+// Prevent unhandled error crashes in dev when Redis is offline
+[signalQueue, signalQueueEvents, executionQueue, executionQueueEvents, auditQueue].forEach((q) => {
+  q.on('error', (err) => {
+    // Only log briefly if it's a connection issue, otherwise standard log
+    if (process.env.NODE_ENV !== 'production' && err.message.includes('ECONNREFUSED')) return;
+    console.error(`[QueueManager] Queue Error: ${err.message}`);
+  });
+});
+
 /**
  * Task Submission Helpers
  */

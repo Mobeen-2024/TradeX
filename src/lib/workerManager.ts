@@ -88,6 +88,13 @@ async function handleWorkerMessage(workerId: string, msg: any) {
       broadcast({ type: 'worker_log', workerId, worker: msg.worker, message: msg.message, ts: Date.now() });
       break;
     
+    case 'mock_update':
+      // Broadcast this update to all OTHER workers
+      workerManager.postMessageToAll({ type: 'mock_sync', key: msg.key, value: msg.value });
+      // Also update main thread's local mock store
+      import('./redis.ts').then(({ updateMockStore }) => updateMockStore(msg.key, msg.value));
+      break;
+    
     case 'heartbeat':
       const entry = registry.get(workerId);
       heartbeatMonitor.checkIn(workerId, {

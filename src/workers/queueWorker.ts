@@ -103,6 +103,10 @@ export const signalWorker = new Worker('signals', async (job: Job) => {
 const setupHandlers = (worker: Worker, name: string) => {
   worker.on('completed', (job) => console.debug(`[QueueWorker] ✅ ${name} job ${job.id} completed.`));
   worker.on('failed', (job, err) => console.error(`[QueueWorker] ⚠️ ${name} job ${job?.id} failed:`, err.message));
+  worker.on('error', (err) => {
+    if (process.env.NODE_ENV !== 'production' && err.message.includes('ECONNREFUSED')) return;
+    console.error(`[QueueWorker] ${name} Queue Error:`, err.message);
+  });
 };
 
 setupHandlers(executionWorker, 'Execution');

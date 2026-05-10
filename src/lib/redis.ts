@@ -25,8 +25,17 @@ class MockRedis {
     return typeof val === 'string' ? val : JSON.stringify(val);
   }
 
+  private syncToMain(key: string, value: any) {
+    if (typeof process !== 'undefined' && process.env.WORKER_ID) {
+      import('worker_threads').then(({ parentPort }) => {
+        parentPort?.postMessage({ type: 'mock_update', key, value });
+      });
+    }
+  }
+
   async set(key: string, value: string, ...args: any[]): Promise<'OK'> {
     memoryStore[key] = value;
+    this.syncToMain(key, value);
     return 'OK';
   }
 
@@ -49,17 +58,19 @@ class MockRedis {
       memoryStore[key] = {};
     }
     // hset(key, field, value, field2, value2 ...) OR hset(key, { field: value })
+    let count = 0;
     if (args.length === 1 && typeof args[0] === 'object' && !Array.isArray(args[0])) {
       Object.assign(memoryStore[key], args[0]);
-      return Object.keys(args[0]).length;
-    }
-    let count = 0;
-    for (let i = 0; i < args.length; i += 2) {
-      if (i + 1 < args.length) {
-        memoryStore[key][args[i]] = args[i + 1];
-        count++;
+      count = Object.keys(args[0]).length;
+    } else {
+      for (let i = 0; i < args.length; i += 2) {
+        if (i + 1 < args.length) {
+          memoryStore[key][args[i]] = args[i + 1];
+          count++;
+        }
       }
     }
+    this.syncToMain(key, memoryStore[key]);
     return count;
   }
 
@@ -124,6 +135,43 @@ class MockRedis {
   }
 
   async expire(_key: string, _seconds: number): Promise<0 | 1> { return 1; }
+
+  async xadd(key: string, id: string, ...args: any[]): Promise<string> {
+    if (!memoryStore[key]) memoryStore[key] = [];
+    const streamId = id === '*' ? `${Date.now()}-${memoryStore[key].length}` : id;
+    
+    // xadd(key, '*', { field: val }) or xadd(key, '*', 'field', 'val' ...)
+    let message: any = {};
+    if (args.length === 1 && typeof args[0] === 'object') {
+      message = args[0];
+    } else {
+      for (let i = 0; i < args.length; i += 2) {
+        if (i + 1 < args.length) message[args[i]] = args[i + 1];
+      }
+    }
+
+    memoryStore[key].push({ id: streamId, message });
+    return streamId;
+  }
+
+  async xread(...args: any[]): Promise<any[] | null> {
+    // Highly simplified mock for xread
+    return null;
+  }
+
+  async xrange(key: string, start: string, end: string, options: any = {}): Promise<any[]> {
+    const stream = memoryStore[key];
+    if (!Array.isArray(stream)) return [];
+    return stream.slice(0, options.COUNT || 100);
+  }
+
+  async xinfo(sub: string, key: string): Promise<any> {
+    if (sub === 'STREAM') {
+      const stream = memoryStore[key];
+      return { lastGeneratedId: stream && stream.length > 0 ? stream[stream.length - 1].id : '0-0' };
+    }
+    return null;
+  }
 
   async quit(): Promise<'OK'> { return 'OK'; }
 
@@ -190,14 +238,21 @@ export function createRedisClient(options: Record<string, any> = {}): any {
   const handler: ProxyHandler<Redis> = {
     get(target, prop: string) {
       // Pass through non-function properties (status, options, etc.)
-      const mockVal = (globalMock as any)[prop];
+      // Check for property in mock (case-insensitive for methods)
+      let mockProp = prop;
+      if (!(prop in globalMock) && typeof prop === 'string') {
+        const lower = prop.toLowerCase();
+        if (lower in globalMock) mockProp = lower;
+      }
+
+      const mockVal = (globalMock as any)[mockProp];
       if (typeof mockVal !== 'function') {
         return (target as any)[prop];
       }
 
       return (...args: any[]) => {
         if (useMock) {
-          return (globalMock as any)[prop](...args);
+          return (globalMock as any)[mockProp](...args);
         }
         try {
           const result = (target as any)[prop](...args);
@@ -213,7 +268,7 @@ export function createRedisClient(options: Record<string, any> = {}): any {
                 err?.code === 'ECONNREFUSED'
               ) {
                 useMock = true;
-                return (globalMock as any)[prop](...args);
+                return (globalMock as any)[mockProp](...args);
               }
               throw err;
             });
@@ -228,7 +283,7 @@ export function createRedisClient(options: Record<string, any> = {}): any {
             err?.code === 'ECONNREFUSED'
           ) {
             useMock = true;
-            return (globalMock as any)[prop](...args);
+            return (globalMock as any)[mockProp](...args);
           }
           throw err;
         }
