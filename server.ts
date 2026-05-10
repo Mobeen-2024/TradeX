@@ -30,6 +30,8 @@ import { stateSyncManager } from './src/lib/stateSyncManager.ts';
 import { db } from './src/lib/db.ts';
 import { initQdrant } from './src/lib/qdrant.ts';
 import { memoryEngine } from './src/lib/ai/memoryEngine.ts';
+import { eventBus } from './src/lib/events/eventBus.ts';
+import './src/workers/eventArchiver.ts'; // Start archiver
 import { z } from 'zod';
 
 async function start() {
@@ -49,6 +51,7 @@ async function start() {
   await initQdrant();
   await bootManager.hydrateRuntime();
   persistenceService.start();
+  eventBus.log('platform.boot', 'system', 'INFO', { msg: 'TradeX Pro Engine Started' });
 
   const isProd = process.env.NODE_ENV === 'production';
   const clients = new Set<any>();
@@ -341,6 +344,19 @@ async function start() {
     const { query = '' } = (request.query as any) || {};
     if (!query) return [];
     return memoryEngine.recallRelevantMemories(query);
+  });
+
+  fastify.get('/api/events', async (request) => {
+    const { type, severity, limit = 50 } = (request.query as any) || {};
+    const where: any = {};
+    if (type) where.eventType = type;
+    if (severity) where.severity = severity;
+
+    return (db as any).auditEvent.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: parseInt(limit.toString())
+    });
   });
 
   // ── Risk Profiles ────────────────────────────────────────

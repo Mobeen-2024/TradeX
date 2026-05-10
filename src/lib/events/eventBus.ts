@@ -1,0 +1,80 @@
+import { redis } from '../redis.ts';
+import { EventEmitter } from 'events';
+
+export type EventSeverity = 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL';
+
+export interface SystemEvent {
+  eventType: string;
+  source: string;
+  severity: EventSeverity;
+  payload: any;
+  strategyId?: string;
+  timestamp?: number;
+}
+
+const STREAM_KEY = 'tradex:events';
+const MAX_STREAM_LENGTH = 10000; // Keep last 10k events in Redis
+
+class EventBus extends EventEmitter {
+  private useRedis = true;
+
+  constructor() {
+    super();
+    this.checkRedis();
+  }
+
+  private checkRedis() {
+    // If redis is in mock mode or disconnected, we stay in local EventEmitter mode
+    if ((redis as any).isMock || !redis.isOpen) {
+      this.useRedis = false;
+      console.log('[EventBus] Redis not available. Running in Local Mode.');
+    }
+  }
+
+  /**
+   * Publish an event to the platform's audit trail.
+   */
+  async publish(event: SystemEvent) {
+    const timestamp = event.timestamp || Date.now();
+    const eventData = {
+      ...event,
+      timestamp,
+      payload: JSON.stringify(event.payload)
+    };
+
+    // Emit locally for real-time subscribers (UI, etc.)
+    this.emit('event', eventData);
+
+    if (this.useRedis) {
+      try {
+        // XADD key MAXLEN ~ 10000 * eventType source severity payload strategyId timestamp
+        await redis.xAdd(STREAM_KEY, '*', {
+          type: event.eventType,
+          source: event.source,
+          severity: event.severity,
+          payload: eventData.payload,
+          strategyId: event.strategyId || '',
+          timestamp: timestamp.toString()
+        }, {
+          TRIM: {
+            strategy: 'MAXLEN',
+            strategyModifier: '~',
+            threshold: MAX_STREAM_LENGTH
+          }
+        });
+      } catch (e) {
+        console.error('[EventBus] Redis publish failed, falling back to local only:', e);
+        this.useRedis = false;
+      }
+    }
+  }
+
+  /**
+   * Utility for easy publishing
+   */
+  log(type: string, source: string, severity: EventSeverity, payload: any, strategyId?: string) {
+    return this.publish({ eventType: type, source, severity, payload, strategyId });
+  }
+}
+
+export const eventBus = new EventBus();

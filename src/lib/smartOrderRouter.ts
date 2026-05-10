@@ -18,6 +18,7 @@ import { getGlobalState, setPosition, setOpenOrder, redis, executeAtomicPosition
 import { writeExecutionLog } from './questdb.ts';
 import type { RawOrder } from './riskEngine.ts';
 import { circuitBreakers } from './circuitBreaker.ts';
+import { eventBus } from './events/eventBus.ts';
 
 const activeTwapTimers = new Map<string, NodeJS.Timeout>();
 const TWAP_STATE_KEY = 'tradex:active_twaps'; // Hash -> parentId -> JSON state
@@ -61,6 +62,7 @@ async function recordParentOrder(parentId: string, order: RawOrder, config: SORC
     await redis.hset('tradex:parent_orders', parentId, JSON.stringify({
       ...order, config, parentId, createdAt: Date.now(), status: 'routing'
     }));
+    eventBus.log('order.routing', 'smart_router', 'INFO', { parentId, symbol: order.symbol, side: order.side, qty: order.quantity, strategy: config.strategy });
   } catch { /* Redis unavailable — skip persistence in dev */ }
 }
 
@@ -70,6 +72,7 @@ async function finalizeParentOrder(parentId: string, status: 'complete' | 'parti
     if (!raw) return;
     const order = JSON.parse(raw);
     await redis.hset('tradex:parent_orders', parentId, JSON.stringify({ ...order, status, completedAt: Date.now() }));
+    eventBus.log('order.finalized', 'smart_router', status === 'failed' ? 'ERROR' : 'INFO', { parentId, status });
   } catch { /* Redis unavailable — skip persistence in dev */ }
 }
 

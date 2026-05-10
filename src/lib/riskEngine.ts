@@ -15,6 +15,7 @@
  */
 
 import { getPositionsByAccount, getGlobalState, redis } from './redis.ts';
+import { eventBus } from './events/eventBus.ts';
 
 // ── Risk Profile (per-account limits) ────────────────────────────
 export interface RiskProfile {
@@ -96,21 +97,27 @@ export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
 
   // ── 1. Symbol Whitelist ──────────────────────────────────────────
   if (profile.allowedSymbols.length > 0 && !profile.allowedSymbols.includes(order.symbol)) {
-    return { approved: false, reason: `Symbol ${order.symbol} not in account whitelist.` };
+    const reason = `Symbol ${order.symbol} not in account whitelist.`;
+    eventBus.log('risk.rejected', 'risk_engine', 'WARN', { accountId: order.accountId, reason, symbol: order.symbol });
+    return { approved: false, reason };
   }
 
   // ── 2. Leverage cap ──────────────────────────────────────────────
   if (order.leverage > profile.maxLeverage) {
-    return { approved: false, reason: `Leverage ${order.leverage}x exceeds account limit of ${profile.maxLeverage}x.` };
+    const reason = `Leverage ${order.leverage}x exceeds account limit of ${profile.maxLeverage}x.`;
+    eventBus.log('risk.rejected', 'risk_engine', 'WARN', { accountId: order.accountId, reason, leverage: order.leverage });
+    return { approved: false, reason };
   }
 
   // ── 3. Notional value check ──────────────────────────────────────
   const execPrice = order.price ?? currentPrice;
   const notional = order.notionalUsd ?? (order.quantity * execPrice);
   if (notional > profile.maxPositionSizeUsd) {
+    const reason = `Order notional $${notional.toFixed(2)} exceeds max position size $${profile.maxPositionSizeUsd}.`;
+    eventBus.log('risk.rejected', 'risk_engine', 'WARN', { accountId: order.accountId, reason, notional });
     return {
       approved: false,
-      reason: `Order notional $${notional.toFixed(2)} exceeds max position size $${profile.maxPositionSizeUsd}.`
+      reason
     };
   }
   if (notional > profile.maxPositionSizeUsd * 0.8) {
@@ -119,13 +126,17 @@ export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
 
   // ── 4. Open position count ───────────────────────────────────────
   if (accountPositions.length >= profile.maxOpenPositions) {
-    return { approved: false, reason: `Max open positions limit (${profile.maxOpenPositions}) reached for account ${order.accountId}.` };
+    const reason = `Max open positions limit (${profile.maxOpenPositions}) reached for account ${order.accountId}.`;
+    eventBus.log('risk.rejected', 'risk_engine', 'WARN', { accountId: order.accountId, reason });
+    return { approved: false, reason };
   }
 
   // ── 5. Daily loss circuit-breaker ───────────────────────────────
   const dailyLoss = await getDailyLoss(order.accountId);
   if (dailyLoss >= profile.maxDailyLossUsd) {
-    return { approved: false, reason: `Daily loss limit $${profile.maxDailyLossUsd} breached. Trading suspended for account ${order.accountId}.` };
+    const reason = `Daily loss limit $${profile.maxDailyLossUsd} breached. Trading suspended for account ${order.accountId}.`;
+    eventBus.log('risk.triggered', 'risk_engine', 'CRITICAL', { accountId: order.accountId, reason, dailyLoss });
+    return { approved: false, reason };
   }
 
   // ── 6. Drawdown circuit-breaker ──────────────────────────────────
@@ -139,13 +150,19 @@ export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
   
   const drawdownPct = Math.abs(totalUnrealizedPnl / equity) * 100;
   if (totalUnrealizedPnl < 0 && drawdownPct > profile.maxDrawdownPct) {
-    return {
-      approved: false,
-      reason: `Drawdown circuit-breaker triggered: ${drawdownPct.toFixed(2)}% > ${profile.maxDrawdownPct}% limit.`
-    };
+    const reason = `Drawdown circuit-breaker triggered: ${drawdownPct.toFixed(2)}% > ${profile.maxDrawdownPct}% limit.`;
+    eventBus.log('risk.triggered', 'risk_engine', 'CRITICAL', { accountId: order.accountId, reason, drawdownPct });
+    return { approved: false, reason };
   }
 
   console.log(`[RiskEngine] ✅ Order approved for ${order.accountId} — notional=$${notional.toFixed(2)}, dailyLoss=$${dailyLoss.toFixed(2)}, positions=${accountPositions.length}`);
+  
+  eventBus.log('risk.approved', 'risk_engine', 'INFO', { 
+    accountId: order.accountId, 
+    symbol: order.symbol, 
+    notional,
+    dailyLoss
+  });
 
   return { approved: true, warnings };
 }

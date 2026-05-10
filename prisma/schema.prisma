@@ -148,3 +148,16 @@ model TradeOutcome {
   
   strategy        Strategy @relation(fields: [strategyId], references: [id])
 }
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  eventType   String   // e.g., "signal.created", "risk.triggered", "execution.failed"
+  source      String   // e.g., "smart_router", "ai_worker", "risk_engine"
+  severity    String   // "INFO", "WARN", "ERROR", "CRITICAL"
+  payload     Json     // Flexible payload for the specific event
+  strategyId  String?  // Optional relation if event is tied to a strategy
+  timestamp   DateTime @default(now())
+
+  @@index([eventType, timestamp])
+  @@index([source, timestamp])
+}
