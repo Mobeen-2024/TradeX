@@ -63,6 +63,14 @@ async function start() {
     }
   });
 
+  // ── Wire Event Bus to WS clients ──────────────────────────
+  eventBus.on('event', (event) => {
+    const payload = JSON.stringify({ type: 'audit_event', data: event });
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(payload);
+    }
+  });
+
   const { setWorkflowBroadcast, submitWorkflow } = await import('./src/lib/workflow/orchestrator.ts').then(async (m) => {
     const engineModule = await import('./src/lib/workflow/engine.ts');
     return {
