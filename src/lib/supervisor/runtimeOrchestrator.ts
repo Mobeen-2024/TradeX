@@ -3,39 +3,47 @@ import { heartbeatMonitor } from './heartbeatMonitor.ts';
 import { redis, KEYS } from '../redis.ts';
 import { queueManager } from '../queueManager.ts';
 import { eventBus } from '../events/eventBus.ts';
+import { WorkerSupervisor } from './workerSupervisor.ts';
 
 const RECONCILIATION_INTERVAL = 5000; // 5 seconds
 const SCALE_OUT_THRESHOLD = 50; // signals in queue
 
-interface FailureMetrics {
-  attempts: number;
-  lastFailure: number;
-  quarantined: boolean;
-}
-
 /**
- * Runtime Supervisor Orchestrator
+ * Root Runtime Supervisor
  * 
- * A Kubernetes-style control loop that ensures the platform's execution state
- * matches the desired configuration. Handles self-healing and zombie detection.
- * Includes 'Circuit Breaker' protection to prevent infinite restart loops.
+ * Orchestrates child supervisors (Fault Domains) using an Erlang-style tree.
+ * 
+ * Tree Hierarchy:
+ * Runtime Supervisor (Root)
+ *     ├── Market Supervisor (volatility_agent, sentiment_agent)
+    │      └── Policy: One-for-One
+ *     └── Execution Supervisor (ai_analytics, macro_agent)
+ *         └── Policy: One-for-One
  */
 class RuntimeOrchestrator {
   private timer: any = null;
   private isProcessing = false;
-  private failureRegistry = new Map<string, FailureMetrics>();
-
-  // Protection Constants
-  private readonly RESTART_LIMIT = 5;
-  private readonly RESTART_WINDOW_MS = 60000; // 1 minute
-  private readonly QUARANTINE_COOLDOWN_MS = 300000; // 5 minutes
+  
+  // Child Supervisors
+  public marketSupervisor: WorkerSupervisor;
+  public executionSupervisor: WorkerSupervisor;
 
   constructor() {
+    this.marketSupervisor = new WorkerSupervisor({
+      name: 'Market_Supervisor',
+      policy: 'one_for_one'
+    });
+
+    this.executionSupervisor = new WorkerSupervisor({
+      name: 'Execution_Supervisor',
+      policy: 'one_for_one'
+    });
+
     this.start();
   }
 
   private start() {
-    console.log('[Orchestrator] ☸️  Distributed Supervisor active (Loop: 5s, Protection: ON).');
+    console.log('[Orchestrator] [INFO] ☸️  Root Runtime Supervisor active (Supervision Tree Mode).');
     this.timer = setInterval(() => this.reconcile(), RECONCILIATION_INTERVAL);
   }
 
@@ -48,181 +56,76 @@ class RuntimeOrchestrator {
 
     try {
       // ── 1. OBSERVE ───────────────────────────────────────────
-      // Get current running instances and their health status
       const actualWorkers = workerManager.list();
       const unhealthyIds = await heartbeatMonitor.getUnhealthyWorkers();
       const metrics = await queueManager.getQueueMetrics();
       
-      const quarantinedIds = new Set<string>();
-      for (const [sig, m] of this.failureRegistry.entries()) {
-        if (m.quarantined) {
-          // This is a simplification; in a real system we'd map signature back to workerIds
-        }
-      }
-      
-      const health = await heartbeatMonitor.getHealthSnapshot(quarantinedIds);
+      const health = await heartbeatMonitor.getHealthSnapshot(new Set());
 
-      // ── 2. DIFF & ACT (Self-Healing) ──────────────────────────
+      // ── 2. SELF-HEALING (Supervised Recovery) ──────────────────
       for (const workerId of unhealthyIds) {
-        // A worker that stopped heartbeating but is still in our 'running' list is a zombie
         const entry = actualWorkers.find(w => w.id === workerId);
         if (entry && entry.status === 'running') {
-          console.warn(`[Orchestrator] 🚨 Zombie detected: ${workerId} (${entry.type}). Restarting...`);
-          await this.restartWorker(workerId, entry.type as StrategyType);
+          console.warn(`[Orchestrator] [WARN] 🚨 Unhealthy worker detected: ${workerId} (${entry.type}). Handing off to supervisor.`);
+          
+          // Route to appropriate supervisor
+          if (entry.type === 'volatility_agent' || entry.type === 'sentiment_agent') {
+            await this.marketSupervisor.handleChildFailure(workerId, entry.type, entry.config);
+          } else if (entry.type === 'ai_analytics' || entry.type === 'macro_agent') {
+            await this.executionSupervisor.handleChildFailure(workerId, entry.type, entry.config);
+          } else {
+            // Default recovery for unassigned workers
+            await this.simpleRestart(workerId, entry.type as StrategyType, entry.config);
+          }
         }
       }
 
-      // ── 3. INTELLIGENT SCALE & REBALANCE (Dynamic HPA) ────────────
-      
-      // Calculate Average CPU Load across all active workers
+      // ── 3. DYNAMIC SCALING ───────────────────────────────────────
+      // (Scaling logic preserved but simplified for tree orchestration)
       const healthEntries = Object.values(health);
       const avgCpuLoad = healthEntries.length > 0 
         ? healthEntries.reduce((acc, h) => acc + h.cpu, 0) / healthEntries.length 
         : 0;
 
-      // Simulated Latency (In production: pulled from BullMQ worker getMetrics())
-      const avgLatencyMs = metrics.signals.waiting > 10 ? 150 : 25; 
-      const latencyFactor = Math.min(avgLatencyMs / 200, 1); // Normalized (max at 200ms)
-
-      /**
-       * The ScaleScore Formula
-       * (queueDepth * 0.4) + (latency * 0.3) + (cpuLoad * 0.2) + (errorRate * 0.1)
-       * We normalize the queue depth relative to our threshold.
-       */
-      const normalizedQueue = Math.min(metrics.signals.waiting / SCALE_OUT_THRESHOLD, 2);
-      
-      // Calculate Average Error Rate
-      const avgErrorRate = healthEntries.length > 0
-        ? healthEntries.reduce((acc, h) => acc + h.errorCount, 0) / healthEntries.length
-        : 0;
-      const errorFactor = Math.min(avgErrorRate / 10, 1); // Normalize (max at 10 errors)
-
-      const scaleScore = (normalizedQueue * 0.4) + (latencyFactor * 0.3) + (avgCpuLoad * 0.2) + (errorFactor * 0.1);
-
-      if (scaleScore > 0.8) {
-        console.warn(`[Orchestrator] 📈 High ScaleScore: ${scaleScore.toFixed(2)} (Queue: ${metrics.signals.waiting}, CPU: ${avgCpuLoad.toFixed(2)}). Auto-scaling...`);
-        
+      if (metrics.signals.waiting > SCALE_OUT_THRESHOLD) {
+        console.warn(`[Orchestrator] [WARN] 📈 High queue pressure detected (${metrics.signals.waiting}). Scaling execution layer...`);
         const analyticsCount = actualWorkers.filter(w => w.type === 'ai_analytics').length;
         if (analyticsCount < 5) {
-          console.log(`[Orchestrator] 🚀 Scaling: Adding ai_analytics instance...`);
-          await workerManager.start('ai_analytics', { symbol: 'btcusdt' });
-        }
-      } else if (scaleScore < 0.2 && actualWorkers.length > 3) {
-        // Scale in if underutilized (Keep at least 3 workers for redundancy)
-        const idleAnalytics = actualWorkers.find(w => w.type === 'ai_analytics');
-        if (idleAnalytics) {
-          console.log(`[Orchestrator] 📉 Low ScaleScore: ${scaleScore.toFixed(2)}. Scaling in: Terminating ${idleAnalytics.id}...`);
-          await workerManager.stop(idleAnalytics.id);
+          await this.executionSupervisor.spawnChild('ai_analytics', { symbol: 'btcusdt' });
         }
       }
 
       // ── 4. VISUALIZATION STREAM ──────────────────────────────
-      // Emit full health snapshot for the Runtime Graph
       workerManager.broadcast({
         type: 'runtime_health_update',
         health,
         metrics,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        tree: {
+          market: this.marketSupervisor.getChildren(),
+          execution: this.executionSupervisor.getChildren()
+        }
       });
       
     } catch (e) {
-      console.error('[Orchestrator] ❌ Reconciliation loop error:', e);
+      console.error('[Orchestrator] [ERROR] ❌ Reconciliation loop error:', e);
     } finally {
       this.isProcessing = false;
     }
   }
 
-
-  /**
-   * Cull and Respawn protocol with Circuit Breaker protection.
-   */
-  private async restartWorker(workerId: string, type: StrategyType) {
+  private async simpleRestart(workerId: string, type: StrategyType, config: any) {
+    console.warn(`[Orchestrator] [WARN] ♻️  Simple restart for unmanaged worker: ${workerId}`);
     try {
-      // 1. Get last known config for this worker
-      const workersRaw = await redis.get(KEYS.workerRegistry);
-      if (!workersRaw) return;
-      const workers = JSON.parse(workersRaw);
-      const metadata = workers[workerId];
-
-      if (!metadata) return;
-
-      // 2. Identify the logical worker (Signature) to track its history
-      const config = metadata.config || {};
-      const signature = `${type}:${config.symbol || 'global'}`;
-      
-      const now = Date.now();
-      const metrics = this.failureRegistry.get(signature) || { attempts: 0, lastFailure: 0, quarantined: false };
-
-      // 3. Check for Quarantine
-      if (metrics.quarantined) {
-        if (now - metrics.lastFailure > this.QUARANTINE_COOLDOWN_MS) {
-          console.log(`[Orchestrator] 🧊 Quarantine expired for ${signature}. Retrying...`);
-          metrics.quarantined = false;
-          metrics.attempts = 0;
-        } else {
-          console.warn(`[Orchestrator] 🛡️  Quarantine Active: Skipping restart for ${signature}.`);
-          return;
-        }
-      }
-
-      // 4. Track Failures within Window
-      if (now - metrics.lastFailure < this.RESTART_WINDOW_MS) {
-        metrics.attempts++;
-      } else {
-        metrics.attempts = 1; // Reset window
-      }
-      metrics.lastFailure = now;
-
-      // 5. Threshold Protection (Circuit Breaker)
-      if (metrics.attempts >= this.RESTART_LIMIT) {
-        metrics.quarantined = true;
-        this.failureRegistry.set(signature, metrics);
-        
-        const errorMsg = `CRITICAL: Worker ${signature} quarantined after ${metrics.attempts} failures in 60s. Infinite loop suspected.`;
-        console.error(`[Orchestrator] ⛔ ${errorMsg}`);
-        
-        // Emit institutional event for UI alerting
-        eventBus.emitEvent('worker.quarantined', 'supervisor', 'CRITICAL', {
-          msg: errorMsg,
-          signature,
-          attempts: metrics.attempts
-        });
-        return;
-      }
-
-      this.failureRegistry.set(signature, metrics);
-
-      // 6. Hard kill the worker thread
-      try {
-        await workerManager.stop(workerId);
-      } catch (e) {
-        // Already dead
-      }
-
-      // 7. Clear stale health state
-      await heartbeatMonitor.clearHeartbeat(workerId);
-
-      // 8. Fetch last snapshot for state recovery
-      const snapshotRaw = await redis.hget(KEYS.runtimeSnapshots, workerId);
-      const snapshot = snapshotRaw ? JSON.parse(snapshotRaw) : null;
-
-      console.warn(`[Orchestrator] ♻️  Respawning zombie ${workerId} (${type}). Attempts: ${metrics.attempts}/${this.RESTART_LIMIT}`);
-      await workerManager.start(type, config, snapshot);
-      
-      eventBus.emitEvent('worker.restarted', 'supervisor', 'WARN', {
-        workerId,
-        type,
-        attempts: metrics.attempts,
-        signature
-      });
-
-    } catch (e) {
-      console.error(`[Orchestrator] Failed to restart ${workerId}:`, e);
-    }
+      await workerManager.stop(workerId);
+    } catch {}
+    await workerManager.start(type, config);
   }
 
   public stop() {
     if (this.timer) clearInterval(this.timer);
+    this.marketSupervisor.stopAll();
+    this.executionSupervisor.stopAll();
   }
 }
 

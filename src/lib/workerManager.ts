@@ -249,12 +249,13 @@ export const workerManager = {
     for (const [id] of registry) await this.stop(id);
   },
 
-  list(): { id: string; type: StrategyType; status: string; startedAt: number }[] {
+  list(): { id: string; type: StrategyType; status: string; startedAt: number; config: any }[] {
     return Array.from(registry.values()).map(e => ({
       id:        e.id,
       type:      e.type,
       status:    e.status,
       startedAt: e.startedAt,
+      config:    e.config,
     }));
   },
 
