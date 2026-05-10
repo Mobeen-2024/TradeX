@@ -77,30 +77,43 @@ async function syncWithBlackboard() {
 
     if (!volAgent) return;
 
-    const { status } = volAgent;
+    const { status: volStatus } = volAgent;
     let slMultiplier = 1.0;
     let tpMultiplier = 1.0;
     let sizeMultiplier = 1.0;
 
-    if (status === 'SPIKE') {
+    if (volStatus === 'SPIKE') {
       slMultiplier = 2.0;    // Widen stops to survive whip-saws
       tpMultiplier = 1.5;    // Target larger runs
       sizeMultiplier = 0.5;  // Reduce size for safety
-    } else if (status === 'EXPANDING') {
+    } else if (volStatus === 'EXPANDING') {
       slMultiplier = 1.5;
       tpMultiplier = 1.2;
       sizeMultiplier = 0.8;
+    }
+
+    // ── Sentiment Adaptation ──
+    const sentAgent = beliefs['Sentiment'];
+    let newAsymmetry = baseConfig.asymmetry;
+    
+    if (sentAgent) {
+      if (sentAgent.label === 'BULLISH') {
+        newAsymmetry = Math.max(baseConfig.asymmetry, 1.5); // Favor longs
+      } else if (sentAgent.label === 'BEARISH') {
+        newAsymmetry = 1.0 / Math.max(baseConfig.asymmetry, 1.5); // Favor shorts (inverse of 1.5 = 0.66)
+      }
     }
 
     const newSL = baseConfig.stopLossPct * slMultiplier;
     const newTP = baseConfig.takeProfitPct * tpMultiplier;
     const newSize = baseConfig.notionalUsdPerLeg * sizeMultiplier;
 
-    if (config.stopLossPct !== newSL || config.notionalUsdPerLeg !== newSize) {
-      log(`🧠 Adaptive Bridge: Market is ${status}. Adjusting parameters: SL=${newSL.toFixed(2)}%, TP=${newTP.toFixed(2)}%, Size=$${newSize.toFixed(0)}`);
+    if (config.stopLossPct !== newSL || config.notionalUsdPerLeg !== newSize || config.asymmetry !== newAsymmetry) {
+      log(`🧠 Adaptive Bridge: Vol=${volStatus}, Sent=${sentAgent?.label || 'NONE'}. Adjusting SL=${newSL.toFixed(2)}%, TP=${newTP.toFixed(2)}%, Size=$${newSize.toFixed(0)}, Asym=${newAsymmetry.toFixed(2)}`);
       config.stopLossPct = newSL;
       config.takeProfitPct = newTP;
       config.notionalUsdPerLeg = newSize;
+      config.asymmetry = newAsymmetry;
     }
   } catch (e) {
     // Blackboard sync failed — proceed with existing config
