@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 mock_db.json
+prisma/dev.db
