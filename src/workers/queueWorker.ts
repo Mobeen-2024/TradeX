@@ -8,7 +8,7 @@ import IORedis from 'ioredis';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
 
-connection.on('error', (err) => {
+connection.on('error', (err: any) => {
   if (err.code === 'ECONNREFUSED') return;
   console.error('[QueueWorker] Redis Connection Error:', err.message);
 });

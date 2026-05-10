@@ -8,7 +8,7 @@ const connection = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 
-connection.on('error', (err) => {
+connection.on('error', (err: any) => {
   if (err.code === 'ECONNREFUSED') {
     // Suppress spam in dev, let workers handle the fallout
     return;
