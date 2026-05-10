@@ -9,7 +9,14 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
 
 connection.on('error', (err: any) => {
-  if (err.code === 'ECONNREFUSED') return;
+  const isProd = process.env.NODE_ENV === 'production';
+  if (err.code === 'ECONNREFUSED') {
+    if (isProd) {
+      console.error('[QueueWorker] FATAL: Durable worker connection failed in production. Stopping to prevent execution amnesia.');
+      process.exit(1);
+    }
+    return;
+  }
   console.error('[QueueWorker] Redis Connection Error:', err.message);
 });
 

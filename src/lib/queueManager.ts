@@ -9,7 +9,13 @@ const connection = new IORedis(REDIS_URL, {
 });
 
 connection.on('error', (err: any) => {
+  const isProd = process.env.NODE_ENV === 'production';
+  
   if (err.code === 'ECONNREFUSED') {
+    if (isProd) {
+      console.error('[QueueManager] FATAL: Redis connection failed in production. Exiting to prevent state fragmentation.');
+      process.exit(1);
+    }
     // Suppress spam in dev, let workers handle the fallout
     return;
   }
