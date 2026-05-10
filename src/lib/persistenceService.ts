@@ -85,7 +85,7 @@ class PersistenceService {
   private async syncStrategies() {
     try {
       const rawStrategies = await redis.hgetall('tradex:runtime:strategies');
-      const strategies = Object.values(rawStrategies).map(s => JSON.parse(s));
+      const strategies = Object.values(rawStrategies).map(s => JSON.parse(s as string));
 
       for (const strategy of strategies) {
         await db.strategy.upsert({
@@ -134,7 +134,7 @@ class PersistenceService {
   private async syncPositions() {
     try {
       const rawPositions = await redis.hgetall('tradex:positions');
-      const positions = Object.values(rawPositions).map(p => JSON.parse(p));
+      const positions = Object.values(rawPositions).map(p => JSON.parse(p as string));
 
       for (const pos of positions) {
         await db.position.upsert({
