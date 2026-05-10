@@ -229,6 +229,7 @@ export function createRedisClient(options: Record<string, any> = {}): any {
     if (!warned) {
       warned = true;
       useMock = true;
+      console.warn('[Redis] [WARN] Service unavailable — Switching to Mock Mode.');
       runtimeCapabilities.redisPersistence = false;
       runtimeCapabilities.durableQueues = false;
     }
@@ -237,9 +238,8 @@ export function createRedisClient(options: Record<string, any> = {}): any {
   realClient.on('connect', () => {
     useMock = false;
     warned = false;
+    console.log('[Redis] [INFO] Connection established.');
     runtimeCapabilities.redisPersistence = true;
-    // Note: durableQueues might still be false until a separate health check
-    // or let it follow redis status for simplicity here.
     runtimeCapabilities.durableQueues = true;
   });
 

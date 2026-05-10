@@ -10,7 +10,7 @@ import { stateSyncManager } from './stateSyncManager.ts';
  */
 export const bootManager = {
   async hydrateRuntime() {
-    console.log('\n[Boot] 🌊 Starting State Hydration Sequence...');
+    console.log('\n[Boot] [INFO] 🌊 Starting State Hydration Sequence...');
     
     try {
       // Step 1: Restore runtime state (snapshots, execution caches)
@@ -109,9 +109,9 @@ export const bootManager = {
       const { hydrateRiskState } = await import('./riskEngine.ts');
       await hydrateRiskState();
 
-      console.log('[Boot] 🚀 Hydration Complete. Runtime is ready.\n');
+      console.log('[Boot] [INFO] 🚀 Hydration Complete. Runtime is ready.\n');
     } catch (e) {
-      console.error('[Boot] ❌ Critical Hydration Failure:', e);
+      console.error('[Boot] [ERROR] ❌ Critical Hydration Failure:', e);
       // System will start with empty state if hydration fails
     }
   }

@@ -48,7 +48,7 @@ class EventBus extends EventEmitter {
   private checkRedis() {
     if ((redis as any).isMock || !redis.isOpen) {
       this.useRedis = false;
-      console.log('[EventBus] Redis not available. Running in Local Mode.');
+      console.log('[EventBus] [INFO] Redis not available. Running in Local Mode.');
     }
   }
 
@@ -72,7 +72,7 @@ class EventBus extends EventEmitter {
       try {
         ledgerId = await eventStore.append(event, causationId, correlationId);
       } catch (e) {
-        console.error('[EventBus] Ledger append failed:', e);
+        console.error('[EventBus] [ERROR] Ledger append failed:', e);
       }
     }
 

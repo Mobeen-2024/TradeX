@@ -23,14 +23,14 @@ async function processExecution(job: any) {
 
     const riskResult = await runRiskChecks(order);
     if (!riskResult.approved) {
-      console.warn(`[QueueWorker] 🛡️ Risk block on ${job.id}: ${riskResult.reason}`);
+      console.warn(`[QueueWorker] [WARN] 🛡️ Risk block on ${job.id}: ${riskResult.reason}`);
       return { success: false, reason: riskResult.reason };
     }
 
     const result = await smartOrderRouter.route(order, accountIds, sorConfig);
     return { success: true, result };
   } catch (err: any) {
-    console.error(`[QueueWorker] ❌ Execution job ${job.id} failed:`, err.message);
+    console.error(`[QueueWorker] [ERROR] ❌ Execution job ${job.id} failed:`, err.message);
     throw err;
   }
 }
@@ -49,7 +49,7 @@ async function processAudit(job: any) {
       }
     });
   } catch (err: any) {
-    console.error(`[QueueWorker] ❌ Failed to persist audit log ${job.id}:`, err.message);
+    console.error(`[QueueWorker] [ERROR] ❌ Failed to persist audit log ${job.id}:`, err.message);
     throw err;
   }
 }
@@ -67,11 +67,11 @@ async function processSignal(job: any) {
  * Lifecycle Handlers for BullMQ
  */
 const setupBullMQHandlers = (worker: Worker, name: string) => {
-  worker.on('completed', (job) => console.debug(`[QueueWorker] ✅ ${name} job ${job.id} completed.`));
-  worker.on('failed', (job, err) => console.error(`[QueueWorker] ⚠️ ${name} job ${job?.id} failed:`, err.message));
+  worker.on('completed', (job) => console.debug(`[QueueWorker] [INFO] ✅ ${name} job ${job.id} completed.`));
+  worker.on('failed', (job, err) => console.error(`[QueueWorker] [ERROR] ⚠️ ${name} job ${job?.id} failed:`, err.message));
   worker.on('error', (err) => {
     if (process.env.NODE_ENV !== 'production' && err.message.includes('ECONNREFUSED')) return;
-    console.error(`[QueueWorker] ${name} Queue Error:`, err.message);
+    console.error(`[QueueWorker] [ERROR] ${name} Queue Error:`, err.message);
   });
 };
 
@@ -80,7 +80,7 @@ const setupBullMQHandlers = (worker: Worker, name: string) => {
  */
 export function initQueueWorkers() {
   if (!isDurable) {
-    console.log('[QueueWorker] ⚡ Initializing Ephemeral Local Workers (Event Listeners).');
+    console.log('[QueueWorker] [INFO] Initializing Ephemeral Local Workers (Event Listeners).');
     
     executionQueue.on('job', processExecution);
     auditQueue.on('job', processAudit);
@@ -89,7 +89,7 @@ export function initQueueWorkers() {
     return;
   }
 
-  console.log('[QueueWorker] 🦾 Initializing Durable BullMQ Workers.');
+  console.log('[QueueWorker] [INFO] Initializing Durable BullMQ Workers.');
   const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
   
   const executionWorker = new Worker('executions', processExecution, { 

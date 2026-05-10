@@ -39,19 +39,20 @@ export let isDurable = false;
  */
 export function initQueueManager() {
   if (!runtimeCapabilities.durableQueues) {
-    console.warn('[QueueManager] ⚡ Running in Ephemeral Local Queue Mode (DurableQueues: false).');
+    console.warn('[QueueManager] [WARN] Redis unavailable — Durable queues disabled.');
+    console.log('[QueueManager] [INFO] Falling back to Local Ephemeral Queue Runtime.');
     isDurable = false;
     signalQueue = new LocalQueue('signals');
     executionQueue = new LocalQueue('executions');
     auditQueue = new LocalQueue('audit');
   } else {
     try {
-      console.log('[QueueManager] 🛠️  Durable Capability Confirmed. Initializing BullMQ clusters.');
+      console.log('[QueueManager] [INFO] Durable Capability Confirmed. Initializing BullMQ clusters.');
       connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
       
       connection.on('error', (err: any) => {
         if (process.env.NODE_ENV !== 'production' && err.code === 'ECONNREFUSED') return;
-        console.error('[QueueManager] Redis Connection Error:', err.message);
+        console.error('[QueueManager] [ERROR] Redis Connection Error:', err.message);
       });
 
       signalQueue = new Queue('signals', { connection });
@@ -59,7 +60,7 @@ export function initQueueManager() {
       auditQueue = new Queue('audit', { connection });
       isDurable = true;
     } catch (e) {
-      console.warn('[QueueManager] Failed to init BullMQ despite capability, falling back to Local Mode:', (e as any).message);
+      console.warn('[QueueManager] [WARN] Failed to init BullMQ despite capability, falling back to Local Mode:', (e as any).message);
       isDurable = false;
       signalQueue = new LocalQueue('signals');
       executionQueue = new LocalQueue('executions');
@@ -73,7 +74,7 @@ export function initQueueManager() {
       q.on('error', (err: any) => {
         const msg = err.message || '';
         if (process.env.NODE_ENV !== 'production' && (msg.includes('ECONNREFUSED') || msg.includes('closed'))) return;
-        console.error(`[QueueManager] ${q.name} Error: ${msg}`);
+        console.error(`[QueueManager] [ERROR] ${q.name} Queue Error: ${msg}`);
       });
     }
   });

@@ -62,11 +62,11 @@ async function start() {
   initQueueManager();
   initQueueWorkers();
 
-  console.log(`[System] Runtime Capabilities:`, runtimeCapabilities);
+  console.log(`[System] [INFO] Runtime Capabilities Negotiated:`, runtimeCapabilities);
 
   // ── Start Projection Engine (Deterministic Event Sourcing) ────
   import('./src/lib/events/projectors/positionProjector.ts').then(({ positionProjector }) => {
-    console.log('[System] Projection Engine Booted.');
+    console.log('[System] [INFO] Projection Engine Booted.');
   });
 
   eventBus.emitEvent('system.boot', 'system', 'INFO', { msg: 'TradeX Pro Engine Started' });
@@ -613,7 +613,7 @@ async function start() {
       fastify.log.error(err);
       process.exit(1);
     }
-    console.log(`\n  🚀 TradeX Pro Backend running at: ${address}`);
+    console.log(`\n[Server] [INFO] TradeX Pro Backend running at: ${address}`);
     gateway.connect();
 
     // ── Resume Background Tasks ────────────────────
