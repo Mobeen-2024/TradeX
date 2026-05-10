@@ -208,6 +208,8 @@ export function createRedisClient(options: Record<string, any> = {}): any {
               if (
                 err?.message?.includes('Connection is closed') ||
                 err?.message?.includes('ECONNREFUSED') ||
+                err?.message?.includes('enableOfflineQueue') ||
+                err?.message?.includes("Stream isn't writeable") ||
                 err?.code === 'ECONNREFUSED'
               ) {
                 useMock = true;
@@ -221,6 +223,8 @@ export function createRedisClient(options: Record<string, any> = {}): any {
           if (
             err?.message?.includes('Connection is closed') ||
             err?.message?.includes('ECONNREFUSED') ||
+            err?.message?.includes('enableOfflineQueue') ||
+            err?.message?.includes("Stream isn't writeable") ||
             err?.code === 'ECONNREFUSED'
           ) {
             useMock = true;
