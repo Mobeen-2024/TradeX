@@ -51,6 +51,7 @@ class RuntimeOrchestrator {
       const actualWorkers = workerManager.list();
       const unhealthyIds = await heartbeatMonitor.getUnhealthyWorkers();
       const metrics = await queueManager.getQueueMetrics();
+      const health = await heartbeatMonitor.getHealthSnapshot();
 
       // ── 2. DIFF & ACT (Self-Healing) ──────────────────────────
       for (const workerId of unhealthyIds) {
@@ -101,7 +102,6 @@ class RuntimeOrchestrator {
 
       // ── 4. VISUALIZATION STREAM ──────────────────────────────
       // Emit full health snapshot for the Runtime Graph
-      const health = await heartbeatMonitor.getHealthSnapshot();
       workerManager.broadcast({
         type: 'runtime_health_update',
         health,
