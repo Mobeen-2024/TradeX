@@ -56,6 +56,12 @@ async function start() {
   await initQdrant();
   await bootManager.hydrateRuntime();
   persistenceService.start();
+
+  // ── Start Projection Engine (Deterministic Event Sourcing) ────
+  import('./lib/events/projectors/positionProjector.ts').then(({ positionProjector }) => {
+    console.log('[System] Projection Engine Booted.');
+  });
+
   eventBus.emitEvent('system.boot', 'system', 'INFO', { msg: 'TradeX Pro Engine Started' });
 
   const isProd = process.env.NODE_ENV === 'production';

@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 import { runRiskChecks } from './riskEngine.ts';
 import { smartOrderRouter } from './smartOrderRouter.ts';
 import { redis, KEYS } from './redis.ts';
+import { eventBus } from './events/eventBus.ts';
 import { heartbeatMonitor } from './supervisor/heartbeatMonitor.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -187,6 +188,8 @@ async function handleWorkerMessage(workerId: string, msg: any) {
       await syncRegistryToRedis();
       console.error(`[Worker:${workerId}] Error: ${msg.error}`);
       broadcast({ type: 'worker_error', workerId, error: msg.error });
+      
+      eventBus.emitEvent('worker.error', 'worker_manager', 'ERROR', { workerId, error: msg.error });
       break;
     }
   }
@@ -219,6 +222,9 @@ export const workerManager = {
     registry.set(workerId, entry);
     await syncRegistryToRedis();
     broadcast({ type: 'worker_started', workerId, strategyType: type, config });
+    
+    // ── Deterministic Event Sourcing ──
+    eventBus.emitEvent('worker.started', 'worker_manager', 'INFO', { workerId, type, config });
 
     return workerId;
   },
@@ -228,6 +234,8 @@ export const workerManager = {
     if (!entry) throw new Error(`Worker ${workerId} not found.`);
     entry.worker.postMessage({ type: 'stop' });
     console.log(`[WorkerMgr] Stop signal sent to ${workerId}`);
+    
+    eventBus.emitEvent('worker.stopped', 'worker_manager', 'INFO', { workerId, type: entry.type });
   },
 
   async stopAll(): Promise<void> {

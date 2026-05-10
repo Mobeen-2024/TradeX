@@ -33,6 +33,10 @@ export interface SystemEvent {
 const STREAM_KEY = 'tradex:events';
 const MAX_STREAM_LENGTH = 10000; // Keep last 10k events in Redis
 
+import { eventStore } from './eventStore.ts';
+
+// ... (types kept same)
+
 class EventBus extends EventEmitter {
   private useRedis = true;
 
@@ -42,7 +46,6 @@ class EventBus extends EventEmitter {
   }
 
   private checkRedis() {
-    // If redis is in mock mode or disconnected, we stay in local EventEmitter mode
     if ((redis as any).isMock || !redis.isOpen) {
       this.useRedis = false;
       console.log('[EventBus] Redis not available. Running in Local Mode.');
@@ -50,55 +53,47 @@ class EventBus extends EventEmitter {
   }
 
   /**
-   * Publish an event to the platform's audit trail.
+   * Publish an event to the platform's audit trail and event ledger.
    */
-  async publish(event: SystemEvent) {
+  async publish(event: SystemEvent, causationId?: string, correlationId?: string) {
     const timestamp = event.timestamp || Date.now();
     const eventData = {
       ...event,
       timestamp,
-      payload: JSON.stringify(event.payload)
     };
 
     // Emit locally for real-time subscribers (UI, etc.)
     this.emit('event', eventData);
 
     // ── DURABLE SINK ───────────────────────────────────────────
-    // Push to BullMQ for persistent ingestion to PostgreSQL
+    // 1. Push to the Immutable Ledger (Event Sourcing Source of Truth)
+    let ledgerId = '';
+    if (this.useRedis) {
+      try {
+        ledgerId = await eventStore.append(event, causationId, correlationId);
+      } catch (e) {
+        console.error('[EventBus] Ledger append failed:', e);
+      }
+    }
+
+    // 2. Push to the Audit Pipeline (PostgreSQL via BullMQ)
     import('../queueManager.ts').then(({ queueManager }) => {
-      queueManager.addAuditLog(eventData).catch(err => {
-        console.error('[EventBus] Durable queue push failed:', err.message);
+      queueManager.addAuditLog({ 
+        ...eventData, 
+        ledgerId,
+        payload: JSON.stringify(event.payload) 
+      }).catch(err => {
+        console.error('[EventBus] Audit queue push failed:', err.message);
       });
     });
 
-    if (this.useRedis) {
-      try {
-        // XADD key MAXLEN ~ 10000 * eventType source severity payload strategyId timestamp
-        await redis.xAdd(STREAM_KEY, '*', {
-          type: event.eventType,
-          source: event.source,
-          severity: event.severity,
-          payload: eventData.payload,
-          strategyId: event.strategyId || '',
-          timestamp: timestamp.toString()
-        }, {
-          TRIM: {
-            strategy: 'MAXLEN',
-            strategyModifier: '~',
-            threshold: MAX_STREAM_LENGTH
-          }
-        });
-      } catch (e) {
-        console.error('[EventBus] Redis publish failed, falling back to local only:', e);
-        this.useRedis = false;
-      }
-    }
+    return ledgerId;
   }
 
   /**
    * Utility for easy publishing
    */
-  emitEvent(type: EventType, source: string, severity: EventSeverity, payload: any, strategyId?: string) {
+  emitEvent(type: EventType | string, source: string, severity: EventSeverity, payload: any, strategyId?: string) {
     return this.publish({ eventType: type, source, severity, payload, strategyId });
   }
 }

@@ -1,4 +1,5 @@
 import { redis } from '../redis.ts';
+import { eventBus } from '../events/eventBus.ts';
 
 const BLACKBOARD_PREFIX = 'tradex:blackboard:';
 
@@ -16,10 +17,16 @@ export const blackboard = {
   async setBelief(symbol: string, agentName: string, belief: any) {
     const key = `${BLACKBOARD_PREFIX}${symbol.toUpperCase()}`;
     try {
-      await redis.hset(key, agentName, JSON.stringify({
+      const data = {
         ...belief,
         updatedAt: Date.now()
-      }));
+      };
+      await redis.hset(key, agentName, JSON.stringify(data));
+      
+      eventBus.emitEvent('blackboard.belief_updated', `agent:${agentName}`, 'INFO', {
+        symbol: symbol.toUpperCase(),
+        belief: data
+      });
     } catch (e) {
       // Silent fail in dev if redis unavailable
     }

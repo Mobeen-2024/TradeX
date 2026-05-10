@@ -2,6 +2,7 @@ import { workerManager, StrategyType } from '../workerManager.ts';
 import { heartbeatMonitor } from './heartbeatMonitor.ts';
 import { redis, KEYS } from '../redis.ts';
 import { queueManager } from '../queueManager.ts';
+import { eventBus } from '../events/eventBus.ts';
 
 const RECONCILIATION_INTERVAL = 5000; // 5 seconds
 const SCALE_OUT_THRESHOLD = 50; // signals in queue
@@ -181,8 +182,7 @@ class RuntimeOrchestrator {
         console.error(`[Orchestrator] ⛔ ${errorMsg}`);
         
         // Emit institutional event for UI alerting
-        const { eventBus } = await import('../events/eventBus.ts');
-        eventBus.emitEvent('ai.warning', 'supervisor', 'CRITICAL', {
+        eventBus.emitEvent('worker.quarantined', 'supervisor', 'CRITICAL', {
           msg: errorMsg,
           signature,
           attempts: metrics.attempts
@@ -208,6 +208,13 @@ class RuntimeOrchestrator {
 
       console.warn(`[Orchestrator] ♻️  Respawning zombie ${workerId} (${type}). Attempts: ${metrics.attempts}/${this.RESTART_LIMIT}`);
       await workerManager.start(type, config, snapshot);
+      
+      eventBus.emitEvent('worker.restarted', 'supervisor', 'WARN', {
+        workerId,
+        type,
+        attempts: metrics.attempts,
+        signature
+      });
 
     } catch (e) {
       console.error(`[Orchestrator] Failed to restart ${workerId}:`, e);

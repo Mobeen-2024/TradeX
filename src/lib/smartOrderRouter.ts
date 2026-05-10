@@ -14,7 +14,7 @@
  */
 
 import { randomBytes } from 'crypto';
-import { getGlobalState, setPosition, setOpenOrder, redis, executeAtomicPositionUpdate } from './redis.ts';
+import { getGlobalState, setPosition, setOpenOrder, redis, executeAtomicPositionUpdate, KEYS } from './redis.ts';
 import { writeExecutionLog } from './questdb.ts';
 import type { RawOrder } from './riskEngine.ts';
 import { circuitBreakers } from './circuitBreaker.ts';
@@ -99,15 +99,17 @@ async function executeChildOrder(child: ChildOrder, price: number): Promise<stri
       lastUpdated: Date.now()
     };
 
-    // 3. Persist consolidated position atomically via Lua script
+    // 3. Persist consolidated position atomically
+    const raw = await redis.hget(KEYS.positions, posId);
+    const isNew = !raw;
     await executeAtomicPositionUpdate(posId, child.symbol, child.quantity, price, newPosition);
 
     // 4. Log the individual execution to QuestDB for audit trail
     const execId = `exec_${randomBytes(5).toString('hex')}`;
     writeExecutionLog(execId, child.symbol, child.side, price, child.quantity, 'filled');
 
-    // 5. Emit event for sourcing
-    eventBus.emitEvent('execution.filled', 'smart_router', 'INFO', { 
+    // 5. Emit events for sourcing
+    const executionPayload = { 
       execId, 
       childId: child.id, 
       parentId: child.parentId, 
@@ -115,7 +117,19 @@ async function executeChildOrder(child: ChildOrder, price: number): Promise<stri
       side: child.side, 
       price, 
       qty: child.quantity 
-    });
+    };
+
+    eventBus.emitEvent('execution.filled', 'smart_router', 'INFO', executionPayload);
+    
+    // Position Event (The Aggregate)
+    eventBus.emitEvent(isNew ? 'position.opened' : 'position.updated', 'smart_router', 'INFO', {
+      posId,
+      symbol: child.symbol,
+      side: child.side,
+      qty: child.quantity,
+      price,
+      isNew
+    }, child.parentId);
 
     return posId;
   });
