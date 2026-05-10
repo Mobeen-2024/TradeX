@@ -21,7 +21,7 @@ const graphElements = computed(() => {
     type: 'special',
     label: 'ORCHESTRATOR',
     position: { x: 400, y: 50 },
-    data: { role: 'supervisor', icon: Activity },
+    data: { role: 'supervisor', icon: Activity, color: '#3b82f6' },
     style: { background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6' }
   });
 
@@ -31,7 +31,7 @@ const graphElements = computed(() => {
     type: 'special',
     label: 'BLACKBOARD',
     position: { x: 400, y: 350 },
-    data: { role: 'memory', icon: Database },
+    data: { role: 'memory', icon: Database, color: '#a855f7' },
     style: { background: 'rgba(168, 85, 247, 0.1)', border: '1px solid #a855f7' }
   });
 
@@ -46,7 +46,7 @@ const graphElements = computed(() => {
       type: 'special',
       label: id.split('_').slice(0, 2).join(' '),
       position: { x: workerX, y: 200 },
-      data: { ...node, icon: isAgent ? Zap : Cpu },
+      data: { ...node, icon: isAgent ? Zap : Cpu, color },
       style: { 
         background: `${color}11`, 
         border: `1px solid ${color}`,
@@ -117,7 +117,7 @@ watch(graphElements, (newEl) => {
           :class="{ 'quarantine-shake': props.data.status === 'quarantined' }"
         >
           <div class="node-icon-wrapper p-2 rounded-lg bg-white/5 border border-white/10">
-            <component :is="props.data.icon" :size="20" :color="props.style?.border" />
+            <component :is="props.data.icon" :size="20" :color="props.data.color || '#3b82f6'" />
           </div>
           
           <div class="flex flex-col items-center">
