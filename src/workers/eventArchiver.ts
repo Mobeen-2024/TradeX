@@ -53,7 +53,7 @@ class EventArchiver {
       });
       
       if (eventsToSave.length > 0) {
-        // console.log(`[EventArchiver] Archived ${eventsToSave.length} events to PostgreSQL.`);
+        console.log(`[EventArchiver] Archived ${eventsToSave.length} events to database.`);
       }
     } catch (e) {
       console.error('[EventArchiver] Flush failed. Returning events to buffer.', e);

@@ -30,6 +30,13 @@ class MockRedis {
     return 'OK';
   }
 
+  async incrbyfloat(key: string, value: number): Promise<string> {
+    const current = memoryStore[key] ? parseFloat(memoryStore[key]) : 0;
+    const newVal = current + value;
+    memoryStore[key] = newVal.toString();
+    return memoryStore[key];
+  }
+
   async hget(key: string, field: string): Promise<string | null> {
     const store = memoryStore[key];
     if (!store || typeof store !== 'object') return null;
@@ -130,6 +137,8 @@ class MockRedis {
       hdel: (k: string, ...a: any[]) => { ops.push(() => this.hdel(k, ...a)); return pipe; },
       sadd: (k: string, ...a: any[]) => { ops.push(() => this.sadd(k, ...a)); return pipe; },
       srem: (k: string, ...a: any[]) => { ops.push(() => this.srem(k, ...a)); return pipe; },
+      incrbyfloat: (k: string, v: number) => { ops.push(() => this.incrbyfloat(k, v)); return pipe; },
+      expire: (k: string, s: number) => { ops.push(() => this.expire(k, s)); return pipe; },
       exec: async () => { const results = await Promise.all(ops.map(op => op())); return results.map(v => [null, v]); },
     };
     return pipe as any;
@@ -186,18 +195,32 @@ export function createRedisClient(options: Record<string, any> = {}): any {
         return (target as any)[prop];
       }
 
-      return async (...args: any[]) => {
+      return (...args: any[]) => {
         if (useMock) {
           return (globalMock as any)[prop](...args);
         }
         try {
-          return await (target as any)[prop](...args);
+          const result = (target as any)[prop](...args);
+          
+          // If it's a promise, handle it with catch
+          if (result instanceof Promise) {
+            return result.catch((err: any) => {
+              if (
+                err?.message?.includes('Connection is closed') ||
+                err?.message?.includes('ECONNREFUSED') ||
+                err?.code === 'ECONNREFUSED'
+              ) {
+                useMock = true;
+                return (globalMock as any)[prop](...args);
+              }
+              throw err;
+            });
+          }
+          return result;
         } catch (err: any) {
-          // Catch "Connection is closed" / ECONNREFUSED and fall back to mock
           if (
             err?.message?.includes('Connection is closed') ||
             err?.message?.includes('ECONNREFUSED') ||
-            err?.message?.includes("Stream isn't writeable") ||
             err?.code === 'ECONNREFUSED'
           ) {
             useMock = true;
