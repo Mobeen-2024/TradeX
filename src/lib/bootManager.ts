@@ -91,6 +91,10 @@ export const bootManager = {
         console.log(`[Boot] ✅ Hydrated ${dbPositions.length} open positions.`);
       }
 
+      // 3. Hydrate Risk State
+      const { hydrateRiskState } = await import('./riskEngine.ts');
+      await hydrateRiskState();
+
       console.log('[Boot] 🚀 Hydration Complete. Runtime is ready.\n');
     } catch (e) {
       console.error('[Boot] ❌ Critical Hydration Failure:', e);

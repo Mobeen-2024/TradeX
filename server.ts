@@ -32,6 +32,7 @@ import { initQdrant } from './src/lib/qdrant.ts';
 import { memoryEngine } from './src/lib/ai/memoryEngine.ts';
 import { eventBus } from './src/lib/events/eventBus.ts';
 import './src/workers/eventArchiver.ts'; // Start archiver
+import './src/workers/portfolioArchiver.ts'; // Start portfolio snapshots
 import { z } from 'zod';
 
 async function start() {
@@ -363,6 +364,16 @@ async function start() {
     return (db as any).auditEvent.findMany({
       where,
       orderBy: { timestamp: 'desc' },
+      take: parseInt(limit.toString())
+    });
+  });
+
+  fastify.get('/api/portfolio/history', async (request) => {
+    const { accountId = 'default_account', limit = 100 } = (request.query as any) || {};
+    
+    return (db as any).portfolioSnapshot.findMany({
+      where: { accountId },
+      orderBy: { timestamp: 'asc' },
       take: parseInt(limit.toString())
     });
   });

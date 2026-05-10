@@ -16,6 +16,7 @@
 
 import { getPositionsByAccount, getGlobalState, redis } from './redis.ts';
 import { eventBus } from './events/eventBus.ts';
+import { db } from './db.ts';
 
 // ── Risk Profile (per-account limits) ────────────────────────────
 export interface RiskProfile {
@@ -71,15 +72,64 @@ export async function setRiskProfile(profile: RiskProfile): Promise<void> {
 async function getDailyLoss(accountId: string): Promise<number> {
   const key = `tradex:daily_loss:${accountId}:${new Date().toISOString().slice(0, 10)}`;
   const val = await redis.get(key);
-  return val ? parseFloat(val) : 0;
+  if (val) return parseFloat(val);
+
+  // Fallback to PostgreSQL if Redis is empty (e.g., after crash)
+  try {
+    const state = await (db as any).riskState.findUnique({ where: { accountId } });
+    if (state) {
+      // Re-populate Redis for performance
+      await redis.set(key, state.dailyLossUsd.toString(), { EX: 86400 });
+      return state.dailyLossUsd;
+    }
+  } catch (e) {
+    console.error('[RiskEngine] Persistence fallback failed:', e);
+  }
+  
+  return 0;
 }
 
 export async function recordLoss(accountId: string, lossUsd: number): Promise<void> {
-  const key = `tradex:daily_loss:${accountId}:${new Date().toISOString().slice(0, 10)}`;
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const key = `tradex:daily_loss:${accountId}:${dateStr}`;
+  
+  // 1. Update Redis (Hot path)
   const pipe = redis.pipeline();
   pipe.incrbyfloat(key, lossUsd);
-  pipe.expire(key, 86400); // 24h TTL
+  pipe.expire(key, 86400);
   await pipe.exec();
+
+  // 2. Update PostgreSQL (Persistence path)
+  try {
+    const current = await getDailyLoss(accountId);
+    await (db as any).riskState.upsert({
+      where: { accountId },
+      update: { dailyLossUsd: current },
+      create: { accountId, dailyLossUsd: current }
+    });
+  } catch (e) {
+    console.error('[RiskEngine] Failed to persist risk state:', e);
+  }
+}
+
+/**
+ * Hydrate the risk engine from persistent storage.
+ * Called during system boot to ensure continuity.
+ */
+export async function hydrateRiskState() {
+  console.log('[RiskEngine] Hydrating risk state from PostgreSQL...');
+  try {
+    const states = await (db as any).riskState.findMany();
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    for (const state of states) {
+      const key = `tradex:daily_loss:${state.accountId}:${dateStr}`;
+      await redis.set(key, state.dailyLossUsd.toString(), { EX: 86400 });
+    }
+    console.log(`[RiskEngine] Successfully hydrated ${states.length} account risk profiles.`);
+  } catch (e) {
+    console.error('[RiskEngine] Hydration failed:', e);
+  }
 }
 
 // ── Core Risk Check (synchronous logic, async data fetches) ────────
@@ -153,6 +203,26 @@ export async function runRiskChecks(order: RawOrder): Promise<RiskCheckResult> {
     const reason = `Drawdown circuit-breaker triggered: ${drawdownPct.toFixed(2)}% > ${profile.maxDrawdownPct}% limit.`;
     eventBus.log('risk.triggered', 'risk_engine', 'CRITICAL', { accountId: order.accountId, reason, drawdownPct });
     return { approved: false, reason };
+  }
+
+  // ── 7. Correlation Exposure Check ────────────────────────────────
+  // Group assets into sectors (simplified mock logic)
+  const sectors: Record<string, string[]> = {
+    'layer1': ['BTC', 'ETH', 'SOL', 'AVAX', 'DOT'],
+    'ai': ['RNDR', 'FET', 'AGIX', 'OCEAN'],
+    'defi': ['AAVE', 'UNI', 'MKR', 'SNX']
+  };
+
+  const getSector = (sym: string) => Object.keys(sectors).find(s => sectors[s].includes(sym.toUpperCase().replace('USDT', ''))) || 'other';
+  const orderSector = getSector(order.symbol);
+
+  if (orderSector !== 'other') {
+    const sectorCount = accountPositions.filter(p => getSector(p.pair) === orderSector).length;
+    if (sectorCount >= 3) { // Max 3 positions per correlated sector
+      const reason = `Correlation limit reached: Account already has ${sectorCount} active positions in ${orderSector} sector.`;
+      eventBus.log('risk.rejected', 'risk_engine', 'WARN', { accountId: order.accountId, reason, sector: orderSector });
+      return { approved: false, reason };
+    }
   }
 
   console.log(`[RiskEngine] ✅ Order approved for ${order.accountId} — notional=$${notional.toFixed(2)}, dailyLoss=$${dailyLoss.toFixed(2)}, positions=${accountPositions.length}`);

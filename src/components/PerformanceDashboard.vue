@@ -110,12 +110,30 @@ const updateChart = () => {
     chart.timeScale().fitContent();
 };
 
+const fetchEquityHistory = async () => {
+    try {
+        const res = await fetch('/api/portfolio/history');
+        const data = await res.json();
+        if (data.length > 0 && areaSeries) {
+            const curve = data.map((d: any) => ({
+                time: (new Date(d.timestamp).getTime() / 1000) as Time,
+                value: d.equity
+            }));
+            areaSeries.setData(curve);
+            chart?.timeScale().fitContent();
+        }
+    } catch (e) {
+        console.error('Failed to fetch equity history');
+    }
+};
+
 watch(() => stats.value.equityCurve, updateChart, { deep: true });
 
 let resizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
     initChart();
+    fetchEquityHistory();
     if (chartContainer.value) {
         resizeObserver = new ResizeObserver((entries) => {
             if (chart && entries[0].contentRect) {

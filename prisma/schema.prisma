@@ -161,3 +161,24 @@ model AuditEvent {
   @@index([eventType, timestamp])
   @@index([source, timestamp])
 }
+
+model PortfolioSnapshot {
+  id              String   @id @default(uuid())
+  accountId       String
+  equity          Float
+  realizedPnl     Float
+  unrealizedPnl   Float
+  drawdownPct     Float
+  marginUsed      Float
+  timestamp       DateTime @default(now())
+
+  @@index([accountId, timestamp])
+}
+
+model RiskState {
+  id              String   @id @default(uuid())
+  accountId       String   @unique
+  dailyLossUsd    Float    @default(0)
+  maxDrawdownPct  Float    @default(0)
+  lastUpdated     DateTime @updatedAt
+}
