@@ -11,26 +11,73 @@ datasource db {
 }
 
 model Strategy {
-  id              String   @id @default(uuid())
+  id              String             @id @default(uuid())
   name            String
-  type            String
-  status          String   // RUNNING, PAUSED, ERROR
-  roi             Float    @default(0)
-  trades          Int      @default(0)
-  winRate         Float    @default(0)
-  pnlUsdt         Float    @default(0)
-  alloc           Float
-  pairs           String   // SQLite doesn't support String[]
-  nodes           Json?    // VueFlow nodes
-  edges           Json?    // VueFlow edges
-  settings        Json?    // Strategy-specific settings
-  errorCount      Int      @default(0)
-  signalsProcessed Int     @default(0)
-  lastPing        DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  description     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  
+  // Relations
+  versions        StrategyVersion[]
+  runtime         StrategyRuntime?
   logs            ExecutionLog[]
   positions       Position[]
+}
+
+model StrategyVersion {
+  id              String             @id @default(uuid())
+  strategyId      String
+  versionNumber   Int
+  commitMessage   String
+  isActive        Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  
+  // Configuration State
+  settings        Json?
+  alloc           Float
+  pairs           String             // SQLite serialization of pairs
+  
+  // Relations
+  strategy        Strategy           @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  nodes           StrategyNode[]
+  edges           StrategyEdge[]
+}
+
+model StrategyNode {
+  id              String             @id
+  versionId       String
+  type            String
+  label           String
+  positionX       Float
+  positionY       Float
+  config          Json?
+  
+  version         StrategyVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+model StrategyEdge {
+  id              String             @id
+  versionId       String
+  sourceNodeId    String
+  targetNodeId    String
+  sourceHandle    String?
+  targetHandle    String?
+  
+  version         StrategyVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+model StrategyRuntime {
+  strategyId      String             @id
+  status          String             @default("PAUSED")
+  roi             Float              @default(0)
+  winRate         Float              @default(0)
+  pnlUsdt         Float              @default(0)
+  trades          Int                @default(0)
+  errorCount      Int                @default(0)
+  signalsProcessed Int               @default(0)
+  lastPing        DateTime           @default(now())
+  
+  strategy        Strategy           @relation(fields: [strategyId], references: [id], onDelete: Cascade)
 }
 
 model Position {

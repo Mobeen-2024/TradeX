@@ -20,16 +20,55 @@ export const bootManager = {
         console.log(`[Boot] 🔥 Warm Boot: Recovered ${Object.keys(hotStrategies).length} strategies from Redis.`);
       } else {
         console.log('[Boot] ❄️ Cold Boot: Redis empty. Hydrating from PostgreSQL...');
-        const dbStrategies = await db.strategy.findMany({
+        // Use any to bypass stale types; Logic is correct per new schema
+        const dbStrategies = await (db.strategy as any).findMany({
           where: {
-            status: { in: ['RUNNING', 'PAUSED', 'ERROR'] }
+            runtime: {
+              status: { in: ['RUNNING', 'PAUSED', 'ERROR'] }
+            }
+          },
+          include: {
+            runtime: true,
+            versions: {
+              where: { isActive: true },
+              include: { nodes: true, edges: true },
+              take: 1
+            }
           }
         });
         
         for (const strategy of dbStrategies) {
+          const activeVersion = strategy.versions?.[0];
+          if (!activeVersion) continue;
+
           await stateSyncManager.snapshotStrategy({
-            ...strategy,
-            pairs: typeof strategy.pairs === 'string' ? strategy.pairs.split(',').filter(Boolean) : []
+            id: strategy.id,
+            name: strategy.name,
+            description: strategy.description,
+            status: strategy.runtime?.status || 'PAUSED',
+            roi: strategy.runtime?.roi || 0,
+            trades: strategy.runtime?.trades || 0,
+            winRate: strategy.runtime?.winRate || 0,
+            pnlUsdt: strategy.runtime?.pnlUsdt || 0,
+            alloc: activeVersion.alloc,
+            pairs: typeof activeVersion.pairs === 'string' ? activeVersion.pairs.split(',').filter(Boolean) : [],
+            nodes: activeVersion.nodes.map((n: any) => ({
+              id: n.id,
+              type: n.type,
+              data: { label: n.label, ... (n.config as any) },
+              position: { x: n.positionX, y: n.positionY }
+            })),
+            edges: activeVersion.edges.map((e: any) => ({
+              id: e.id,
+              source: e.sourceNodeId,
+              target: e.targetNodeId,
+              sourceHandle: e.sourceHandle,
+              targetHandle: e.targetHandle
+            })),
+            settings: activeVersion.settings,
+            errorCount: strategy.runtime?.errorCount || 0,
+            signalsProcessed: strategy.runtime?.signalsProcessed || 0,
+            lastPing: strategy.runtime?.lastPing || new Date()
           });
         }
         console.log(`[Boot] ✅ Hydrated ${dbStrategies.length} strategies to hot state.`);

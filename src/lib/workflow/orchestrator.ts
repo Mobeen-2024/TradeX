@@ -51,19 +51,21 @@ export const workflowWorker = new MockWorker('workflow_queue', async (job: Job) 
 // Link queue to worker for mock execution
 workflowQueue.worker = workflowWorker;
 
+import { workflowManager } from './workflowManager.ts';
+
 export async function submitWorkflow(workflowId: string, nodes: any[], edges: any[], settings: any) {
-  // Snapshot before queuing
-  await stateSyncManager.snapshotStrategy({
-    id: workflowId,
-    name: settings.name || `Workflow ${workflowId}`,
-    type: 'Node Workflow',
-    status: 'RUNNING',
+  // 1. Commit new version to DB and Snapshot to Redis (Hot/Cold sync)
+  await workflowManager.commit(workflowId, {
+    name: settings.name,
+    description: settings.description,
     nodes,
     edges,
     settings,
     alloc: settings.alloc || 0,
-    createdAt: Date.now()
+    pairs: settings.pairs || [],
+    commitMessage: settings.commitMessage
   });
 
+  // 2. Dispatch to execution queue
   await workflowQueue.add('execute', { workflowId, nodes, edges, settings });
 }

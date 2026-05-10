@@ -88,33 +88,39 @@ class PersistenceService {
       const strategies = Object.values(rawStrategies).map(s => JSON.parse(s as string));
 
       for (const strategy of strategies) {
-        await db.strategy.upsert({
+        // 1. Ensure the core Strategy container exists (using any to bypass stale types if needed)
+        await (db.strategy as any).upsert({
           where: { id: strategy.id },
+          update: { updatedAt: new Date() },
+          create: {
+            id: strategy.id,
+            name: strategy.name,
+            description: strategy.description || 'Auto-created from runtime'
+          }
+        });
+
+        // 2. Sync the StrategyRuntime (hot metrics)
+        await (db as any).strategyRuntime.upsert({
+          where: { strategyId: strategy.id },
           update: {
             status: strategy.status,
             roi: strategy.roi,
             trades: strategy.trades,
             winRate: strategy.winRate,
             pnlUsdt: strategy.pnlUsdt,
-            alloc: strategy.alloc,
             errorCount: strategy.errorCount,
             signalsProcessed: strategy.signalsProcessed,
-            lastPing: new Date(),
-            nodes: strategy.nodes,
-            edges: strategy.edges,
-            settings: strategy.settings,
-            pairs: Array.isArray(strategy.pairs) ? strategy.pairs.join(',') : (strategy.pairs || '')
+            lastPing: new Date()
           },
           create: {
-            id: strategy.id,
-            name: strategy.name,
-            type: strategy.type,
+            strategyId: strategy.id,
             status: strategy.status,
-            alloc: strategy.alloc,
-            pairs: Array.isArray(strategy.pairs) ? strategy.pairs.join(',') : (strategy.pairs || ''),
-            nodes: strategy.nodes,
-            edges: strategy.edges,
-            settings: strategy.settings
+            roi: strategy.roi,
+            trades: strategy.trades,
+            winRate: strategy.winRate,
+            pnlUsdt: strategy.pnlUsdt,
+            errorCount: strategy.errorCount,
+            signalsProcessed: strategy.signalsProcessed
           }
         });
       }

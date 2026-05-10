@@ -1,21 +1,17 @@
-import { stateSyncManager } from '../src/lib/stateSyncManager.ts';
+import { workflowManager } from '../src/lib/workflow/workflowManager.ts';
 import { redis } from '../src/lib/redis.ts';
 
 async function createDemo() {
-  const strategy = {
-    id: 'strat_' + Math.random().toString(36).substr(2, 9),
+  const strategyId = 'strat_neural_momentum';
+  
+  const config = {
     name: 'Neural Momentum Scalper',
-    type: 'Neural Network',
-    status: 'RUNNING',
-    roi: 12.5,
-    trades: 42,
-    winRate: 68.5,
-    pnlUsdt: 1250.40,
+    description: 'Institutional-grade high frequency scalp agent using EMA crosses and Neural inference.',
     alloc: 10000,
     pairs: ['BTC/USDT', 'ETH/USDT'],
     nodes: [
-      { id: '1', type: 'entry', data: { label: 'EMA Cross' }, position: { x: 100, y: 100 } },
-      { id: '2', type: 'execute', data: { label: 'Market Buy' }, position: { x: 400, y: 100 } }
+      { id: '1', type: 'entry', data: { label: 'EMA Cross (14/28)' }, position: { x: 100, y: 100 } },
+      { id: '2', type: 'execution', data: { label: 'Market Order' }, position: { x: 400, y: 100 } }
     ],
     edges: [
       { id: 'e1-2', source: '1', target: '2' }
@@ -24,19 +20,15 @@ async function createDemo() {
       timeframe: '5m',
       risk: 'medium'
     },
-    createdAt: Date.now()
+    commitMessage: 'Initial Deployment v1.0'
   };
 
-  console.log('Deploying Demo Strategy to Runtime...');
-  await stateSyncManager.snapshotStrategy(strategy);
-  
-  // Also queue a log to show it working
-  await stateSyncManager.queueLog(strategy.id, 'INFO', 'Strategy initialized and connected to neural gateway.');
-  await stateSyncManager.queueLog(strategy.id, 'EXEC', 'Awaiting next EMA signal on BTC/USDT 5m.');
+  console.log('Deploying Demo Strategy via Versioning Engine...');
+  await workflowManager.commit(strategyId, config);
 
-  console.log('✅ Strategy Deployed!');
-  console.log('Strategy ID:', strategy.id);
-  console.log('Check your browser at http://127.0.0.1:3000/signals');
+  console.log('✅ Strategy Versioned and Deployed!');
+  console.log('Strategy ID:', strategyId);
+  console.log('Check your dashboard at http://localhost:3000/signals');
   
   process.exit(0);
 }
