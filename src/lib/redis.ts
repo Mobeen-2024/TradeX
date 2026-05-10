@@ -250,6 +250,14 @@ export const KEYS = {
   workers:         'tradex:workers',
   activeTwaps:     'tradex:active_twaps',
   parentOrders:    'tradex:parent_orders',
+  
+  // Runtime Persistence Keys
+  runtimeStrategy: (id: string) => `runtime:strategy:${id}`,
+  runtimeNode:     (id: string) => `runtime:node:${id}`,
+  runtimeExecution:(id: string) => `runtime:execution:${id}`,
+  runtimeSnapshots: 'runtime:snapshots',
+  signalQueues:     'runtime:signal_queues',
+  executionCaches:  'runtime:execution_caches',
 } as const;
 
 // ── Typed Helpers ──────────────────────────────────────────────────

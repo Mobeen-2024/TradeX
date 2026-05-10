@@ -182,3 +182,13 @@ model RiskState {
   maxDrawdownPct  Float    @default(0)
   lastUpdated     DateTime @updatedAt
 }
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  role      String   @default("USER")
+}
+
