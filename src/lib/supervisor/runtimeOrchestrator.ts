@@ -56,7 +56,7 @@ class RuntimeOrchestrator {
         const analyticsCount = actualWorkers.filter(w => w.type === 'ai_analytics').length;
         if (analyticsCount < 3) {
           console.log(`[Orchestrator] 🚀 Scaling: Adding ai_analytics instance...`);
-          await workerManager.start(StrategyType.AI_ANALYTICS, { symbol: 'btcusdt' });
+          await workerManager.start('ai_analytics', { symbol: 'btcusdt' });
         }
       }
       
