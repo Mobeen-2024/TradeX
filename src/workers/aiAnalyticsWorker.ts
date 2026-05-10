@@ -122,11 +122,26 @@ async function runIntentAnalysis() {
       spread
     };
 
+    // ── Task 1: Intent Analysis (with Memory Retrieval) ────────────────
+    const contextDescription = `Market Analysis for ${config.symbol}. Price: ${price}. Imbalance: ${imbalance.toFixed(2)}. Spread: ${spread.toFixed(4)}.`;
+    
+    // 1. Dynamic Recall: Ask the memory engine for relevant past experiences
+    const { memoryEngine } = await import('../lib/ai/memoryEngine.ts');
+    const pastLessons = await memoryEngine.recallRelevantMemories(contextDescription);
+    const memoryContext = pastLessons.length > 0 
+      ? `\n\n[Adaptive Memory Context]:\n${pastLessons.map(l => `• ${l}`).join('\n')}`
+      : "";
+
     await streamIntentAnalysis(
       snapshot,
       (chunk) => parentPort?.postMessage({ type: 'ai_intent_chunk', chunk }),
       (full) => {
-        parentPort?.postMessage({ type: 'ai_intent', narration: full, imbalanceRatio: imbalance });
+        const narratedWithMemory = full + memoryContext;
+        parentPort?.postMessage({ 
+          type: 'ai_intent', 
+          narration: narratedWithMemory, 
+          imbalanceRatio: imbalance 
+        });
       }
     );
   } catch (e) {

@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import PerformanceDashboard from '../components/PerformanceDashboard.vue';
 import AnalyticsRightSidebar from '../components/AnalyticsRightSidebar.vue';
+import CognitiveBrain from '../components/ai/CognitiveBrain.vue';
 import { Cpu } from 'lucide-vue-next';
 
 const sidebarRef = ref<InstanceType<typeof AnalyticsRightSidebar> | null>(null);
@@ -16,7 +17,14 @@ const sidebarRef = ref<InstanceType<typeof AnalyticsRightSidebar> | null>(null);
             <Cpu class="w-5 h-5" />
          </button>
       </div>
-      <PerformanceDashboard class="!p-4 sm:!p-6 !h-auto !overflow-visible" />
+      <div class="px-4 sm:px-6 grid grid-cols-1 xl:grid-cols-12 gap-6 pb-12">
+        <div class="xl:col-span-8">
+          <PerformanceDashboard class="!p-0 !h-auto !overflow-visible" />
+        </div>
+        <div class="xl:col-span-4 h-[600px] xl:h-[700px]">
+          <CognitiveBrain />
+        </div>
+      </div>
     </div>
 
     <!-- Right Contextual Sidebar -->

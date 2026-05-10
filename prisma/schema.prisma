@@ -22,6 +22,8 @@ model Strategy {
   runtime         StrategyRuntime?
   logs            ExecutionLog[]
   positions       Position[]
+  decisions       AiDecision[]
+  outcomes        TradeOutcome[]
 }
 
 model StrategyVersion {
@@ -108,14 +110,41 @@ model ExecutionLog {
   strategy        Strategy @relation(fields: [strategyId], references: [id])
 }
 
-model AiAdvisory {
+model AiExperience {
+  id              String   @id @default(uuid())
+  content         String   // The "lesson learned" text
+  vectorId        String?  // Reference to the Qdrant vector ID
+  source          String   // e.g., "TRADE_OUTCOME", "FAILED_SIGNAL"
+  importance      Float    @default(0.5)
+  pair            String?
+  marketContext   Json?    // Snapshot of conditions when this was learned
+  createdAt       DateTime @default(now())
+}
+
+model AiDecision {
   id              String   @id @default(uuid())
   strategyId      String
-  type            String   // RISK_ALERT, OPTIMIZATION, OPPORTUNITY
-  severity        String   // low, medium, high
-  message         String
-  suggestion      String?
-  impact          String?
+  nodeId          String?
+  action          String   // e.g., "BUY", "SKIP", "REDUCE_RISK"
+  reasoning       String   // The "thought process"
+  confidence      Float
+  marketSnapshot  Json     // Conditions at time of decision
+  outcomeId       String?  // Linked to Position or TradeOutcome
   timestamp       DateTime @default(now())
-  isApplied       Boolean  @default(false)
+  
+  strategy        Strategy @relation(fields: [strategyId], references: [id])
+}
+
+model TradeOutcome {
+  id              String   @id @default(uuid())
+  strategyId      String
+  pair            String
+  side            String
+  pnlUsdt         Float
+  durationSec     Int
+  exitReason      String   // e.g., "TP", "SL", "AI_INTERVENTION"
+  marketContext   Json?
+  timestamp       DateTime @default(now())
+  
+  strategy        Strategy @relation(fields: [strategyId], references: [id])
 }

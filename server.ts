@@ -27,6 +27,9 @@ import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSc
 import { bootManager } from './src/lib/bootManager.ts';
 import { persistenceService } from './src/lib/persistenceService.ts';
 import { stateSyncManager } from './src/lib/stateSyncManager.ts';
+import { db } from './src/lib/db.ts';
+import { initQdrant } from './src/lib/qdrant.ts';
+import { memoryEngine } from './src/lib/ai/memoryEngine.ts';
 import { z } from 'zod';
 
 async function start() {
@@ -43,6 +46,7 @@ async function start() {
   await fastify.register(middie);
 
   // ── Start Persistence & Hydration ──────────────────────────
+  await initQdrant();
   await bootManager.hydrateRuntime();
   persistenceService.start();
 
@@ -248,7 +252,30 @@ async function start() {
 
   fastify.post('/api/close_position/:id', async (request, reply) => {
     const { id } = request.params as any;
+    const { exitReason = 'MANUAL' } = (request.body as any) || {};
+    
+    // 1. Get position data before deleting
+    const raw = await redis.hget(KEYS.positions, id);
+    if (!raw) return reply.status(404).send({ error: 'Position not found' });
+    const pos = JSON.parse(raw);
+    
+    // 2. Get market context
+    const marketSnapshot = await getGlobalState();
+    
+    // 3. Delete position
     await deletePosition(id);
+    
+    // 4. Trigger AI Learning asynchronously
+    memoryEngine.learnFromOutcome({
+      strategyId: pos.strategyId || 'manual',
+      pair: pos.pair,
+      side: pos.type,
+      pnlUsdt: pos.liveDelta || 0,
+      durationSec: Math.floor((Date.now() - (pos.openedAt || Date.now())) / 1000),
+      exitReason,
+      marketContext: marketSnapshot
+    }).catch(err => console.error('[Memory] Async learning failed:', err));
+
     console.log('Position closed via API, id:', id);
     return { success: true };
   });
@@ -293,6 +320,27 @@ async function start() {
     const { status } = request.body as any;
     await credentialVault.updateStatus(id, status);
     return { success: true };
+  });
+
+  // ── AI Cognitive Memory Endpoints ──────────────────────────
+  fastify.get('/api/ai/experiences', async () => {
+    return (db as any).aiExperience.findMany({
+      orderBy: { timestamp: 'desc' },
+      take: 20
+    });
+  });
+
+  fastify.get('/api/ai/outcomes', async () => {
+    return (db as any).tradeOutcome.findMany({
+      orderBy: { timestamp: 'desc' },
+      take: 20
+    });
+  });
+
+  fastify.get('/api/ai/recall', async (request) => {
+    const { query = '' } = (request.query as any) || {};
+    if (!query) return [];
+    return memoryEngine.recallRelevantMemories(query);
   });
 
   // ── Risk Profiles ────────────────────────────────────────
