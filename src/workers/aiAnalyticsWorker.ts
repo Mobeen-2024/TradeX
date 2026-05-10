@@ -45,6 +45,8 @@ let config: AIConfig = {
 };
 
 let running = true;
+let errorCount = 0;
+let lastTaskDuration = 0;
 
 // ── Redis ──────────────────────────────────────────────────────────
 const redis = createRedisClient();
@@ -196,22 +198,28 @@ async function run() {
 
   while (running) {
     const now = Date.now();
+    const startTime = now;
+    try {
+      // Intent (frequent)
+      await runIntentAnalysis();
 
-    // Intent (frequent)
-    await runIntentAnalysis();
+      // Levels (periodic)
+      if (now - lastLevelsUpdate > config.levelsIntervalMs) {
+        await runLevelMapping();
+        lastLevelsUpdate = now;
+      }
 
-    // Levels (periodic)
-    if (now - lastLevelsUpdate > config.levelsIntervalMs) {
-      await runLevelMapping();
-      lastLevelsUpdate = now;
+      // Pattern (every 1m approx or on check)
+      if (now - lastPatternScan > 60000) {
+        await runPatternScan();
+        lastPatternScan = now;
+      }
+      if (errorCount > 0) errorCount--;
+    } catch (err) {
+      errorCount++;
     }
 
-    // Pattern (every 1m approx or on check)
-    if (now - lastPatternScan > 60000) {
-      await runPatternScan();
-      lastPatternScan = now;
-    }
-
+    lastTaskDuration = Date.now() - startTime;
     await new Promise(res => setTimeout(res, config.intentIntervalMs));
   }
 
@@ -227,6 +235,8 @@ setInterval(() => {
       data: {
         cpu: process.cpuUsage().user / 1000000,
         memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        errorCount,
+        latencyMs: lastTaskDuration,
         nodeId: 'analytics_primary'
       }
     });

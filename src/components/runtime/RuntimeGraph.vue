@@ -39,7 +39,14 @@ const graphElements = computed(() => {
   let workerX = 50;
   Object.entries(store.nodes).forEach(([id, node]) => {
     const isAgent = node.type.includes('agent');
-    const color = node.status === 'quarantined' ? '#ef4444' : (isAgent ? '#10b981' : '#3b82f6');
+    
+    // Multi-factor Color Mapping
+    let color = '#3b82f6'; // Default Blue
+    if (node.state === 'HEALTHY') color = isAgent ? '#10b981' : '#3b82f6';
+    else if (node.state === 'DEGRADED') color = '#f59e0b';
+    else if (node.state === 'STALLING') color = '#f97316';
+    else if (node.state === 'UNRESPONSIVE') color = '#ef4444';
+    else if (node.state === 'QUARANTINED') color = '#a855f7';
     
     newElements.push({
       id,
@@ -50,7 +57,8 @@ const graphElements = computed(() => {
       style: { 
         background: `${color}11`, 
         border: `1px solid ${color}`,
-        boxShadow: node.status === 'quarantined' ? '0 0 15px rgba(239, 68, 68, 0.5)' : 'none'
+        boxShadow: node.state === 'QUARANTINED' || node.state === 'DEGRADED' ? `0 0 15px ${color}88` : 'none',
+        opacity: node.state === 'UNRESPONSIVE' ? 0.4 : 1
       }
     });
 
@@ -114,7 +122,7 @@ watch(graphElements, (newEl) => {
       <template #node-special="props">
         <div 
           class="custom-runtime-node p-4 rounded-xl backdrop-blur-xl transition-all duration-500 flex flex-col items-center gap-2 min-w-[140px]"
-          :class="{ 'quarantine-shake': props.data.status === 'quarantined' }"
+          :class="{ 'quarantine-shake': props.data.state === 'QUARANTINED' }"
         >
           <div class="node-icon-wrapper p-2 rounded-lg bg-white/5 border border-white/10">
             <component :is="props.data.icon" :size="20" :color="props.data.color || '#3b82f6'" />
@@ -122,26 +130,34 @@ watch(graphElements, (newEl) => {
           
           <div class="flex flex-col items-center">
             <span class="text-[10px] font-bold tracking-tighter text-white uppercase">{{ props.label }}</span>
-            <span v-if="props.data.status" class="text-[8px] opacity-60 uppercase tracking-widest">{{ props.data.status }}</span>
+            <span v-if="props.data.state" class="text-[8px] font-bold uppercase tracking-widest" :style="{ color: props.data.color }">{{ props.data.state }}</span>
           </div>
 
           <!-- Mini Telemetry -->
           <div v-if="props.data.cpu !== undefined" class="w-full mt-2 space-y-1">
             <div class="flex justify-between text-[7px] text-zinc-400 uppercase">
-              <span>CPU</span>
-              <span>{{ props.data.cpu.toFixed(1) }}%</span>
+              <span>LATENCY</span>
+              <span>{{ props.data.latencyMs }}ms</span>
             </div>
-            <div class="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <div class="flex justify-between text-[7px] text-zinc-400 uppercase">
+              <span>ERRORS</span>
+              <span :class="{ 'text-red-400': props.data.errorCount > 0 }">{{ props.data.errorCount }}</span>
+            </div>
+            <div class="h-1 w-full bg-white/5 rounded-full overflow-hidden mt-1">
               <div 
-                class="h-full bg-blue-500 transition-all duration-1000" 
+                class="h-full transition-all duration-1000" 
+                :class="props.data.cpu > 80 ? 'bg-orange-500' : 'bg-blue-500'"
                 :style="{ width: `${Math.min(props.data.cpu * 2, 100)}%` }"
               ></div>
             </div>
           </div>
 
-          <!-- Quarantine Warning -->
-          <div v-if="props.data.status === 'quarantined'" class="absolute -top-2 -right-2 bg-red-600 text-white p-1 rounded-full animate-pulse shadow-lg">
+          <!-- Quarantine/Status Warning -->
+          <div v-if="props.data.state === 'QUARANTINED'" class="absolute -top-2 -right-2 bg-purple-600 text-white p-1 rounded-full animate-pulse shadow-lg">
             <ShieldAlert :size="12" />
+          </div>
+          <div v-else-if="props.data.state === 'DEGRADED'" class="absolute -top-2 -right-2 bg-yellow-600 text-white p-1 rounded-full animate-bounce shadow-lg">
+            <AlertTriangle :size="12" />
           </div>
         </div>
       </template>

@@ -64,6 +64,9 @@ const redis = createRedisClient();
 const priceHistory: number[] = [];
 const VOL_WINDOW = 20;
 
+let errorCount = 0;
+let lastLoopDuration = 0;
+
 /**
  * Execution Bridge: Adaptive Intelligence
  * 
@@ -167,6 +170,7 @@ async function run() {
   log(`Straddle worker started for account=${config.accountId}, symbol=${config.symbol}, notional=$${config.notionalUsdPerLeg}`);
 
   while (running) {
+    const startTime = Date.now();
     try {
       // Sync with global intelligence before each check
       await syncWithBlackboard();
@@ -233,13 +237,15 @@ async function run() {
           activeLeg = {};
         }
 
-        // ── Persist state for recovery ───────────
         await persistState();
+        if (errorCount > 0) errorCount--;
       }
     } catch (err) {
+      errorCount++;
       log(`Error: ${(err as Error).message}`);
     }
 
+    lastLoopDuration = Date.now() - startTime;
     await new Promise(res => setTimeout(res, config.intervalMs));
   }
 
@@ -256,6 +262,8 @@ setInterval(() => {
       data: {
         cpu: process.cpuUsage().user / 1000000,
         memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        errorCount,
+        latencyMs: lastLoopDuration,
         nodeId: 'straddle_primary'
       }
     });

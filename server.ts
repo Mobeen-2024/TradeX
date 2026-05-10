@@ -56,7 +56,7 @@ async function start() {
   await initQdrant();
   await bootManager.hydrateRuntime();
   persistenceService.start();
-  eventBus.log('platform.boot', 'system', 'INFO', { msg: 'TradeX Pro Engine Started' });
+  eventBus.emitEvent('system.boot', 'system', 'INFO', { msg: 'TradeX Pro Engine Started' });
 
   const isProd = process.env.NODE_ENV === 'production';
   const clients = new Set<any>();
@@ -606,13 +606,21 @@ async function start() {
     // ── Resume Background Tasks ────────────────────
     smartOrderRouter.resumeActiveTwaps().catch(err => console.error('[SOR] Resumption failed:', err));
 
-    // ── Start Institutional AI Analytics ───────────
-    workerManager.start('ai_analytics', {
-      symbol: 'btcusdt',
-      intentIntervalMs: 1000,
-      levelsIntervalMs: 30000,
-      qualityGateEnabled: true
-    }).catch(err => console.error('[AI] Worker failed to start:', err));
+    // ── Start Institutional Intelligence Cluster ───────────
+    
+    // 1. Intelligence Agents (Environmental Modeling)
+    const agents = [
+      { type: 'volatility_agent', config: { symbol: 'btcusdt' } },
+      { type: 'sentiment_agent',  config: { symbol: 'btcusdt' } },
+      { type: 'macro_agent',      config: { symbol: 'btcusdt' } },
+      { type: 'ai_analytics',     config: { symbol: 'btcusdt', intentIntervalMs: 1000, levelsIntervalMs: 30000, qualityGateEnabled: true } }
+    ] as const;
+
+    for (const agent of agents) {
+      workerManager.start(agent.type as any, agent.config).catch(err => 
+        console.error(`[AI] Agent ${agent.type} failed to start:`, err)
+      );
+    }
   });
 
   const shutdown = async (signal: string) => {

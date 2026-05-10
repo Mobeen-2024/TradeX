@@ -41,6 +41,8 @@ interface DeltaNeutralConfig {
 
 let config: DeltaNeutralConfig = workerData as DeltaNeutralConfig;
 let running = true;
+let errorCount = 0;
+let lastLoopDuration = 0;
 
 function log(msg: string) {
   parentPort?.postMessage({ type: 'log', worker: 'delta_neutral', message: msg });
@@ -60,6 +62,7 @@ async function run() {
   log(`Delta-Neutral worker started for account=${config.accountId}, symbol=${config.symbol}, target_delta=${config.targetDelta}`);
 
   while (running) {
+    const startTime = Date.now();
     try {
       // Fetch positions from Redis
       const raw = await redis.hgetall('tradex:positions');
@@ -102,10 +105,13 @@ async function run() {
           },
         });
       }
+      if (errorCount > 0) errorCount--;
     } catch (err) {
+      errorCount++;
       log(`Error: ${(err as Error).message}`);
     }
 
+    lastLoopDuration = Date.now() - startTime;
     await new Promise(res => setTimeout(res, config.intervalMs));
   }
 
@@ -122,6 +128,8 @@ setInterval(() => {
       data: {
         cpu: process.cpuUsage().user / 1000000,
         memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        errorCount,
+        latencyMs: lastLoopDuration,
         nodeId: 'delta_neutral_primary'
       }
     });

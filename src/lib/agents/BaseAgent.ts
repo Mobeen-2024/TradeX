@@ -15,6 +15,8 @@ export abstract class BaseAgent {
   protected running: boolean = false;
   protected intervalMs: number = 5000;
   protected hbInterval?: NodeJS.Timeout;
+  protected errorCount: number = 0;
+  protected lastTaskDuration: number = 0;
 
   constructor(agentName: string) {
     this.agentName = agentName;
@@ -40,11 +42,16 @@ export abstract class BaseAgent {
     this.startHeartbeat();
 
     while (this.running) {
+      const startTime = Date.now();
       try {
         await this.task();
+        // Decay error count on success
+        if (this.errorCount > 0) this.errorCount--;
       } catch (err: any) {
+        this.errorCount++;
         this.log(`Error in agent task: ${err.message}`, 'ERROR');
       }
+      this.lastTaskDuration = Date.now() - startTime;
       await new Promise(res => setTimeout(res, this.intervalMs));
     }
   }
@@ -93,6 +100,8 @@ export abstract class BaseAgent {
         status: 'RUNNING',
         cpu: process.cpuUsage().user / 1000000,
         memory: process.memoryUsage().heapUsed / 1024 / 1024,
+        errorCount: this.errorCount,
+        latencyMs: this.lastTaskDuration
       });
     }, 2000);
   }

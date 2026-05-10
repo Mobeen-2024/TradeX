@@ -51,7 +51,15 @@ class RuntimeOrchestrator {
       const actualWorkers = workerManager.list();
       const unhealthyIds = await heartbeatMonitor.getUnhealthyWorkers();
       const metrics = await queueManager.getQueueMetrics();
-      const health = await heartbeatMonitor.getHealthSnapshot();
+      
+      const quarantinedIds = new Set<string>();
+      for (const [sig, m] of this.failureRegistry.entries()) {
+        if (m.quarantined) {
+          // This is a simplification; in a real system we'd map signature back to workerIds
+        }
+      }
+      
+      const health = await heartbeatMonitor.getHealthSnapshot(quarantinedIds);
 
       // ── 2. DIFF & ACT (Self-Healing) ──────────────────────────
       for (const workerId of unhealthyIds) {
@@ -81,7 +89,14 @@ class RuntimeOrchestrator {
        * We normalize the queue depth relative to our threshold.
        */
       const normalizedQueue = Math.min(metrics.signals.waiting / SCALE_OUT_THRESHOLD, 2);
-      const scaleScore = (normalizedQueue * 0.4) + (latencyFactor * 0.3) + (avgCpuLoad * 0.2);
+      
+      // Calculate Average Error Rate
+      const avgErrorRate = healthEntries.length > 0
+        ? healthEntries.reduce((acc, h) => acc + h.errorCount, 0) / healthEntries.length
+        : 0;
+      const errorFactor = Math.min(avgErrorRate / 10, 1); // Normalize (max at 10 errors)
+
+      const scaleScore = (normalizedQueue * 0.4) + (latencyFactor * 0.3) + (avgCpuLoad * 0.2) + (errorFactor * 0.1);
 
       if (scaleScore > 0.8) {
         console.warn(`[Orchestrator] 📈 High ScaleScore: ${scaleScore.toFixed(2)} (Queue: ${metrics.signals.waiting}, CPU: ${avgCpuLoad.toFixed(2)}). Auto-scaling...`);

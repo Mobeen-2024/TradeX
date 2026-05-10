@@ -4,9 +4,12 @@ import { ref } from 'vue';
 export interface RuntimeNode {
   id: string;
   type: string;
-  status: 'running' | 'stopped' | 'quarantined';
+  status: string;
+  state: 'HEALTHY' | 'DEGRADED' | 'STALLING' | 'UNRESPONSIVE' | 'QUARANTINED';
   cpu: number;
   memory: number;
+  errorCount: number;
+  latencyMs: number;
   lastHeartbeat: number;
   config: any;
 }
