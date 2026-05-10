@@ -41,11 +41,12 @@ export const executionQueueEvents = new QueueEvents('executions', { connection }
 export const auditQueue = new Queue('audit', { connection });
 
 // Prevent unhandled error crashes in dev when Redis is offline
-[signalQueue, signalQueueEvents, executionQueue, executionQueueEvents, auditQueue].forEach((q) => {
-  q.on('error', (err) => {
+( [signalQueue, signalQueueEvents, executionQueue, executionQueueEvents, auditQueue] as any[]).forEach((q) => {
+  q.on('error', (err: any) => {
     // Only log briefly if it's a connection issue, otherwise standard log
-    if (process.env.NODE_ENV !== 'production' && err.message.includes('ECONNREFUSED')) return;
-    console.error(`[QueueManager] Queue Error: ${err.message}`);
+    const msg = err.message || '';
+    if (process.env.NODE_ENV !== 'production' && (msg.includes('ECONNREFUSED') || msg.includes('closed'))) return;
+    console.error(`[QueueManager] Queue Error: ${msg}`);
   });
 });
 

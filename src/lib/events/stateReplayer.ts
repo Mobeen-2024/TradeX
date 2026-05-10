@@ -1,5 +1,5 @@
 import { db } from '../db.ts';
-import { EventType } from './eventBus.ts';
+import type { EventType } from './eventBus.ts';
 
 export interface ReconstructedState {
   strategyId: string;

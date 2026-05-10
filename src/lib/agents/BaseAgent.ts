@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'worker_threads';
-import { eventBus, EventType, EventSeverity } from '../events/eventBus.ts';
+import { eventBus } from '../events/eventBus.ts';
+import type { EventType, EventSeverity } from '../events/eventBus.ts';
 import { heartbeatMonitor } from '../supervisor/heartbeatMonitor.ts';
 import { blackboard } from './blackboard.ts';
 

@@ -1,5 +1,5 @@
 import { redis } from '../redis.ts';
-import { SystemEvent, EventType, EventSeverity } from './eventBus.ts';
+import type { SystemEvent, EventSeverity } from './eventBus.ts';
 
 const LEDGER_KEY = 'tradex:ledger:events';
 const MAX_LEDGER_SIZE = 100000; // Large history for forensic audits
