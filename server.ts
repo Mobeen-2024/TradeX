@@ -21,6 +21,7 @@ import { credentialVault } from './src/lib/credentialVault.ts';
 import { runRiskChecks, setRiskProfile } from './src/lib/riskEngine.ts';
 import { smartOrderRouter } from './src/lib/smartOrderRouter.ts';
 import { workerManager, setWorkerBroadcast } from './src/lib/workerManager.ts';
+import { queueManager } from './src/lib/queueManager.ts';
 import { startAIAnalytics } from './src/lib/aiAnalytics.ts';
 import { circuitBreakers } from './src/lib/circuitBreaker.ts';
 import { PlaceOrderSchema, AddVaultAccountSchema, RiskProfileSchema, WsMessageSchema } from './src/lib/schemas.ts';
@@ -31,8 +32,10 @@ import { db } from './src/lib/db.ts';
 import { initQdrant } from './src/lib/qdrant.ts';
 import { memoryEngine } from './src/lib/ai/memoryEngine.ts';
 import { eventBus } from './src/lib/events/eventBus.ts';
-import './src/workers/eventArchiver.ts'; // Start archiver
+// import './src/workers/eventArchiver.ts'; // Replaced by durable BullMQ audit worker
 import './src/workers/portfolioArchiver.ts'; // Start portfolio snapshots
+import './src/workers/runtimeSnapshotWorker.ts'; // Start runtime checkpointing
+import './src/workers/queueWorker.ts'; // Start persistent queues
 import { z } from 'zod';
 
 async function start() {
@@ -252,11 +255,23 @@ async function start() {
         return reply.status(422).send({ success: false, error: riskResult.reason, code: 'RISK_BLOCKED' });
       }
 
-      const sorResult = await smartOrderRouter.route(rawOrder, req.accountIds ?? [rawOrder.accountId], req.sorConfig ?? { strategy: 'market' });
-      return { success: true, sorResult, warnings: riskResult.warnings };
+      // Instead of immediate direct routing, we push to a durable queue
+      const job = await queueManager.addExecution({
+        order: rawOrder,
+        accountIds: req.accountIds ?? [rawOrder.accountId],
+        sorConfig: req.sorConfig ?? { strategy: 'market' }
+      });
+
+      return { 
+        success: true, 
+        jobId: job.id, 
+        status: 'QUEUED',
+        warnings: riskResult.warnings 
+      };
     } catch (e: any) {
       return reply.status(500).send({ error: e.message });
     }
+
   };
 
   fastify.post('/api/place_order', { preHandler: zodGuard(PlaceOrderSchema) }, handleOrder);

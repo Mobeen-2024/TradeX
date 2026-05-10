@@ -45,6 +45,14 @@ class EventBus extends EventEmitter {
     // Emit locally for real-time subscribers (UI, etc.)
     this.emit('event', eventData);
 
+    // ── DURABLE SINK ───────────────────────────────────────────
+    // Push to BullMQ for persistent ingestion to PostgreSQL
+    import('../queueManager.ts').then(({ queueManager }) => {
+      queueManager.addAuditLog(eventData).catch(err => {
+        console.error('[EventBus] Durable queue push failed:', err.message);
+      });
+    });
+
     if (this.useRedis) {
       try {
         // XADD key MAXLEN ~ 10000 * eventType source severity payload strategyId timestamp

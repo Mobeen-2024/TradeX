@@ -132,5 +132,58 @@ export const memoryEngine = {
       console.error('[Memory] Recall failed:', e);
       return [];
     }
+  },
+
+  /**
+   * Specifically tracks and learns from market regimes (volatility, trend, etc.)
+   */
+  async trackMarketRegime(regime: {
+    type: 'TRENDING' | 'RANGING' | 'VOLATILE';
+    volatility: number;
+    description: string;
+    metrics: any;
+  }) {
+    console.log(`[Memory] Tracking regime: ${regime.type}`);
+    const lesson = `Market is currently ${regime.type} with ${regime.volatility.toFixed(2)}% volatility. ${regime.description}`;
+    const vector = await getEmbedding(lesson);
+
+    await qdrant.upsert(MEMORY_COLLECTION, {
+      points: [{
+        id: Math.random().toString(36).substr(2, 9),
+        vector: vector,
+        payload: {
+          content: lesson,
+          source: 'MARKET_REGIME',
+          metrics: regime.metrics,
+          type: regime.type
+        }
+      }]
+    });
+  },
+
+  /**
+   * Specialized learning for failed trade setups
+   */
+  async learnFromFailure(failure: {
+    strategyId: string;
+    condition: string;
+    reason: string;
+    marketContext: any;
+  }) {
+    const lesson = `STRATEGY_FAIL: ${failure.strategyId} failed on ${failure.condition} because ${failure.reason}. Context: ${JSON.stringify(failure.marketContext)}`;
+    const vector = await getEmbedding(lesson);
+
+    await qdrant.upsert(MEMORY_COLLECTION, {
+      points: [{
+        id: Math.random().toString(36).substr(2, 9),
+        vector: vector,
+        payload: {
+          content: lesson,
+          source: 'FAILED_CONDITION',
+          strategyId: failure.strategyId
+        }
+      }]
+    });
   }
 };
+
