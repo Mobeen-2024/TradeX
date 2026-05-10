@@ -20,44 +20,58 @@ export class VolatilityAgent extends BaseAgent {
   }
 
   protected async task(): Promise<void> {
-    // 1. Fetch current market price from shared state (supports Mock mode)
     const state = await redis.hgetall(KEYS.globalState);
     const price = parseFloat(state.price || '0');
 
     if (price <= 0) return;
 
-    // 2. Maintain rolling window
     this.prices.push(price);
     if (this.prices.length > this.windowSize) {
       this.prices.shift();
     }
 
-    if (this.prices.length < 5) return; // Need minimum data
+    if (this.prices.length < 5) return;
 
-    // 3. Calculate Realized Volatility (StdDev of returns)
+    // 1. Calculate Realized Volatility
     const volatility = this.calculateVolatility(this.prices);
     
-    // 4. Detect Regime Changes
-    let status: 'STABLE' | 'EXPANDING' | 'SPIKE' = 'STABLE';
-    const change = this.lastVolatility > 0 ? (volatility / this.lastVolatility) - 1 : 0;
+    // 2. Calculate Trend Strength (Normalized slope)
+    const first = this.prices[0];
+    const last = this.prices[this.prices.length - 1];
+    const trendRaw = (last - first) / first;
+    const trendStrength = Math.min(Math.abs(trendRaw * 100), 1); // Normalize to 0-1
 
-    if (change > 0.5) status = 'SPIKE';
-    else if (change > 0.2) status = 'EXPANDING';
+    // 3. Probabilistic Confidence (based on sample size and stability)
+    const confidence = Math.min(this.prices.length / this.windowSize, 0.95);
 
-    // 5. Update Blackboard
+    // 4. Market Stress & Liquidity Risk (Derived)
+    const marketStress = Math.min((volatility * 2) * (1 + trendStrength), 1);
+    const liquidityRisk = Math.min(volatility * 0.5, 1);
+
+    // 5. Regime Classification
+    let regime = 'stable_range';
+    if (volatility > 0.5) {
+      regime = trendStrength > 0.5 ? 'trending_breakout' : 'mean_reversion_spike';
+    } else if (trendStrength > 0.7) {
+      regime = 'low_vol_creep';
+    }
+
+    // 6. Update Blackboard with Shared Cognitive Context
     await this.updateBlackboard(this.symbol, {
-      status,
-      value: volatility.toFixed(4),
-      change: (change * 100).toFixed(2) + '%',
-      priceSampleCount: this.prices.length
+      regime,
+      confidence: parseFloat(confidence.toFixed(2)),
+      trendStrength: parseFloat(trendStrength.toFixed(2)),
+      liquidityRisk: parseFloat(liquidityRisk.toFixed(2)),
+      marketStress: parseFloat(marketStress.toFixed(2)),
+      volatilityValue: volatility.toFixed(4)
     });
 
-    // 6. Emit High-Impact Events
-    if (status === 'SPIKE') {
+    // 7. Emit Intelligence Event on Regime Shift
+    if (volatility > 1.0) {
       this.emit('ai.warning', 'WARN', {
-        msg: `Volatility Spike detected on ${this.symbol}!`,
-        vol: volatility.toFixed(4),
-        prev: this.lastVolatility.toFixed(4)
+        msg: `High Stress Regime Detected: ${regime}`,
+        stress: marketStress.toFixed(2),
+        vol: volatility.toFixed(4)
       });
     }
 
