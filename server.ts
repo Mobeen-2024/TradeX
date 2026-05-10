@@ -58,7 +58,7 @@ async function start() {
   persistenceService.start();
 
   // ── Start Projection Engine (Deterministic Event Sourcing) ────
-  import('./lib/events/projectors/positionProjector.ts').then(({ positionProjector }) => {
+  import('./src/lib/events/projectors/positionProjector.ts').then(({ positionProjector }) => {
     console.log('[System] Projection Engine Booted.');
   });
 
